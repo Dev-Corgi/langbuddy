@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Button } from "@/components/ui/button"
 import { PopoverContent, Popover, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"

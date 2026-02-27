@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { ChevronDown } from "lucide-react"
 import { EditorBubbleItem, useEditor } from "novel"
 import { Button } from "@/components/ui/button"

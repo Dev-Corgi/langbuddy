@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Bold, Italic, Underline, Strikethrough, Code } from "lucide-react"
 import { EditorBubbleItem, useEditor } from "novel"
 
