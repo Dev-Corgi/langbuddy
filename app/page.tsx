@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { MainNav } from "./_components/main-nav";
-import { MainCarousel } from "./_components/main-carousel";
-import { ImageButtons } from "./_components/image-buttons";
+import { PostingCarousel } from "./_components/posting-carousel";
+import { PostingList } from "./_components/posting-list";
 import { LangBuddyNews } from "./_components/langbuddy-news";
 
 export default function Home() {
@@ -16,19 +16,17 @@ export default function Home() {
 
       <MainNav activePrimaryLabel="Home" />
       <main className="py-6 md:py-10 relative z-10">
-        <MainCarousel />
-        
-        <div className="mx-auto w-full px-4 xl:px-40">
-          <div className="mt-16 md:mt-32 space-y-24 md:space-y-40">
-            <section className="relative">
-              <ImageButtons />
-            </section>
-
-            <section className="relative">
-              <div className="absolute -inset-x-4 md:-inset-x-20 -inset-y-10 bg-muted/30 rounded-[60px] -z-10" />
-              <LangBuddyNews />
-            </section>
+        <div className="mx-auto w-full max-w-[1600px] px-4 xl:px-8 space-y-20 md:space-y-32">
+          <PostingCarousel />
+          
+          <div className="mx-auto w-full px-0 xl:px-32">
+            <PostingList />
           </div>
+          
+          <section className="relative px-0 xl:px-32">
+            <div className="absolute -inset-x-4 md:-inset-x-20 -inset-y-10 bg-muted/30 rounded-[60px] -z-10" />
+            <LangBuddyNews />
+          </section>
         </div>
       </main>
     </div>
