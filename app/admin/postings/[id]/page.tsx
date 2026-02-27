@@ -180,9 +180,7 @@ export default function EditPostingPage() {
       alert(error.message)
       setIsSubmitting(false)
     } else {
-      const redirectPath = 
-        formData.category === '스터디' ? '/admin/study' :
-        formData.category === '언어교환' ? '/admin/language' : '/admin/meetups'
+      const redirectPath = '/admin/meetups'
       router.push(redirectPath)
       router.refresh()
     }
@@ -194,9 +192,7 @@ export default function EditPostingPage() {
     if (error) {
       alert(error.message)
     } else {
-      const redirectPath = 
-        formData.category === '스터디' ? '/admin/study' :
-        formData.category === '언어교환' ? '/admin/language' : '/admin/meetups'
+      const redirectPath = '/admin/meetups'
       router.push(redirectPath)
       router.refresh()
     }
