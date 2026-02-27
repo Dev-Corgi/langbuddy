@@ -21,6 +21,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { NovelRenderer } from '@/components/admin/novel-renderer'
 
 export default function PostingDetailPage() {
   const params = useParams()
@@ -256,9 +257,9 @@ export default function PostingDetailPage() {
               <div className="h-px bg-muted" />
               
               {/* Rich Content Area */}
-              <div 
-                className="prose prose-zinc max-w-none prose-headings:font-black prose-p:font-medium prose-p:text-muted-foreground prose-img:rounded-[24px] prose-img:shadow-lg whitespace-pre-wrap"
-                dangerouslySetInnerHTML={{ __html: displayContent }}
+              <NovelRenderer 
+                content={displayContent}
+                className="prose prose-zinc max-w-none prose-headings:font-black prose-p:font-medium prose-p:text-muted-foreground prose-img:rounded-[24px] prose-img:shadow-lg"
               />
             </div>
           </div>

@@ -4,13 +4,14 @@ import { useState, useRef, useEffect, useMemo } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { ChevronLeft, ChevronRight, Loader2, Calendar, Clock } from "lucide-react"
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SectionHeader } from "./section-header"
 import { createClient } from "@/lib/supabase"
 import { useLocale } from "@/hooks/use-locale"
 import { i18n } from "@/lib/i18n"
+import { PostingInfo } from "./posting-info"
 
 export function PostingCarousel() {
   const locale = useLocale()
@@ -206,56 +207,11 @@ export function PostingCarousel() {
                     )}
                   </div>
                   
-                  <Link href={`/posting/${item.id}`} className="mt-4 block space-y-1.5 group">
-                    {/* 1. D-Day Row */}
-                    <div className="h-5 flex items-center">
-                      {dDay ? (
-                        <span className="text-primary font-black text-[12px] md:text-[13px] uppercase tracking-tight">
-                          {dDay}
-                        </span>
-                      ) : item.is_recurring ? (
-                        <span className="text-emerald-500 font-black text-[12px] md:text-[13px] uppercase tracking-tight">
-                          {locale === 'en' ? 'Every Week' : '매주 반복'}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground font-black text-[12px] md:text-[13px] uppercase tracking-tight">
-                          {locale === 'en' ? 'TBD' : '일시 미정'}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* 2. Date Row */}
-                    <div className="flex items-center gap-1.5 text-foreground/70">
-                      <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="font-bold text-[12px] md:text-[13px] tracking-tight">
-                        {item.is_recurring 
-                          ? (locale === 'en' ? `Every ${item.recurring_days?.join(', ')}` : `매주 ${item.recurring_days?.join(', ')}`)
-                          : (item.is_date_undecided || !item.date || item.date === '미정' ? (locale === 'en' ? 'Date Undecided' : '날짜 미정') : item.date)
-                        }
-                      </span>
-                    </div>
-
-                    {/* 3. Time Row */}
-                    <div className="flex items-center gap-1.5 text-muted-foreground">
-                      <Clock className="w-3.5 h-3.5 text-muted-foreground/70" />
-                      <span className="font-medium text-[12px] md:text-[13px] tracking-tight">
-                        {item.is_time_undecided || !item.time || item.time === '미정' 
-                          ? (locale === 'en' ? 'Time TBD' : '시간 미정')
-                          : item.time
-                        }
-                      </span>
-                    </div>
-
-                    {/* 4. Title Row */}
-                    <div className="font-black text-base md:text-lg line-clamp-2 leading-tight transition-colors group-hover:text-primary">
-                      {locale === 'en' && item.title_en ? item.title_en : item.title}
-                    </div>
-
+                  <Link href={`/posting/${item.id}`} className="mt-4 block group">
+                    <PostingInfo item={item} size="sm" />
+                    
                     {/* 5. Additional Info Row */}
-                    <div className="mt-1 space-y-0.5">
-                      <p className="text-[12px] md:text-[13px] text-muted-foreground font-medium line-clamp-1">
-                        {locale === 'en' && item.location_en ? item.location_en : item.location}
-                      </p>
+                    <div className="mt-1">
                       <div className="flex items-center gap-2">
                         <span className="text-[12px] md:text-[13px] text-primary font-black">
                           {item.cost || (locale === 'en' ? 'Free' : '무료')}

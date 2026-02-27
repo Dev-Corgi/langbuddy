@@ -104,18 +104,18 @@ function MainNavContent({ activePrimaryLabel }: { activePrimaryLabel?: string })
                 {locale}
               </button>
               
-              <Link 
+              {/* <Link 
                 href="#" 
                 className="flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-[12px] font-black transition-all shadow-sm active:scale-95"
               >
                 <User className="w-3.5 h-3.5" />
                 {t.nav.login}
-              </Link>
+              </Link> */}
             </div>
           </div>
 
           {/* Bottom Row - More compact */}
-          <div className="flex items-center h-[48px] justify-between">
+          {/* <div className="flex items-center h-[48px] justify-between">
             <nav className="flex items-center gap-8 h-full">
               {links.map((link) => (
                 <Link
@@ -143,7 +143,7 @@ function MainNavContent({ activePrimaryLabel }: { activePrimaryLabel?: string })
                 {t.nav.myBookings}
               </Link>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
 
@@ -156,9 +156,12 @@ function MainNavContent({ activePrimaryLabel }: { activePrimaryLabel?: string })
             </Link>
             
             <div className="flex items-center gap-3">
-              <Link href="#" className="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground transition-colors active:bg-primary/90">
-                <User className="w-5 h-5" />
-              </Link>
+              <button 
+                onClick={toggleLocale}
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground transition-colors active:bg-primary/90"
+              >
+                <Globe className="w-5 h-5" />
+              </button>
             </div>
           </div>
         </div>

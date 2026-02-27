@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "@tailwindcss/typography";
+@import "./novel-styles.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
@@ -164,4 +164,61 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Tiptap / Prose Spacing Fix */
+.prose p {
+  margin-top: 1.5em !important;
+  margin-bottom: 1.5em !important;
+  line-height: 1.8;
+}
+
+/* Ensure empty paragraphs (line breaks) are visible */
+.prose p:empty::before,
+.prose p > br:only-child::before {
+  content: "\00a0";
+  display: inline-block;
+}
+
+.prose h1, .prose h2, .prose h3 {
+  margin-top: 2.5em !important;
+  margin-bottom: 1.25em !important;
+  line-height: 1.2;
+}
+
+.prose ul, .prose ol {
+  margin-top: 1.25em !important;
+  margin-bottom: 1.25em !important;
+  padding-left: 1.5em !important;
+}
+
+.prose li {
+  margin-top: 0.75em !important;
+  margin-bottom: 0.75em !important;
+}
+
+/* Tiptap Image Resize Support */
+.prose img {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.prose img:hover {
+  opacity: 0.9;
+}
+
+/* Make images resizable in editor */
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  cursor: pointer;
+  border-radius: 0.5rem;
+}
+
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 3px solid #3b82f6;
+  outline-offset: 2px;
 }

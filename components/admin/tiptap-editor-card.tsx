@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Globe } from 'lucide-react'
 
-const TiptapEditor = dynamic(() => import('@/components/admin/tiptap-editor').then(mod => mod.TiptapEditor), { 
+const NovelEditor = dynamic(() => import('@/components/admin/novel-editor').then(mod => mod.NovelEditor), { 
   ssr: false,
   loading: () => <div className="h-[300px] w-full bg-muted animate-pulse rounded-xl border border-border flex items-center justify-center text-muted-foreground font-bold">에디터 로딩 중...</div>
 })
@@ -27,7 +27,7 @@ export function TiptapEditorCard({ title, value, onChange, isEnglish = false }: 
         </CardTitle>
       </CardHeader>
       <CardContent className="p-8 space-y-6">
-        <TiptapEditor 
+        <NovelEditor 
           value={value} 
           onChange={onChange} 
         />

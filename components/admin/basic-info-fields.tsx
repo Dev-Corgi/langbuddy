@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils'
 interface BasicInfoFieldsProps {
   title: string
   titleEn: string
+  subtitle?: string
+  subtitleEn?: string
   date: string
   startTime: string
   endTime: string
@@ -21,6 +23,8 @@ interface BasicInfoFieldsProps {
   isLocationUndecided: boolean
   onTitleChange: (value: string) => void
   onTitleEnChange: (value: string) => void
+  onSubtitleChange?: (value: string) => void
+  onSubtitleEnChange?: (value: string) => void
   onDateChange: (value: string) => void
   onStartTimeChange: (value: string) => void
   onEndTimeChange: (value: string) => void
@@ -35,6 +39,8 @@ interface BasicInfoFieldsProps {
 export function BasicInfoFields({
   title,
   titleEn,
+  subtitle,
+  subtitleEn,
   date,
   startTime,
   endTime,
@@ -46,6 +52,8 @@ export function BasicInfoFields({
   isLocationUndecided,
   onTitleChange,
   onTitleEnChange,
+  onSubtitleChange,
+  onSubtitleEnChange,
   onDateChange,
   onStartTimeChange,
   onEndTimeChange,
@@ -78,6 +86,33 @@ export function BasicInfoFields({
           <Input 
             value={titleEn} 
             onChange={(e) => onTitleEnChange(e.target.value)}
+            className="h-14 rounded-2xl border-primary/10 bg-primary/5 focus:ring-primary text-sm font-medium"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="space-y-3">
+          <Label className="font-black text-foreground/70 flex items-center gap-2">
+            <TypeOutline className="w-4 h-4 text-primary" />
+            한줄 소개 (KO)
+          </Label>
+          <Input 
+            placeholder="목록에 노출될 짧은 소개글"
+            value={subtitle || ''} 
+            onChange={(e) => onSubtitleChange?.(e.target.value)}
+            className="h-14 rounded-2xl border-border bg-muted/50 focus:ring-primary text-sm font-medium"
+          />
+        </div>
+        <div className="space-y-3">
+          <Label className="font-black text-primary flex items-center gap-2">
+            <TypeOutline className="w-4 h-4 text-primary" />
+            One-line Intro (EN)
+          </Label>
+          <Input 
+            placeholder="Short intro for list view"
+            value={subtitleEn || ''} 
+            onChange={(e) => onSubtitleEnChange?.(e.target.value)}
             className="h-14 rounded-2xl border-primary/10 bg-primary/5 focus:ring-primary text-sm font-medium"
           />
         </div>

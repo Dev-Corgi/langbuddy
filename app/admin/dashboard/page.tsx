@@ -302,6 +302,7 @@ export default function AdminDashboardPage() {
           </Card>
           */}
 
+          {/* 
           <Card className="border-border shadow-sm rounded-[32px] overflow-hidden border-none">
             <CardHeader className="bg-muted/50 border-b border-border">
               <CardTitle className="text-lg md:text-xl font-black">
@@ -332,6 +333,7 @@ export default function AdminDashboardPage() {
               </p>
             </CardContent>
           </Card>
+          */}
         </div>
       </div>
     </div>

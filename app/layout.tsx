@@ -4,6 +4,7 @@ import "./globals.css";
 import { Footer } from "./_components/footer";
 import { BottomNav } from "./_components/bottom-nav";
 import { Suspense } from "react";
+import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,8 +34,9 @@ export default function RootLayout({
         <Suspense fallback={null}>
           {children}
           <Footer />
-          <BottomNav />
+          {/* <BottomNav /> */}
         </Suspense>
+        <Toaster />
       </body>
     </html>
   );

@@ -27,6 +27,7 @@ interface EditorProps {
 export function TiptapEditor({ value, onChange }: EditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [imageWidth, setImageWidth] = useState<string>('')
   const supabase = createClient()
 
   const editor = useEditor({
@@ -35,6 +36,10 @@ export function TiptapEditor({ value, onChange }: EditorProps) {
       StarterKit,
       Image.configure({
         allowBase64: true,
+        inline: true,
+        HTMLAttributes: {
+          class: 'rounded-lg cursor-pointer',
+        },
       }),
     ],
     content: value,
@@ -68,16 +73,24 @@ export function TiptapEditor({ value, onChange }: EditorProps) {
         .from('postings')
         .upload(filePath, file)
 
-      if (uploadError) throw uploadError
+      if (uploadError) {
+        console.error('Upload error:', uploadError)
+        throw uploadError
+      }
 
       const { data: { publicUrl } } = supabase.storage
         .from('postings')
         .getPublicUrl(filePath)
 
-      editor.chain().focus().setImage({ src: publicUrl }).run()
-    } catch (error) {
+      editor.chain().focus().setImage({ 
+        src: publicUrl,
+        alt: file.name,
+        title: file.name,
+      }).run()
+    } catch (error: any) {
       console.error('Error uploading image:', error)
-      alert('이미지 업로드에 실패했습니다.')
+      const errorMessage = error?.message || '알 수 없는 오류가 발생했습니다.'
+      alert(`이미지 업로드에 실패했습니다.\n오류: ${errorMessage}`)
     } finally {
       setIsUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -164,6 +177,43 @@ export function TiptapEditor({ value, onChange }: EditorProps) {
             <ImageIcon className="w-4 h-4" />
           )}
         </Button>
+        <div className="w-px h-6 bg-border mx-1 self-center" />
+        {editor.isActive('image') && (
+          <div className="flex items-center gap-2 px-2">
+            <span className="text-xs text-muted-foreground">너비:</span>
+            <input
+              type="number"
+              placeholder="px"
+              value={imageWidth}
+              onChange={(e) => {
+                const width = e.target.value
+                setImageWidth(width)
+                if (width && !isNaN(Number(width))) {
+                  editor.chain().focus().updateAttributes('image', {
+                    width: `${width}px`,
+                    style: `width: ${width}px; height: auto;`
+                  }).run()
+                }
+              }}
+              className="w-20 px-2 py-1 text-xs border border-border rounded bg-background"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setImageWidth('')
+                editor.chain().focus().updateAttributes('image', {
+                  width: null,
+                  style: null
+                }).run()
+              }}
+              className="text-xs"
+            >
+              초기화
+            </Button>
+          </div>
+        )}
         <div className="ml-auto flex gap-1">
           <Button
             type="button"

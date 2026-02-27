@@ -1,0 +1,237 @@
+/* Novel Editor Styles - CSS Variables */
+:root {
+  --novel-black: #000000;
+  --novel-highlight-default: #ffffff;
+  --novel-highlight-purple: #f6f3f8;
+  --novel-highlight-red: #fef1f1;
+  --novel-highlight-yellow: #fef9c3;
+  --novel-highlight-blue: #dbeafe;
+  --novel-highlight-green: #dcfce7;
+  --novel-highlight-orange: #fed7aa;
+  --novel-highlight-pink: #fce7f3;
+  --novel-highlight-gray: #f3f4f6;
+}
+
+/* Novel Editor Styles - Drag Handle */
+.ProseMirror .drag-handle {
+  position: absolute;
+  opacity: 0;
+  transition: opacity 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+}
+
+.ProseMirror:hover .drag-handle {
+  opacity: 1;
+}
+
+.ProseMirror .drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Novel Editor Styles - Placeholder */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #adb5bd;
+  pointer-events: none;
+  height: 0;
+}
+
+.ProseMirror .is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #adb5bd;
+  pointer-events: none;
+  height: 0;
+}
+
+/* Novel Editor Styles - Image Resizer */
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+}
+
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 3px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Novel Editor Styles - Selection */
+.ProseMirror-selectednode {
+  outline: 3px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Novel Editor Styles - Focus */
+.ProseMirror:focus {
+  outline: none;
+}
+
+/* Novel Editor Styles - Headings */
+.ProseMirror h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 2.5rem;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.ProseMirror h2 {
+  font-size: 1.875rem;
+  font-weight: 600;
+  line-height: 2.25rem;
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.ProseMirror h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 2rem;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.ProseMirror p {
+  font-size: 1rem;
+  line-height: 1.75rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Novel Editor Styles - Code Block */
+.ProseMirror pre {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  font-family: 'JetBrainsMono', 'Courier New', Courier, monospace;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+}
+
+.ProseMirror pre code {
+  color: inherit;
+  padding: 0;
+  background: none;
+  font-size: 0.8rem;
+}
+
+/* Novel Editor Styles - Lists */
+.ProseMirror ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.ProseMirror ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.ProseMirror li {
+  margin: 0.25rem 0;
+}
+
+.ProseMirror ul ul {
+  list-style: circle;
+  margin: 0.25rem 0;
+}
+
+.ProseMirror ul ul ul {
+  list-style: square;
+  margin: 0.25rem 0;
+}
+
+/* Novel Editor Styles - Task List */
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding: 0;
+}
+
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+}
+
+.ProseMirror ul[data-type="taskList"] li > label {
+  flex: 0 0 auto;
+  margin-right: 0.5rem;
+  user-select: none;
+}
+
+.ProseMirror ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+}
+
+/* Novel Editor Styles - Bubble Menu */
+.bubble-menu {
+  display: flex;
+  background-color: #fff;
+  padding: 0.2rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Novel Editor Styles - Command Menu */
+.command-menu {
+  background-color: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  padding: 0.5rem;
+}
+
+/* Novel Editor Styles - Drag Handle Icon */
+.drag-handle::before {
+  content: "⋮⋮";
+  font-size: 1rem;
+  color: #9ca3af;
+}
+
+/* Novel Editor Styles - Global Drag Handle from tiptap-extension-global-drag-handle */
+[data-drag-handle] {
+  position: absolute;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  cursor: grab;
+  padding: 0.25rem;
+  margin-left: -2.5rem;
+  margin-top: 0.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  background: transparent;
+  z-index: 10;
+}
+
+[data-drag-handle]:hover {
+  opacity: 1 !important;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+[data-drag-handle]:active {
+  cursor: grabbing;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.ProseMirror:hover [data-drag-handle] {
+  opacity: 0.3;
+}
+
+.ProseMirror [data-drag-handle]:hover {
+  opacity: 1 !important;
+}
+
+/* Drag handle icon */
+[data-drag-handle]::before {
+  content: "⋮⋮";
+  font-size: 1rem;
+  line-height: 1;
+  color: #6b7280;
+  font-weight: bold;
+}

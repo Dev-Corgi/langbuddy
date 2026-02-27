@@ -3,12 +3,13 @@
 import { useState, useEffect, useMemo } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { ChevronDown, ArrowUpDown, Loader2, Calendar, Clock } from "lucide-react"
+import { ChevronDown, ArrowUpDown, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { createClient } from "@/lib/supabase"
 import { useLocale } from "@/hooks/use-locale"
 import { i18n } from "@/lib/i18n"
+import { PostingInfo } from "./posting-info"
 
 export function PostingList() {
   const locale = useLocale()
@@ -26,6 +27,7 @@ export function PostingList() {
         .eq('category', '번개')
         .eq('status', 'active')
         .or(`deadline.is.null,deadline.gt.${now}`)
+        .order('date', { ascending: true, nullsFirst: false })
       
       if (data) setItems(data)
       setLoading(false)
@@ -130,63 +132,18 @@ export function PostingList() {
                       className="object-cover transition-transform duration-500 group-hover:scale-110"
                     />
                     {dDay && (
-                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-background/80 backdrop-blur-md text-foreground text-[11px] font-black tracking-tight z-10 border border-border/50">
+                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-primary/80 backdrop-blur-md text-white text-[11px] font-black tracking-tight z-10">
                         {dDay}
                       </div>
                     )}
                   </div>
 
                   {/* Content Info */}
-                  <div className="flex flex-col md:mt-4 min-w-0 flex-1 gap-1.5">
-                    {/* 1. D-Day Row */}
-                    <div className="h-6 flex items-center">
-                      {dDay ? (
-                        <span className="text-primary font-black text-[13px] md:text-sm uppercase tracking-tight">
-                          {dDay}
-                        </span>
-                      ) : item.is_recurring ? (
-                        <span className="text-emerald-500 font-black text-[13px] md:text-sm uppercase tracking-tight">
-                          {locale === 'en' ? 'Every Week' : '매주 반복'}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground font-black text-[13px] md:text-sm uppercase tracking-tight">
-                          {locale === 'en' ? 'TBD' : '일시 미정'}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* 2. Date Row */}
-                    <div className="flex items-center gap-2 text-foreground/70">
-                      <Calendar className="w-4 h-4 text-muted-foreground" />
-                      <span className="font-bold text-[13px] md:text-sm tracking-tight">
-                        {item.is_recurring 
-                          ? (locale === 'en' ? `Every ${item.recurring_days?.join(', ')}` : `매주 ${item.recurring_days?.join(', ')}`)
-                          : (item.is_date_undecided || !item.date || item.date === '미정' ? (locale === 'en' ? 'Date Undecided' : '날짜 미정') : item.date)
-                        }
-                      </span>
-                    </div>
-
-                    {/* 3. Time Row */}
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Clock className="w-4 h-4 text-muted-foreground/70" />
-                      <span className="font-medium text-[13px] md:text-sm tracking-tight">
-                        {item.is_time_undecided || !item.time || item.time === '미정' 
-                          ? (locale === 'en' ? 'Time TBD' : '시간 미정')
-                          : item.time
-                        }
-                      </span>
-                    </div>
-                    
-                    {/* 4. Title Row */}
-                    <h3 className="mt-1 text-[16px] md:text-[18px] font-black text-foreground line-clamp-2 leading-[1.3] tracking-tight group-hover:text-primary transition-colors">
-                      {locale === 'en' && item.title_en ? item.title_en : item.title}
-                    </h3>
+                  <div className="flex flex-col md:mt-4 min-w-0 flex-1">
+                    <PostingInfo item={item} size="md" className="group" />
                     
                     {/* 5. Additional Info Row */}
-                    <div className="mt-2 space-y-1">
-                      <p className="text-[13px] md:text-sm text-muted-foreground font-medium line-clamp-1">
-                        {locale === 'en' && item.location_en ? item.location_en : item.location}
-                      </p>
+                    <div className="mt-1">
                       <div className="flex items-center gap-2">
                         <span className="text-[14px] md:text-[15px] text-primary font-black">
                           {item.cost || (locale === 'en' ? 'Free' : '무료')}

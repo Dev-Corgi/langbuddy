@@ -56,14 +56,51 @@ export function MainCarousel({ className, autoPlayMs = 5000 }: MainCarouselProps
 
   useEffect(() => {
     async function fetchCarousels() {
+      const now = new Date().toISOString()
+      console.log('🔍 Carousel Query - Current time:', now)
+      
       const { data, error } = await supabase
-        .from('carousels')
+        .from('postings')
         .select('*')
-        .eq('is_active', true)
-        .order('display_order', { ascending: true })
+        .eq('category', '번개')
+        .eq('status', 'active')
+        .or(`deadline.is.null,deadline.gt.${now}`)
+        .order('date', { ascending: true, nullsFirst: false })
+        .limit(5)
+      
+      console.log('📊 Carousel Query Result:', {
+        count: data?.length || 0,
+        error,
+        data: data?.map(p => ({
+          id: p.id,
+          title: p.title,
+          status: p.status,
+          deadline: p.deadline,
+          date: p.date,
+          image_url: p.image_url
+        }))
+      })
       
       if (data && data.length > 0) {
-        setSlides(data)
+        // Map postings to carousel slide format
+        const fallbackImage = "/carousel/imgi_3_250917060052_25013145.gif"
+        const mappedSlides = data.map(posting => ({
+          id: posting.id,
+          title: posting.title,
+          title_en: posting.title_en,
+          subtitle: posting.subtitle,
+          subtitle_en: posting.subtitle_en,
+          description: `${posting.location || ''} ${posting.time ? '• ' + posting.time : ''}`.trim(),
+          description_en: `${posting.location_en || posting.location || ''} ${posting.time ? '• ' + posting.time : ''}`.trim(),
+          period: posting.date,
+          location: posting.location,
+          image_url: posting.image_url || fallbackImage,
+          mobile_image_url: posting.image_url || fallbackImage,
+          thumbnail_url: posting.image_url || fallbackImage,
+          link_url: `/posting/${posting.id}`
+        }))
+        console.log('✅ Mapped slides:', mappedSlides.length)
+        setSlides(mappedSlides)
       } else {
         setSlides([
           {
@@ -276,7 +313,7 @@ export function MainCarousel({ className, autoPlayMs = 5000 }: MainCarouselProps
                   }}
                   className={cn(
                     "font-black tracking-tighter text-white",
-                    isDesktop ? "text-6xl whitespace-pre-line" : "text-4xl line-clamp-1"
+                    isDesktop ? "text-6xl whitespace-pre-line" : "text-3xl line-clamp-1"
                   )}
                 >
                   {displayTitle}

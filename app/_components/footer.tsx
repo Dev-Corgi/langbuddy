@@ -7,7 +7,7 @@ export function Footer() {
   const locale = useLocale()
   
   return (
-    <footer className="w-full bg-card border-t border-border mt-auto relative overflow-hidden">
+    <footer className="w-full bg-muted/30 border-t border-border mt-auto relative overflow-hidden">
       <div className="mx-auto max-w-screen-2xl px-6 py-10 md:py-16">
         <div className="flex flex-row justify-between items-end gap-4">
           {/* Left Section: Logo & Slogan */}
@@ -43,7 +43,7 @@ export function Footer() {
         </div>
       </div>
       {/* Mobile spacing for BottomNav */}
-      <div className="h-20 md:hidden" />
+      {/* <div className="h-20 md:hidden" /> */}
     </footer>
   )
 }

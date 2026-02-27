@@ -50,6 +50,8 @@ export default function EditPostingPage() {
     category: '스터디',
     title: '',
     title_en: '',
+    subtitle: '',
+    subtitle_en: '',
     description: '',
     description_en: '',
     location: '',
@@ -111,6 +113,8 @@ export default function EditPostingPage() {
         const [start, end] = (data.time || '').split(' ~ ')
         setFormData({
           ...data,
+          subtitle: data.subtitle || '',
+          subtitle_en: data.subtitle_en || '',
           start_time: start === '미정' ? '19:00' : (start || '19:00'),
           end_time: start === '미정' ? '' : (end || ''),
           is_date_undecided: data.date === '미정',
@@ -236,6 +240,8 @@ export default function EditPostingPage() {
               <BasicInfoFields
                 title={formData.title}
                 titleEn={formData.title_en}
+                subtitle={formData.subtitle}
+                subtitleEn={formData.subtitle_en}
                 date={formData.date}
                 startTime={formData.start_time}
                 endTime={formData.end_time}
@@ -247,6 +253,8 @@ export default function EditPostingPage() {
                 isLocationUndecided={formData.is_location_undecided}
                 onTitleChange={(val) => setFormData({...formData, title: val})}
                 onTitleEnChange={(val) => setFormData({...formData, title_en: val})}
+                onSubtitleChange={(val) => setFormData({...formData, subtitle: val})}
+                onSubtitleEnChange={(val) => setFormData({...formData, subtitle_en: val})}
                 onDateChange={(val) => setFormData({...formData, date: val})}
                 onStartTimeChange={(val) => setFormData({...formData, start_time: val})}
                 onEndTimeChange={(val) => setFormData({...formData, end_time: val})}

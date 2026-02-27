@@ -12,6 +12,7 @@ import dynamic from 'next/dynamic'
 import { TiptapEditorCard } from '@/components/admin/tiptap-editor-card'
 import { useFormManager } from '@/hooks/use-form-manager'
 import { FormBuilder, FormData as FormBuilderData } from '@/components/admin/form-builder'
+import { toast } from 'sonner'
 
 const TiptapEditor = dynamic(() => import('@/components/admin/tiptap-editor').then(mod => mod.TiptapEditor), { 
   ssr: false,
@@ -48,6 +49,8 @@ function NewPostingContent() {
     category: initialCategory,
     title: '',
     title_en: '',
+    subtitle: '',
+    subtitle_en: '',
     description: '', // 간략한 설명 (리스트 노출용)
     description_en: '',
     location: '',
@@ -83,8 +86,127 @@ function NewPostingContent() {
     fetchForms()
   }, [supabase])
 
+  const validateForm = () => {
+    // 1. 필수 정보 누락 검증
+    if (!formData.title.trim()) {
+      toast.error('번개 제목을 입력해주세요')
+      return false
+    }
+
+    if (!formData.is_date_undecided && !formData.date) {
+      toast.error('날짜를 선택하거나 \'날짜 미정\'을 체크해주세요')
+      return false
+    }
+
+    if (!formData.is_time_undecided && !formData.start_time) {
+      toast.error('시간을 입력하거나 \'시간 미정\'을 체크해주세요')
+      return false
+    }
+
+    if (!formData.is_location_undecided && !formData.location.trim()) {
+      toast.error('장소를 입력하거나 \'장소 미정\'을 체크해주세요')
+      return false
+    }
+
+    if (!formData.image_url.trim()) {
+      toast.error('대표 이미지를 업로드해주세요')
+      return false
+    }
+
+    // 2. 날짜/시간 관련 검증
+    if (!formData.is_date_undecided && formData.date) {
+      const selectedDate = new Date(formData.date)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      if (selectedDate < today) {
+        toast.error('과거 날짜는 선택할 수 없습니다')
+        return false
+      }
+    }
+
+    if (!formData.is_time_undecided && formData.start_time && formData.end_time) {
+      if (formData.end_time <= formData.start_time) {
+        toast.error('종료 시간은 시작 시간보다 늦어야 합니다')
+        return false
+      }
+    }
+
+    if (formData.deadline) {
+      const deadlineDate = new Date(formData.deadline)
+      const now = new Date()
+      
+      if (deadlineDate < now) {
+        toast.error('마감 기한은 현재 시간 이후여야 합니다')
+        return false
+      }
+
+      if (!formData.is_date_undecided && formData.date) {
+        const meetingDate = new Date(formData.date)
+        if (deadlineDate > meetingDate) {
+          toast.error('신청 마감은 모임 날짜 이전이어야 합니다')
+          return false
+        }
+      }
+    }
+
+    // 3. 참가자 수 검증
+    if (formData.max_participants) {
+      const maxNum = parseInt(formData.max_participants)
+      if (isNaN(maxNum) || maxNum <= 0) {
+        toast.error('최대 참가자 수는 1명 이상이어야 합니다')
+        return false
+      }
+      if (maxNum > 1000) {
+        toast.error('최대 참가자 수가 너무 많습니다 (최대 1000명)')
+        return false
+      }
+    }
+
+    // 4. 신청 방식 검증
+    if (formData.apply_type === 'link') {
+      if (!formData.apply_link.trim()) {
+        toast.error('신청 링크를 입력해주세요')
+        return false
+      }
+      if (!formData.apply_link.startsWith('http://') && !formData.apply_link.startsWith('https://')) {
+        toast.error('올바른 URL 형식을 입력해주세요 (http:// 또는 https://)')
+        return false
+      }
+    } else if (formData.apply_type === 'form') {
+      if (!showInlineBuilder && !formData.form_id) {
+        toast.error('신청 폼을 선택하거나 새로 만들어주세요')
+        return false
+      }
+      if (showInlineBuilder && !inlineFormData) {
+        toast.error('신청 폼을 작성해주세요')
+        return false
+      }
+    }
+
+    // 5. 계좌 정보 검증
+    if (isBankAccountEnabled && !formData.bank_account.trim()) {
+      toast.error('계좌 정보를 입력해주세요')
+      return false
+    }
+
+    // 6. 콘텐츠 검증
+    if (!formData.rich_content.trim()) {
+      toast.error('상세 콘텐츠를 작성해주세요')
+      return false
+    }
+
+    return true
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // 검증 실행
+    if (!validateForm()) {
+      return
+    }
+
     setLoading(true)
 
     const submissionData = {
@@ -120,9 +242,10 @@ function NewPostingContent() {
       .insert([submissionData])
 
     if (error) {
-      alert(error.message)
+      toast.error(`등록 실패: ${error.message}`)
       setLoading(false)
     } else {
+      toast.success('번개 모임이 성공적으로 등록되었습니다!')
       router.push('/admin/meetups')
       router.refresh()
     }
@@ -155,6 +278,8 @@ function NewPostingContent() {
               <BasicInfoFields
                 title={formData.title}
                 titleEn={formData.title_en}
+                subtitle={formData.subtitle}
+                subtitleEn={formData.subtitle_en}
                 date={formData.date}
                 startTime={formData.start_time}
                 endTime={formData.end_time}
@@ -166,6 +291,8 @@ function NewPostingContent() {
                 isLocationUndecided={formData.is_location_undecided}
                 onTitleChange={(val) => setFormData({...formData, title: val})}
                 onTitleEnChange={(val) => setFormData({...formData, title_en: val})}
+                onSubtitleChange={(val) => setFormData({...formData, subtitle: val})}
+                onSubtitleEnChange={(val) => setFormData({...formData, subtitle_en: val})}
                 onDateChange={(val) => setFormData({...formData, date: val})}
                 onStartTimeChange={(val) => setFormData({...formData, start_time: val})}
                 onEndTimeChange={(val) => setFormData({...formData, end_time: val})}
