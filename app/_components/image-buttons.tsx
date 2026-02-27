@@ -13,6 +13,7 @@ type ImageButtonItem = {
 }
 
 const ITEMS: ImageButtonItem[] = [
+  /*
   {
     title: "언어교환 모임",
     subtitle: "Language Exchange",
@@ -27,6 +28,7 @@ const ITEMS: ImageButtonItem[] = [
     href: "/posting/study",
     imageSrc: "/imagebuttons/study.jpg",
   },
+  */
   {
     title: "소모임 / 번개",
     subtitle: "Lightning Gathering",
@@ -48,14 +50,14 @@ export function ImageButtons({ className }: ImageButtonsProps) {
         description="관심 있는 모임에 지금 바로 참여해보세요" 
         href="#" 
       />
-      <div className="grid gap-6 md:gap-8 md:grid-cols-3 min-w-0">
+      <div className="grid gap-6 md:gap-8 md:grid-cols-1 max-w-2xl mx-auto min-w-0">
         {ITEMS.map((item, idx) => (
           <Link
             key={item.title}
             href={item.href}
             className={cn(
               "group relative overflow-hidden rounded-[32px] border border-border bg-card transition-all duration-500 hover:shadow-2xl hover:shadow-primary/10 hover:border-primary/30 hover:-translate-y-2",
-              idx === 1 ? "md:scale-105 z-10" : ""
+              // idx === 1 ? "md:scale-105 z-10" : ""
             )}
           >
             <div className="relative min-h-[200px] md:aspect-3/4">

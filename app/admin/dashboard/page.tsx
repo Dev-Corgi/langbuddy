@@ -72,6 +72,7 @@ export default function AdminDashboardPage() {
       setRecentPostings(recent || [])
 
       setStats([
+        /*
         { 
           label: locale === 'en' ? 'Study' : '스터디', 
           value: (studyCount || 0).toString(), 
@@ -86,6 +87,7 @@ export default function AdminDashboardPage() {
           color: 'text-primary',
           href: '/admin/language'
         },
+        */
         { 
           label: locale === 'en' ? 'Social' : '번개 모임', 
           value: (meetupCount || 0).toString(), 
@@ -187,7 +189,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-1 max-w-md gap-4 md:gap-6">
           {stats.map((stat) => (
             <Link key={stat.label} href={stat.href}>
               <Card className="border-border shadow-sm rounded-[24px] border-none hover:ring-2 hover:ring-primary/20 transition-all">
@@ -251,12 +253,14 @@ export default function AdminDashboardPage() {
               </div>
               <div className="p-4 bg-card text-center border-t border-border/50">
                 <div className="flex justify-center gap-4">
+                  {/*
                   <Link href="/admin/study" className="text-sm font-bold text-primary hover:underline">
                     {locale === 'en' ? 'Study' : '스터디'}
                   </Link>
                   <Link href="/admin/language" className="text-sm font-bold text-primary hover:underline">
                     {locale === 'en' ? 'Language' : '언어교환'}
                   </Link>
+                  */}
                   <Link href="/admin/meetups" className="text-sm font-bold text-primary hover:underline">
                     {locale === 'en' ? 'Social' : '번개'}
                   </Link>

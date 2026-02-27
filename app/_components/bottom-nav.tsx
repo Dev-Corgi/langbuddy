@@ -9,8 +9,8 @@ import { useLocale } from "@/hooks/use-locale"
 
 const NAV_ITEMS = (locale: string) => [
   { icon: Home, label: locale === 'en' ? 'Home' : '홈', href: "/" },
-  { icon: BookOpen, label: locale === 'en' ? 'Study' : '스터디', href: "/posting/study" },
-  { icon: Languages, label: locale === 'en' ? 'Language' : '언어교환', href: "/posting/language" },
+  // { icon: BookOpen, label: locale === 'en' ? 'Study' : '스터디', href: "/posting/study" },
+  // { icon: Languages, label: locale === 'en' ? 'Language' : '언어교환', href: "/posting/language" },
   { icon: Zap, label: locale === 'en' ? 'Lightning' : '번개', href: "/posting" },
 ]
 
