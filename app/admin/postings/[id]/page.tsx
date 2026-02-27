@@ -285,14 +285,14 @@ export default function EditPostingPage() {
                     <Wallet className="w-4 h-4 text-primary" />
                     비용 (KO)
                   </Label>
-                  <Input value={formData.cost} onChange={(e) => setFormData({...formData, cost: e.target.value})} className="h-12 rounded-xl border-border text-sm font-medium focus:ring-primary" />
+                  <Input value={formData.cost} onChange={(e) => setFormData({...formData, cost: e.target.value.replace(/\\/g, '₩')})} className="h-12 rounded-xl border-border text-sm font-medium focus:ring-primary" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-sm font-bold text-primary flex items-center gap-2">
                     <Wallet className="w-4 h-4 text-primary" />
                     비용 (EN)
                   </Label>
-                  <Input value={formData.cost_en} onChange={(e) => setFormData({...formData, cost_en: e.target.value})} className="h-12 rounded-xl border-primary/30 bg-primary/5 text-sm font-medium focus:ring-primary" />
+                  <Input value={formData.cost_en} onChange={(e) => setFormData({...formData, cost_en: e.target.value.replace(/\\/g, '₩')})} className="h-12 rounded-xl border-primary/30 bg-primary/5 text-sm font-medium focus:ring-primary" />
                 </div>
               </div>
 

@@ -340,7 +340,7 @@ function NewPostingContent() {
                     id="cost"
                     placeholder="예: 10,000원"
                     value={formData.cost}
-                    onChange={(e) => setFormData({...formData, cost: e.target.value})}
+                    onChange={(e) => setFormData({...formData, cost: e.target.value.replace(/\\/g, '₩')})}
                     className="h-12 rounded-xl border-border focus:ring-primary text-sm font-medium transition-all"
                   />
                 </div>
@@ -353,7 +353,7 @@ function NewPostingContent() {
                     id="cost_en"
                     placeholder="e.g. 10,000 KRW"
                     value={formData.cost_en}
-                    onChange={(e) => setFormData({...formData, cost_en: e.target.value})}
+                    onChange={(e) => setFormData({...formData, cost_en: e.target.value.replace(/\\/g, '₩')})}
                     className="h-12 rounded-xl border-primary/30 focus:ring-primary bg-surface/10 text-sm font-medium transition-all"
                   />
                 </div>
