@@ -40,7 +40,7 @@ export function NovelRenderer({ content, className }: NovelRendererProps) {
         className={className}
         editorProps={{
           attributes: {
-            class: 'prose prose-lg dark:prose-invert prose-headings:font-black prose-p:font-medium focus:outline-none max-w-full'
+            class: 'prose prose-lg dark:prose-invert prose-headings:font-black prose-p:font-medium focus:outline-none max-w-full prose-img:max-w-full prose-img:h-auto prose-video:max-w-full prose-video:h-auto'
           }
         }}
       />
