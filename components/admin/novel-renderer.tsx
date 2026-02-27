@@ -17,6 +17,7 @@ export function NovelRenderer({ content, className }: NovelRendererProps) {
     // If parsing fails, treat as HTML string
     return (
       <div 
+        key={content}
         className={className}
         dangerouslySetInnerHTML={{ __html: content }}
       />
@@ -32,7 +33,7 @@ export function NovelRenderer({ content, className }: NovelRendererProps) {
   )
 
   return (
-    <EditorRoot>
+    <EditorRoot key={content}>
       <EditorContent
         extensions={viewerExtensions as any}
         initialContent={initialContent}
