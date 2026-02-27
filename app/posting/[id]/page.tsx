@@ -260,7 +260,7 @@ export default function PostingDetailPage() {
               <div className="overflow-hidden">
                 <NovelRenderer 
                   content={displayContent}
-                  className="prose prose-zinc max-w-none prose-headings:font-black prose-p:font-medium prose-p:text-muted-foreground prose-img:rounded-[24px] prose-img:shadow-lg prose-img:max-w-full prose-img:h-auto"
+                  className="prose prose-zinc max-w-none prose-headings:font-black prose-p:font-medium prose-p:text-muted-foreground prose-img:rounded-[24px] prose-img:shadow-lg prose-img:max-w-full prose-img:h-auto [&_iframe]:w-full [&_iframe]:aspect-video [&_iframe]:rounded-[24px]"
                 />
               </div>
             </div>
