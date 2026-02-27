@@ -4,6 +4,8 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Image from '@tiptap/extension-image'
 import { Button } from '@/components/ui/button'
+import { useRef, useState } from 'react'
+import { createClient } from '@/lib/supabase'
 import { 
   Bold, 
   Italic, 
@@ -13,7 +15,8 @@ import {
   Heading1,
   Heading2,
   Undo,
-  Redo
+  Redo,
+  Loader2
 } from 'lucide-react'
 
 interface EditorProps {
@@ -22,6 +25,10 @@ interface EditorProps {
 }
 
 export function TiptapEditor({ value, onChange }: EditorProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const supabase = createClient()
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -44,14 +51,48 @@ export function TiptapEditor({ value, onChange }: EditorProps) {
   if (!editor) return null
 
   const addImage = () => {
-    const url = window.prompt('이미지 URL을 입력하세요')
-    if (url) {
-      editor.chain().focus().setImage({ src: url }).run()
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !editor) return
+
+    try {
+      setIsUploading(true)
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`
+      const filePath = `editor/${fileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('postings')
+        .upload(filePath, file)
+
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('postings')
+        .getPublicUrl(filePath)
+
+      editor.chain().focus().setImage({ src: publicUrl }).run()
+    } catch (error) {
+      console.error('Error uploading image:', error)
+      alert('이미지 업로드에 실패했습니다.')
+    } finally {
+      setIsUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
   return (
     <div className="border border-border rounded-xl overflow-hidden bg-card">
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept="image/*"
+        className="hidden"
+      />
       <div className="bg-muted/50 border-b border-border p-2 flex flex-wrap gap-1">
         <Button
           type="button"
@@ -115,8 +156,13 @@ export function TiptapEditor({ value, onChange }: EditorProps) {
           variant="ghost"
           size="sm"
           onClick={addImage}
+          disabled={isUploading}
         >
-          <ImageIcon className="w-4 h-4" />
+          {isUploading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <ImageIcon className="w-4 h-4" />
+          )}
         </Button>
         <div className="ml-auto flex gap-1">
           <Button
