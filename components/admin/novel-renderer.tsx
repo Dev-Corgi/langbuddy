@@ -33,8 +33,8 @@ export function NovelRenderer({ content, className }: NovelRendererProps) {
 
   return (
     <EditorRoot>
-      {/* @ts-ignore - Tiptap version conflicts between novel and direct imports */}
       <EditorContent
+        // @ts-expect-error - Tiptap version conflicts between novel and direct imports
         extensions={viewerExtensions}
         initialContent={initialContent}
         editable={false}
