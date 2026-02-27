@@ -43,6 +43,7 @@ export function NovelEditor({ value, onChange }: NovelEditorProps) {
   return (
     <EditorRoot>
       <EditorContent
+        // @ts-expect-error - Tiptap version conflicts between novel and direct imports
         extensions={[...defaultExtensions, slashCommand]}
         initialContent={initialContent}
         onUpdate={({ editor }) => {
