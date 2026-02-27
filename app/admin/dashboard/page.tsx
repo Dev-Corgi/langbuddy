@@ -210,7 +210,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Quick Actions / Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 md:gap-8">
           <Card className="border-border shadow-sm rounded-[32px] overflow-hidden border-none">
             <CardHeader className="bg-muted/50 border-b border-border">
               <CardTitle className="text-lg md:text-xl font-black">
@@ -269,6 +269,7 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
+          {/* 
           <Card className="border-border shadow-sm rounded-[32px] overflow-hidden border-none">
             <CardHeader className="bg-muted/50 border-b border-border">
               <CardTitle className="text-lg md:text-xl font-black">
@@ -299,6 +300,7 @@ export default function AdminDashboardPage() {
               </p>
             </CardContent>
           </Card>
+          */}
 
           <Card className="border-border shadow-sm rounded-[32px] overflow-hidden border-none">
             <CardHeader className="bg-muted/50 border-b border-border">
