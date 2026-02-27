@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { MainNav } from "./_components/main-nav";
+import { MainCarousel } from "./_components/main-carousel";
 import { PostingCarousel } from "./_components/posting-carousel";
 import { PostingList } from "./_components/posting-list";
 import { LangBuddyNews } from "./_components/langbuddy-news";
@@ -16,7 +17,9 @@ export default function Home() {
 
       <MainNav activePrimaryLabel="Home" />
       <main className="py-6 md:py-10 relative z-10">
-        <div className="mx-auto w-full max-w-[1600px] px-4 xl:px-8 space-y-20 md:space-y-32">
+        <MainCarousel />
+        
+        <div className="mx-auto w-full max-w-[1600px] px-4 xl:px-8 space-y-20 md:space-y-32 mt-20">
           <PostingCarousel />
           
           <div className="mx-auto w-full px-0 xl:px-32">
