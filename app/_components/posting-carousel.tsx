@@ -151,7 +151,7 @@ export function PostingCarousel() {
     <section className="w-full">
       <SectionHeader title={locale === 'en' ? 'Upcoming Meetups' : '오픈 예정 모임'} className="px-4 xl:px-0" />
       
-      <div className="relative group">
+      <div className="relative group/controls">
         <div 
           ref={containerRef} 
           className="overflow-hidden relative"
@@ -163,8 +163,8 @@ export function PostingCarousel() {
             className="flex gap-4 md:gap-6"
             animate={{ 
               x: isMobile 
-                ? `-${index * 100}%` 
-                : `calc(-${index * (100 / 3)}% - ${index * (6 / 3)}px)` 
+                ? `calc(-${index * 100}% - ${index * 16}px)` 
+                : `calc(-${index * (100 / 3)}% - ${index * 24}px)` 
             }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >
@@ -178,7 +178,7 @@ export function PostingCarousel() {
                     isMobile ? "w-full" : "w-[calc((100%/3)-(1.5rem*2/3))]"
                   )}
                 >
-                  <div className="relative aspect-square md:aspect-4/3 rounded-2xl overflow-hidden bg-muted group">
+                  <div className="relative aspect-square md:aspect-4/3 rounded-2xl overflow-hidden bg-muted group/card">
                     {/* Background Blur Image */}
                     <Image
                       src={item.image_url || "/postingpage/imgi_4_2026012915421534.jpg"}
@@ -191,7 +191,7 @@ export function PostingCarousel() {
                       href={`/posting/${item.id}`}
                       className="absolute inset-0 flex items-center justify-center p-6 md:p-8"
                     >
-                      <div className="relative w-full h-full shadow-2xl transition-transform duration-300 group-hover:scale-[1.05]">
+                      <div className="relative w-full h-full shadow-2xl transition-transform duration-300 group-hover/card:scale-[1.05]">
                         <Image
                           src={item.image_url || "/postingpage/imgi_4_2026012915421534.jpg"}
                           alt={locale === 'en' && item.title_en ? item.title_en : item.title}
@@ -236,7 +236,7 @@ export function PostingCarousel() {
             <button
               onClick={() => paginate(-1)}
               className={cn(
-                "absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 h-12 w-12 rounded-full bg-card shadow-lg border border-border flex items-center justify-center hover:bg-accent transition-all z-10 opacity-0 group-hover:opacity-100",
+                "absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 h-12 w-12 rounded-full bg-card shadow-lg border border-border flex items-center justify-center hover:bg-accent transition-all z-10 opacity-0 group-hover/controls:opacity-100",
                 index === 0 && "pointer-events-none opacity-0"
               )}
             >
@@ -245,7 +245,7 @@ export function PostingCarousel() {
             <button
               onClick={() => paginate(1)}
               className={cn(
-                "absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 h-12 w-12 rounded-full bg-card shadow-lg border border-border flex items-center justify-center hover:bg-accent transition-all z-10 opacity-0 group-hover:opacity-100",
+                "absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 h-12 w-12 rounded-full bg-card shadow-lg border border-border flex items-center justify-center hover:bg-accent transition-all z-10 opacity-0 group-hover/controls:opacity-100",
                 index >= items.length - 3 && "pointer-events-none opacity-0"
               )}
             >
