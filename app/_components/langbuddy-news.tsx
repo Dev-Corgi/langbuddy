@@ -44,14 +44,12 @@ export function LangBuddyNews() {
             post_url: "#",
             caption: "[LANGBUDDY NEWS] 동아리 활동 하이라이트 #1"
           },
-          /*
           {
             id: '2',
             thumbnail_url: "/news/news2.jpg",
             post_url: "#",
             caption: "언어교환 모임 현장 스케치"
           },
-          */
           {
             id: '3',
             thumbnail_url: "/news/news3.jpg",

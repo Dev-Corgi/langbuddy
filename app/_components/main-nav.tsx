@@ -13,8 +13,8 @@ import { useLocale } from "@/hooks/use-locale"
 
 const PRIMARY_LINKS = (t: any) => [
   { href: "/", label: t.nav.home },
-  // { href: "/posting/study", label: t.nav.study },
-  // { href: "/posting/language", label: t.nav.language },
+  { href: "/posting/study", label: t.nav.study },
+  { href: "/posting/language", label: t.nav.language },
   { href: "/posting", label: t.nav.social },
 ];
 
@@ -64,7 +64,7 @@ function MainNavContent({ activePrimaryLabel }: { activePrimaryLabel?: string })
             <div className="hidden lg:flex items-center gap-4 h-full">
               <div className="border-l border-border h-4" />
               <p className="text-[13px] font-bold text-muted-foreground tracking-tight whitespace-nowrap leading-none mt-0.5">
-                {locale === 'en' ? 'Making the World Your Neighborhood' : '글로벌 소모임 & 번개 커뮤니티'}
+                {locale === 'en' ? 'Making the World Your Neighborhood' : '글로벌친목 & 언어교환동아리'}
               </p>
             </div>
 

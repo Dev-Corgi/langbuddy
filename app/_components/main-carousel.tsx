@@ -293,7 +293,7 @@ export function MainCarousel({ className, autoPlayMs = 5000 }: MainCarouselProps
                     className="group h-9 md:h-16 px-5 md:px-12 rounded-lg md:rounded-2xl bg-primary text-primary-foreground font-semibold text-sm md:text-xl shadow-2xl shadow-primary/40 hover:bg-primary/90 transition-all active:scale-95"
                     asChild
                   >
-                    <Link href="/posting">
+                    <Link href={active.link_url || "/posting"}>
                       {locale === 'en' ? 'Explore Now' : '자세히 보기'}
                       <ChevronRight className="ml-1 w-3.5 h-3.5 md:w-6 md:h-6 transition-transform group-hover:translate-x-2" />
                     </Link>
