@@ -257,7 +257,7 @@ export default function PostingDetailPage() {
               
               {/* Rich Content Area */}
               <div 
-                className="prose prose-zinc max-w-none prose-headings:font-black prose-p:font-medium prose-p:text-muted-foreground prose-img:rounded-[24px] prose-img:shadow-lg"
+                className="prose prose-zinc max-w-none prose-headings:font-black prose-p:font-medium prose-p:text-muted-foreground prose-img:rounded-[24px] prose-img:shadow-lg whitespace-pre-wrap"
                 dangerouslySetInnerHTML={{ __html: displayContent }}
               />
             </div>
