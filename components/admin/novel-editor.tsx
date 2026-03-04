@@ -49,13 +49,13 @@ export function NovelEditor({ value, onChange }: NovelEditorProps) {
           const json = editor.getJSON()
           onChange(JSON.stringify(json))
         }}
-        className="relative min-h-[500px] w-full border-muted bg-background sm:rounded-lg sm:border sm:shadow-lg px-4"
+        className="relative min-h-[500px] w-full border-muted bg-background rounded-lg border shadow-lg px-4"
         editorProps={{
           handleDOMEvents: {
             keydown: (_view, event) => handleCommandNavigation(event),
           },
           attributes: {
-            class: 'prose prose-lg dark:prose-invert prose-headings:font-title font-default focus:outline-none max-w-full pl-8'
+            class: 'prose prose-lg dark:prose-invert prose-headings:font-title font-default focus:outline-none max-w-full'
           }
         }}
         slotAfter={<ImageResizer />}

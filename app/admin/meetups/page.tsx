@@ -35,36 +35,45 @@ function MeetupsManagementContent() {
   const supabase = createClient()
 
   useEffect(() => {
-    fetchPostings()
     const getSession = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         setCurrentUserId(user.id)
         
+        let superAdminStatus = false
         // Fallback for superadmin email
         if (user.email === 'pomato5959@gmail.com') {
-          setIsSuperAdmin(true)
-          return
+          superAdminStatus = true
+        } else {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('is_superadmin')
+            .eq('id', user.id)
+            .single()
+          superAdminStatus = !!profile?.is_superadmin
         }
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('is_superadmin')
-          .eq('id', user.id)
-          .single()
-        setIsSuperAdmin(!!profile?.is_superadmin)
+        
+        setIsSuperAdmin(superAdminStatus)
+        fetchPostings(user.id, superAdminStatus)
       }
     }
     getSession()
   }, [])
 
-  async function fetchPostings() {
+  async function fetchPostings(userId: string, superAdmin: boolean) {
     setLoading(true)
-    const { data, error } = await supabase
+    let query = supabase
       .from('postings')
       .select('*')
       .eq('category', '번개')
       .order('created_at', { ascending: false })
+    
+    // 슈퍼 관리자가 아니면 자신이 작성한 글만 필터링
+    if (!superAdmin) {
+      query = query.eq('created_by', userId)
+    }
+
+    const { data, error } = await query
     
     if (data) setPostings(data)
     setLoading(false)
@@ -79,7 +88,12 @@ function MeetupsManagementContent() {
     if (!confirm('정말 삭제하시겠습니까?')) return
     const { error } = await supabase.from('postings').delete().eq('id', id)
     if (error) alert(error.message)
-    else fetchPostings()
+    else {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        fetchPostings(user.id, isSuperAdmin)
+      }
+    }
   }
 
   return (

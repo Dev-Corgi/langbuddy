@@ -37,30 +37,28 @@ export default function AdminDashboardPage() {
       setLoading(true)
       
       const { data: { user } } = await supabase.auth.getUser()
+      let userProfile = null
+      
       if (user) {
         const { data: profile } = await supabase
           .from('profiles')
           .select('is_superadmin')
           .eq('id', user.id)
           .single()
+        userProfile = profile
         setIsSuperAdmin(!!profile?.is_superadmin)
       }
       
       // Fetch stats
-      const { count: studyCount } = await supabase
+      let statsQuery = supabase
         .from('postings')
         .select('*', { count: 'exact', head: true })
-        .eq('category', '스터디')
-      
-      const { count: languageCount } = await supabase
-        .from('postings')
-        .select('*', { count: 'exact', head: true })
-        .eq('category', '언어교환')
 
-      const { count: meetupCount } = await supabase
-        .from('postings')
-        .select('*', { count: 'exact', head: true })
-        .eq('category', '번개')
+      if (!userProfile?.is_superadmin && user) {
+        statsQuery = statsQuery.eq('created_by', user.id)
+      }
+
+      const { count: meetupCount } = await statsQuery.eq('category', '번개')
 
       const { count: currentInstaCount } = await supabase
         .from('instagram_posts')
@@ -74,11 +72,17 @@ export default function AdminDashboardPage() {
       setFormCount(currentFormCount || 0)
 
       // Fetch recent postings
-      const { data: recent } = await supabase
+      let recentQuery = supabase
         .from('postings')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(3)
+      
+      if (!userProfile?.is_superadmin && user) {
+        recentQuery = recentQuery.eq('created_by', user.id)
+      }
+
+      const { data: recent } = await recentQuery
       
       setRecentPostings(recent || [])
 
