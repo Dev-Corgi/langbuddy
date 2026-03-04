@@ -9,18 +9,37 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Loader2, Settings, User, Bell, Shield, Save } from 'lucide-react'
 import { useLocale } from '@/hooks/use-locale'
+import { toast } from 'sonner'
 
 export default function AdminSettingsPage() {
   const locale = useLocale()
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState({
+    name: '',
+    name_en: ''
+  })
   const supabase = createClient()
 
   useEffect(() => {
     async function getProfile() {
       const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+      if (user) {
+        setUser(user)
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+        
+        if (profileData) {
+          setProfile({
+            name: profileData.name || '',
+            name_en: profileData.name_en || ''
+          })
+        }
+      }
       setLoading(false)
     }
     getProfile()
@@ -28,9 +47,24 @@ export default function AdminSettingsPage() {
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!user) return
+    
     setIsSaving(true)
-    // Profile update logic could go here
-    setTimeout(() => setIsSaving(false), 1000)
+    const { error } = await supabase
+      .from('profiles')
+      .upsert({
+        id: user.id,
+        name: profile.name,
+        name_en: profile.name_en,
+        updated_at: new Date().toISOString()
+      })
+
+    if (error) {
+      toast.error(locale === 'en' ? 'Failed to update profile.' : '프로필 수정에 실패했습니다.')
+    } else {
+      toast.success(locale === 'en' ? 'Profile updated successfully!' : '프로필이 성공적으로 수정되었습니다!')
+    }
+    setIsSaving(false)
   }
 
   if (loading) {
@@ -70,6 +104,28 @@ export default function AdminSettingsPage() {
             </CardHeader>
             <CardContent className="p-6 md:p-8">
               <form onSubmit={handleUpdateProfile} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                  <div className="space-y-2">
+                    <Label className="font-bold text-foreground/70">{locale === 'en' ? 'Admin Name (KO)' : '관리자 이름 (국문)'}</Label>
+                    <Input 
+                      value={profile.name} 
+                      onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                      placeholder="예: 홍길동 팀장"
+                      required
+                      className="h-12 rounded-xl border-border font-medium focus:ring-primary"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-bold text-foreground/70">{locale === 'en' ? 'Admin Name (EN)' : '관리자 이름 (영문)'}</Label>
+                    <Input 
+                      value={profile.name_en} 
+                      onChange={(e) => setProfile({ ...profile, name_en: e.target.value })}
+                      placeholder="e.g. Leader Hong"
+                      className="h-12 rounded-xl border-border font-medium focus:ring-primary"
+                    />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                   <div className="space-y-2">
                     <Label className="font-bold text-foreground/70">{locale === 'en' ? 'Email Account' : '이메일 계정'}</Label>

@@ -76,7 +76,36 @@ function NewPostingContent() {
     is_recurring: false,
     recurring_days: [] as string[],
     deadline: '',
+    created_by: '',
   })
+
+  useEffect(() => {
+    async function fetchUserAndProfile() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+        
+        if (profile) {
+          setFormData(prev => ({
+            ...prev,
+            host: profile.name,
+            host_en: profile.name_en || '',
+            created_by: user.id
+          }))
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            created_by: user.id
+          }))
+        }
+      }
+    }
+    fetchUserAndProfile()
+  }, [supabase])
 
   useEffect(() => {
     async function fetchForms() {
@@ -312,12 +341,28 @@ function NewPostingContent() {
                   </Label>
                   <Input
                     id="host"
-                    placeholder="예: 홍길동 팀장"
+                    placeholder="프로필에서 자동 설정됨"
                     value={formData.host}
-                    onChange={(e) => setFormData({...formData, host: e.target.value})}
-                    className="h-12 rounded-xl border-border focus:ring-primary text-sm font-medium transition-all"
+                    readOnly
+                    className="h-12 rounded-xl border-border bg-muted/50 text-sm font-medium transition-all"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="host_en" className="text-sm font-bold text-primary flex items-center gap-2">
+                    <Crown className="w-4 h-4 text-primary" />
+                    Host (EN)
+                  </Label>
+                  <Input
+                    id="host_en"
+                    placeholder="Auto-filled from profile"
+                    value={formData.host_en}
+                    readOnly
+                    className="h-12 rounded-xl border-primary/10 bg-primary/5 text-sm font-medium transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
                 <DatePickerField
                   label="신청 마감 기한"
                   value={formData.deadline}

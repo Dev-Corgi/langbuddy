@@ -5,21 +5,23 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Crown } from 'lucide-react'
 import { useLocale } from '@/hooks/use-locale'
+import { cn } from '@/lib/utils'
 
 interface HostInfoCardProps {
   host: string
   hostEn: string
   onHostChange: (value: string) => void
   onHostEnChange: (value: string) => void
+  readOnly?: boolean
 }
 
-export function HostInfoCard({ host, hostEn, onHostChange, onHostEnChange }: HostInfoCardProps) {
+export function HostInfoCard({ host, hostEn, onHostChange, onHostEnChange, readOnly = false }: HostInfoCardProps) {
   const locale = useLocale()
   
   return (
     <Card className="border-none shadow-sm rounded-[32px] overflow-hidden bg-card">
       <CardHeader className="p-8 pb-0">
-        <CardTitle className="text-lg font-black flex items-center gap-2">
+        <CardTitle className="text-lg font-black flex items-center gap-2 text-foreground">
           <div className="w-1.5 h-6 bg-primary rounded-full" />
           {locale === 'en' ? 'Host Settings' : '주최자 정보'}
         </CardTitle>
@@ -33,7 +35,11 @@ export function HostInfoCard({ host, hostEn, onHostChange, onHostEnChange }: Hos
           <Input 
             value={host} 
             onChange={(e) => onHostChange(e.target.value)}
-            className="h-12 rounded-xl border-border text-sm font-medium"
+            readOnly={readOnly}
+            className={cn(
+              "h-12 rounded-xl border-border text-sm font-medium",
+              readOnly && "bg-muted/50 cursor-not-allowed"
+            )}
           />
         </div>
         <div className="space-y-2">
@@ -44,7 +50,11 @@ export function HostInfoCard({ host, hostEn, onHostChange, onHostEnChange }: Hos
           <Input 
             value={hostEn} 
             onChange={(e) => onHostEnChange(e.target.value)}
-            className="h-12 rounded-xl border-primary/10 bg-primary/5 text-sm font-medium"
+            readOnly={readOnly}
+            className={cn(
+              "h-12 rounded-xl border-primary/10 bg-primary/5 text-sm font-medium",
+              readOnly && "bg-muted/50 cursor-not-allowed"
+            )}
           />
         </div>
       </CardContent>

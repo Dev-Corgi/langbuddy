@@ -30,10 +30,32 @@ function MeetupsManagementContent() {
   const locale = useLocale()
   const [postings, setPostings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
     fetchPostings()
+    const getSession = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setCurrentUserId(user.id)
+        
+        // Fallback for superadmin email
+        if (user.email === 'pomato5959@gmail.com') {
+          setIsSuperAdmin(true)
+          return
+        }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_superadmin')
+          .eq('id', user.id)
+          .single()
+        setIsSuperAdmin(!!profile?.is_superadmin)
+      }
+    }
+    getSession()
   }, [])
 
   async function fetchPostings() {
@@ -48,7 +70,12 @@ function MeetupsManagementContent() {
     setLoading(false)
   }
 
-  async function deletePosting(id: string) {
+  async function deletePosting(id: string, createdBy: string | null) {
+    const isOwner = !createdBy || createdBy === currentUserId || isSuperAdmin
+    if (!isOwner) {
+      alert(locale === 'en' ? 'You do not have permission to delete this posting.' : '삭제 권한이 없습니다.')
+      return
+    }
     if (!confirm('정말 삭제하시겠습니까?')) return
     const { error } = await supabase.from('postings').delete().eq('id', id)
     if (error) alert(error.message)
@@ -155,23 +182,29 @@ function MeetupsManagementContent() {
 
                     <div className="flex items-center justify-end gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-border/50 mt-2 md:mt-0">
                       <Button asChild variant="outline" className="flex-1 md:flex-none rounded-xl font-black h-10 px-4 border-border">
-                        <Link href={`/admin/postings/${post.id}`}>{locale === 'en' ? 'Edit' : '수정'}</Link>
+                        <Link href={`/admin/postings/${post.id}`}>
+                          {post.created_by && post.created_by !== currentUserId && !isSuperAdmin
+                            ? (locale === 'en' ? 'View' : '조회') 
+                            : (locale === 'en' ? 'Edit' : '수정')}
+                        </Link>
                       </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="rounded-xl h-10 w-10">
-                            <MoreVertical className="w-5 h-5 text-muted-foreground" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="rounded-xl border-border shadow-xl p-1">
-                          <DropdownMenuItem 
-                            onClick={() => deletePosting(post.id)}
-                            className="text-destructive font-bold focus:text-destructive focus:bg-destructive/10 rounded-lg p-3 cursor-pointer"
-                          >
-                            {locale === 'en' ? 'Delete' : '삭제하기'}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {(post.created_by === currentUserId || !post.created_by || isSuperAdmin) && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="rounded-xl h-10 w-10">
+                              <MoreVertical className="w-5 h-5 text-muted-foreground" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="rounded-xl border-border shadow-xl p-1">
+                            <DropdownMenuItem 
+                              onClick={() => deletePosting(post.id, post.created_by)}
+                              className="text-destructive font-bold focus:text-destructive focus:bg-destructive/10 rounded-lg p-3 cursor-pointer"
+                            >
+                              {locale === 'en' ? 'Delete' : '삭제하기'}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
                   </div>
                 </CardContent>

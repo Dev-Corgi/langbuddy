@@ -45,6 +45,7 @@ function LanguageManagementContent() {
   const [formData, setFormData] = useState<any>(null)
   const [inlineFormData, setInlineFormData] = useState<FormBuilderData | null>(null)
   const [loadedFormId, setLoadedFormId] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   const { 
     formDetails: currentFormDetails, 
@@ -52,6 +53,14 @@ function LanguageManagementContent() {
     saveForm, 
     loadingForm 
   } = useFormManager(loadedFormId)
+
+  useEffect(() => {
+    async function getSession() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) setCurrentUserId(user.id)
+    }
+    getSession()
+  }, [supabase])
 
   useEffect(() => {
     if (currentFormDetails) {
@@ -92,6 +101,24 @@ function LanguageManagementContent() {
         setLoadedFormId(data.form_id)
       }
     } else {
+      // Fetch profile for default data
+      const { data: { user } } = await supabase.auth.getUser()
+      let hostName = '운영진'
+      let hostNameEn = 'Staff'
+      
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name, name_en')
+          .eq('id', user.id)
+          .single()
+        
+        if (profile) {
+          hostName = profile.name
+          hostNameEn = profile.name_en || ''
+        }
+      }
+
       setFormData({
         category: '언어교환',
         title: '정기 언어교환 모임',
@@ -104,15 +131,16 @@ function LanguageManagementContent() {
         end_time: '16:00',
         cost: '무료',
         cost_en: 'Free',
-        host: '운영진',
-        host_en: 'Staff',
+        host: hostName,
+        host_en: hostNameEn,
         is_recurring: true,
         recurring_days: ['토', '일'],
         status: 'active',
         image_url: '',
         bank_account: '',
         apply_type: 'form',
-        recurring_settings: {}
+        recurring_settings: {},
+        created_by: user?.id
       })
     }
     setLoading(false)
@@ -120,6 +148,13 @@ function LanguageManagementContent() {
 
   async function handleSave() {
     if (!formData) return
+
+    // Ownership check
+    if (formData.id && formData.created_by && formData.created_by !== currentUserId) {
+      alert(locale === 'en' ? 'You can only edit your own postings.' : '본인이 작성한 포스팅만 수정할 수 있습니다.')
+      return
+    }
+
     setSaving(true)
     
     let formId = formData.form_id
@@ -333,6 +368,7 @@ function LanguageManagementContent() {
               hostEn={formData.host_en}
               onHostChange={(val) => setFormData({...formData, host: val})}
               onHostEnChange={(val) => setFormData({...formData, host_en: val})}
+              readOnly={true}
             />
           </div>
 

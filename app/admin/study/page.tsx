@@ -48,6 +48,7 @@ function StudyManagementContent() {
   const [formData, setFormData] = useState<any>(null)
   const [inlineFormData, setInlineFormData] = useState<FormBuilderData | null>(null)
   const [loadedFormId, setLoadedFormId] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   const { 
     formDetails: currentFormDetails, 
@@ -55,6 +56,14 @@ function StudyManagementContent() {
     saveForm, 
     loadingForm 
   } = useFormManager(loadedFormId)
+
+  useEffect(() => {
+    async function getSession() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) setCurrentUserId(user.id)
+    }
+    getSession()
+  }, [supabase])
 
   useEffect(() => {
     if (currentFormDetails) {
@@ -96,6 +105,24 @@ function StudyManagementContent() {
         setLoadedFormId(data.form_id)
       }
     } else {
+      // Fetch profile for new default data
+      const { data: { user } } = await supabase.auth.getUser()
+      let hostName = '팀장'
+      let hostNameEn = 'Leader'
+      
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name, name_en')
+          .eq('id', user.id)
+          .single()
+        
+        if (profile) {
+          hostName = profile.name
+          hostNameEn = profile.name_en || ''
+        }
+      }
+
       setFormData({
         category: '스터디',
         title: '정기 영어 스터디',
@@ -108,15 +135,16 @@ function StudyManagementContent() {
         time: '19:00 - 21:00',
         cost: '10,000원',
         cost_en: '10,000 KRW',
-        host: '팀장',
-        host_en: 'Leader',
+        host: hostName,
+        host_en: hostNameEn,
         is_recurring: true,
         recurring_days: ['월', '수'],
         status: 'active',
         image_url: '',
         bank_account: '',
         apply_type: 'form',
-        recurring_settings: {}
+        recurring_settings: {},
+        created_by: user?.id
       })
     }
     setLoading(false)
@@ -124,6 +152,13 @@ function StudyManagementContent() {
 
   async function handleSave() {
     if (!formData) return
+    
+    // Ownership check
+    if (formData.id && formData.created_by && formData.created_by !== currentUserId) {
+      alert(locale === 'en' ? 'You can only edit your own postings.' : '본인이 작성한 포스팅만 수정할 수 있습니다.')
+      return
+    }
+
     setSaving(true)
     
     let formId = formData.form_id
@@ -313,6 +348,7 @@ function StudyManagementContent() {
               hostEn={formData.host_en}
               onHostChange={(val) => setFormData({...formData, host: val})}
               onHostEnChange={(val) => setFormData({...formData, host_en: val})}
+              readOnly={true}
             />
           </div>
 

@@ -30,6 +30,7 @@ import { ChevronLeft, Loader2, Upload, Trash2, Link as LinkIcon, ClipboardList, 
 import { useLocale } from '@/hooks/use-locale'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 export default function EditPostingPage() {
   const router = useRouter()
@@ -39,6 +40,7 @@ export default function EditPostingPage() {
   const locale = useLocale()
   
   const [loading, setLoading] = useState(true)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [issubmitting, setIsSubmitting] = useState(false)
   const [forms, setForms] = useState<any[]>([])
   const [showInlineBuilder, setShowInlineBuilder] = useState(false)
@@ -78,7 +80,9 @@ export default function EditPostingPage() {
     recurring_days: [] as string[],
     deadline: '',
     max_participants: '',
+    created_by: '',
   })
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   const { 
     formDetails: currentFormDetails, 
@@ -86,6 +90,29 @@ export default function EditPostingPage() {
     saveForm, 
     loadingForm 
   } = useFormManager(formData?.form_id || null)
+
+  useEffect(() => {
+    async function getSession() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setCurrentUserId(user.id)
+        
+        // Fallback for superadmin email
+        if (user.email === 'pomato5959@gmail.com') {
+          setIsSuperAdmin(true)
+          return
+        }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_superadmin')
+          .eq('id', user.id)
+          .single()
+        setIsSuperAdmin(!!profile?.is_superadmin)
+      }
+    }
+    getSession()
+  }, [supabase])
 
   useEffect(() => {
     if (currentFormDetails) {
@@ -138,8 +165,14 @@ export default function EditPostingPage() {
     fetchPosting()
   }, [id, supabase, router])
 
+  const isOwner = !formData.created_by || formData.created_by === currentUserId || isSuperAdmin
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isOwner) {
+      toast.error('수정 권한이 없습니다.')
+      return
+    }
     setIsSubmitting(true)
 
     const submissionData = {
@@ -191,6 +224,10 @@ export default function EditPostingPage() {
   }
 
   const handleDelete = async () => {
+    if (!isOwner) {
+      toast.error('삭제 권한이 없습니다.')
+      return
+    }
     if (!confirm('정말 삭제하시겠습니까?')) return
     const { error } = await supabase.from('postings').delete().eq('id', id)
     if (error) {
@@ -218,10 +255,12 @@ export default function EditPostingPage() {
             <ChevronLeft className="w-5 h-5" />
             {locale === 'en' ? 'Back' : '뒤로가기'}
           </button>
-          <Button variant="ghost" onClick={handleDelete} className="text-destructive hover:text-destructive hover:bg-destructive/10 font-bold gap-2">
-            <Trash2 className="w-4 h-4" />
-            {locale === 'en' ? 'Delete' : '삭제'}
-          </Button>
+          {isOwner && (
+            <Button variant="ghost" onClick={handleDelete} className="text-destructive hover:text-destructive hover:bg-destructive/10 font-bold gap-2">
+              <Trash2 className="w-4 h-4" />
+              {locale === 'en' ? 'Delete' : '삭제'}
+            </Button>
+          )}
         </div>
 
         <h1 className="text-3xl font-black text-foreground">
@@ -265,6 +304,33 @@ export default function EditPostingPage() {
                 onTimeUndecidedChange={(checked) => setFormData({...formData, is_time_undecided: checked})}
                 onLocationUndecidedChange={(checked) => setFormData({...formData, is_location_undecided: checked})}
               />
+
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-sm font-bold text-muted-foreground flex items-center gap-2">
+                    <Crown className="w-4 h-4 text-primary" />
+                    주최자 (KO)
+                  </Label>
+                  <Input 
+                    value={formData.host} 
+                    readOnly 
+                    placeholder="프로필에서 자동 설정됨"
+                    className="h-12 rounded-xl border-border bg-muted/50 text-sm font-medium" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-bold text-primary flex items-center gap-2">
+                    <Crown className="w-4 h-4 text-primary" />
+                    Host (EN)
+                  </Label>
+                  <Input 
+                    value={formData.host_en} 
+                    readOnly 
+                    placeholder="Auto-filled from profile"
+                    className="h-12 rounded-xl border-primary/10 bg-primary/5 text-sm font-medium" 
+                  />
+                </div>
+              </div>
 
               <div className="grid grid-cols-2 gap-6">
                 <DatePickerField
@@ -406,8 +472,12 @@ export default function EditPostingPage() {
           />
 
           <div className="mt-12">
-            <Button type="submit" disabled={issubmitting} className="w-full h-16 rounded-2xl bg-primary hover:bg-secondary text-xl font-black shadow-xl transition-all active:scale-[0.98]">
-              {issubmitting ? <Loader2 className="w-6 h-6 animate-spin mr-3" /> : '수정 완료'}
+            <Button 
+              type="submit" 
+              disabled={issubmitting || !isOwner} 
+              className="w-full h-16 rounded-2xl bg-primary hover:bg-secondary text-xl font-black shadow-xl transition-all active:scale-[0.98]"
+            >
+              {issubmitting ? <Loader2 className="w-6 h-6 animate-spin mr-3" /> : (isOwner ? '수정 완료' : '수정 권한 없음')}
             </Button>
           </div>
         </form>

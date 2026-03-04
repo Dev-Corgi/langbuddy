@@ -30,10 +30,21 @@ export default function AdminDashboardPage() {
   const [instaCount, setInstaCount] = useState(0)
   const [formCount, setFormCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true)
+      
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_superadmin')
+          .eq('id', user.id)
+          .single()
+        setIsSuperAdmin(!!profile?.is_superadmin)
+      }
       
       // Fetch stats
       const { count: studyCount } = await supabase
@@ -245,96 +256,55 @@ export default function AdminDashboardPage() {
                     </div>
                   </Link>
                 ))}
-                {(!recentPostings || recentPostings.length === 0) && (
-                  <div className="p-10 text-center text-muted-foreground font-bold">
-                    {locale === 'en' ? 'No postings registered.' : '등록된 포스팅이 없습니다.'}
-                  </div>
-                )}
-              </div>
-              <div className="p-4 bg-card text-center border-t border-border/50">
-                <div className="flex justify-center gap-4">
-                  {/*
-                  <Link href="/admin/study" className="text-sm font-bold text-primary hover:underline">
-                    {locale === 'en' ? 'Study' : '스터디'}
-                  </Link>
-                  <Link href="/admin/language" className="text-sm font-bold text-primary hover:underline">
-                    {locale === 'en' ? 'Language' : '언어교환'}
-                  </Link>
-                  */}
-                  <Link href="/admin/meetups" className="text-sm font-bold text-primary hover:underline">
-                    {locale === 'en' ? 'Social' : '번개'}
-                  </Link>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 
-          <Card className="border-border shadow-sm rounded-[32px] overflow-hidden border-none">
-            <CardHeader className="bg-muted/50 border-b border-border">
-              <CardTitle className="text-lg md:text-xl font-black">
-                {locale === 'en' ? 'Form Management' : '신청 폼 관리'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-5 md:p-6 space-y-4 md:space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-2xl bg-muted border border-border">
-                <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground shrink-0">
-                    <ClipboardList className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-black text-foreground truncate">{locale === 'en' ? 'Internal Forms' : '내부 신청 폼'}</p>
-                    <p className="text-xs font-bold text-muted-foreground">
-                      {locale === 'en' ? `Status: ${formCount} forms created` : `상태: ${formCount}개의 폼 생성됨`}
-                    </p>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" asChild className="rounded-lg h-8 font-bold w-full sm:w-auto">
-                  <Link href="/admin/forms">{locale === 'en' ? 'Manage' : '관리'}</Link>
-                </Button>
-              </div>
-              <p className="text-xs md:text-sm font-medium text-muted-foreground leading-relaxed">
-                {locale === 'en' 
-                  ? "Create custom application forms for your events. You can view responses and export them to CSV."
-                  : "모임 신청을 위한 맞춤형 폼을 만드세요. 접수된 응답을 확인하고 CSV로 내보낼 수 있습니다."}
-              </p>
-            </CardContent>
-          </Card>
-          */}
-
-          {/* 
-          <Card className="border-border shadow-sm rounded-[32px] overflow-hidden border-none">
-            <CardHeader className="bg-muted/50 border-b border-border">
-              <CardTitle className="text-lg md:text-xl font-black">
-                {locale === 'en' ? 'Instagram Status' : '인스타그램 연동 현황'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-5 md:p-6 space-y-4 md:space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-2xl bg-muted border border-border">
-                <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground shrink-0">
-                    <Instagram className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-black text-foreground truncate">@langbuddy_official</p>
-                    <p className="text-xs font-bold text-muted-foreground">
-                      {locale === 'en' ? `Status: Normal (${instaCount} posts)` : `연동 상태: 정상 (${instaCount}개 게시물)`}
-                    </p>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" asChild className="rounded-lg h-8 font-bold w-full sm:w-auto">
-                  <Link href="/admin/instagram">{locale === 'en' ? 'Manage' : '관리'}</Link>
-                </Button>
-              </div>
-              <p className="text-xs md:text-sm font-medium text-muted-foreground leading-relaxed">
-                {locale === 'en' 
-                  ? "We are automatically importing Instagram posts and displaying them in the 'LANGBUDDY NEWS' section. You can manually add or hide posts as well."
-                  : "인스타그램 게시물을 자동으로 불러와 'LANGBUDDY NEWS' 섹션에 표시하고 있습니다. 수동으로 게시물을 추가하거나 숨길 수도 있습니다."}
-              </p>
-            </CardContent>
-          </Card>
-          */}
+        {(!recentPostings || recentPostings.length === 0) && (
+          <div className="p-10 text-center text-muted-foreground font-bold">
+            {locale === 'en' ? 'No postings registered.' : '등록된 포스팅이 없습니다.'}
+          </div>
+        )}
+      </div>
+      <div className="p-4 bg-card text-center border-t border-border/50">
+        <div className="flex justify-center gap-4">
+          <Link href="/admin/meetups" className="text-sm font-bold text-primary hover:underline">
+            {locale === 'en' ? 'Social' : '번개'}
+          </Link>
         </div>
+      </div>
+    </CardContent>
+  </Card>
+
+  {isSuperAdmin && (
+    <Card className="border-border shadow-sm rounded-[32px] overflow-hidden border-none">
+      <CardHeader className="bg-muted/50 border-b border-border">
+        <CardTitle className="text-lg md:text-xl font-black">
+          {locale === 'en' ? 'Instagram Status' : '인스타그램 연동 현황'}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-5 md:p-6 space-y-4 md:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-2xl bg-muted border border-border">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
+            <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground shrink-0">
+              <Instagram className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-black text-foreground truncate">@langbuddy_official</p>
+              <p className="text-xs font-bold text-muted-foreground">
+                {locale === 'en' ? `Status: Normal (${instaCount} posts)` : `연동 상태: 정상 (${instaCount}개 게시물)`}
+              </p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" asChild className="rounded-lg h-8 font-bold w-full sm:w-auto">
+            <Link href="/admin/instagram">{locale === 'en' ? 'Manage' : '관리'}</Link>
+          </Button>
+        </div>
+        <p className="text-xs md:text-sm font-medium text-muted-foreground leading-relaxed">
+          {locale === 'en' 
+            ? "We are automatically importing Instagram posts and displaying them in the 'LANGBUDDY NEWS' section. You can manually add or hide posts as well."
+            : "인스타그램 게시물을 자동으로 불러와 'LANGBUDDY NEWS' 섹션에 표시하고 있습니다. 수동으로 게시물을 추가하거나 숨길 수도 있습니다."}
+        </p>
+      </CardContent>
+    </Card>
+  )}
+</div>
       </div>
     </div>
   )

@@ -28,10 +28,64 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
   const locale = useLocale()
+
+  useEffect(() => {
+    const fetchProfile = async (userId: string, email?: string) => {
+      try {
+        // Fallback check for superadmin email
+        if (email === 'pomato5959@gmail.com') {
+          console.log('AdminLayout: Explicit SuperAdmin identified by email')
+          setIsSuperAdmin(true)
+          return
+        }
+
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('is_superadmin')
+          .eq('id', userId)
+          .single()
+        
+        if (error) {
+          console.error('AdminLayout: Error fetching profile:', error)
+          return
+        }
+        
+        if (profile) {
+          setIsSuperAdmin(!!profile.is_superadmin)
+        }
+      } catch (err) {
+        console.error('AdminLayout: Unexpected error:', err)
+      }
+    }
+
+    // Check initial session
+    const checkInitialSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        fetchProfile(session.user.id, session.user.email)
+      }
+    }
+
+    checkInitialSession()
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        fetchProfile(session.user.id, session.user.email)
+      } else {
+        setIsSuperAdmin(false)
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [supabase])
 
   // Close sidebar on mobile when route changes
   useEffect(() => {
@@ -52,12 +106,8 @@ export default function AdminLayout({
 
   const menuItems = [
     { href: '/admin/dashboard', label: locale === 'en' ? 'Dashboard' : '대시보드', icon: LayoutDashboard },
-    // { href: '/admin/study', label: locale === 'en' ? 'Study' : '스터디 관리', icon: BookOpen },
-    // { href: '/admin/language', label: locale === 'en' ? 'Language' : '언어교환 관리', icon: Languages },
     { href: '/admin/meetups', label: locale === 'en' ? 'Social' : '번개 관리', icon: Zap },
-    // { href: '/admin/forms', label: locale === 'en' ? 'Responses' : '응답 관리', icon: MessageSquare },
-    // { href: '/admin/carousel', label: locale === 'en' ? 'Carousel' : '캐러셀 관리', icon: ImageIcon },
-    { href: '/admin/instagram', label: locale === 'en' ? 'Instagram' : '인스타 연동', icon: Instagram },
+    ...(isSuperAdmin ? [{ href: '/admin/instagram', label: locale === 'en' ? 'Instagram' : '인스타 연동', icon: Instagram }] : []),
     { href: '/admin/settings', label: locale === 'en' ? 'Settings' : '설정', icon: Settings },
   ]
 
