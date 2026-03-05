@@ -191,6 +191,22 @@ export default function EditPostingPage() {
       end_time: formData.end_time
     }
 
+    // 마감 기한에 따른 상태 자동 조정
+    if (submissionData.deadline) {
+      const deadlineDate = new Date(submissionData.deadline)
+      const now = new Date()
+      if (deadlineDate > now) {
+        // 기한이 미래라면 'active'로 복구 (기존이 'expired'였더라도)
+        submissionData.status = 'active'
+      } else {
+        // 기한이 지났다면 'expired'
+        submissionData.status = 'expired'
+      }
+    } else {
+      // 기한이 없다면 기본 'active'
+      submissionData.status = 'active'
+    }
+
     if (formData.apply_type === 'form' && showInlineBuilder && inlineFormData) {
       const newFormId = await saveForm(inlineFormData, formData.form_id)
       if (newFormId) {

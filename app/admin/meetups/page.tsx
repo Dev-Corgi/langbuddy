@@ -12,7 +12,8 @@ import {
   ChevronLeft,
   Calendar,
   MapPin,
-  Image as ImageIcon
+  Image as ImageIcon,
+  AlertCircle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -171,7 +172,11 @@ function MeetupsManagementContent() {
                         <Badge className="rounded-lg font-black text-[10px] md:text-[11px] px-2 py-0.5 bg-accent text-accent-foreground hover:bg-accent">
                           {locale === 'en' ? 'Social' : '번개'}
                         </Badge>
-                        {post.status === 'active' ? (
+                        {post.status === 'expired' || (post.deadline && new Date(post.deadline) < new Date()) ? (
+                          <Badge variant="outline" className="rounded-lg border-amber-500 text-amber-500 font-black text-[10px] md:text-[11px] px-2 py-0.5">
+                            {locale === 'en' ? 'Expired' : '만료됨'}
+                          </Badge>
+                        ) : post.status === 'active' ? (
                           <Badge variant="outline" className="rounded-lg border-emerald-500 text-emerald-500 font-black text-[10px] md:text-[11px] px-2 py-0.5">
                             {locale === 'en' ? 'Published' : '게시 중'}
                           </Badge>
@@ -192,6 +197,17 @@ function MeetupsManagementContent() {
                           {post.location || (locale === 'en' ? 'TBD' : '장소 미정')}
                         </div>
                       </div>
+                      
+                      {((post.status === 'expired') || (post.deadline && new Date(post.deadline) < new Date())) && (
+                        <div className="flex items-center gap-2 pt-1 text-primary animate-pulse">
+                          <AlertCircle className="w-4 h-4 shrink-0" />
+                          <p className="text-xs md:text-sm font-black italic">
+                            {locale === 'en' 
+                              ? 'This event is outdated, please fix deadline or delete it' 
+                              : '만료된 번개입니다, 마감일자를 수정하거나 삭제해 주세요'}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-end gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-border/50 mt-2 md:mt-0">

@@ -44,6 +44,7 @@ export default function ExportPosterPage() {
         .from('postings')
         .select('*')
         .eq('category', '번개')
+        .eq('status', 'active')
         .neq('date', '미정')
         .gte('date', now)
         .order('date', { ascending: true })
@@ -121,7 +122,7 @@ export default function ExportPosterPage() {
       >
         {/* Header */}
         <div className="flex justify-between items-baseline border-b-2 border-[#a31a1a] pb-3 mb-8">
-          <div className="text-2xl font-black text-[#a31a1a]">{"Event Calender"}</div>
+          <div className="text-2xl font-black text-[#a31a1a]">{"LANGBUDDY"}</div>
           <div className="text-2xl font-black uppercase tracking-tighter text-[#a31a1a]">{formatYearMonth()}</div>
         </div>
 
