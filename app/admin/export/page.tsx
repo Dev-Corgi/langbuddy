@@ -22,6 +22,7 @@ interface Event {
   location: string
   location_en: string
   category: string
+  image_url: string
 }
 
 export default function ExportPosterPage() {
@@ -102,32 +103,32 @@ export default function ExportPosterPage() {
   }
 
   const colors = [
-    'bg-[#E9D5C3]', // Light Brown (Brand secondary-like)
-    'bg-[#F3E5F5]', // Light Purple
-    'bg-[#E8F5E9]', // Light Green
-    'bg-[#E3F2FD]', // Light Blue
-    'bg-[#FFF3E0]', // Light Orange
+    'bg-[#a31a1a]', // Primary Red-ish (oklch(0.432 0.272 29.2))
+    'bg-[#e9d5c3]', // Secondary Beige (oklch(0.92 0.035 29.2))
+    'bg-[#a31a1a]', // Repeat primary for consistency or use variants
+    'bg-[#e9d5c3]',
+    'bg-[#a31a1a]',
   ]
 
   const PosterTemplate = ({ lang }: { lang: 'ko' | 'en' }) => {
     return (
       <div 
-        className="w-[640px] h-[900px] bg-[#F9F6F2] p-10 flex flex-col font-sans relative text-[#4A1D1D]"
+        className="w-[640px] h-[900px] bg-[#fdfcfb] p-10 flex flex-col font-sans relative text-primary"
         style={{ 
           boxShadow: '0 0 20px rgba(0,0,0,0.1)',
           boxSizing: 'border-box'
         }}
       >
         {/* Header */}
-        <div className="flex justify-between items-baseline border-b-2 border-[#4A1D1D] pb-3 mb-8">
-          <div className="text-2xl font-black">{formatDateRange()}</div>
-          <div className="text-2xl font-black uppercase tracking-tighter">{formatYearMonth()}</div>
+        <div className="flex justify-between items-baseline border-b-2 border-[#a31a1a] pb-3 mb-8">
+          <div className="text-2xl font-black text-[#a31a1a]">{"Event Calender"}</div>
+          <div className="text-2xl font-black uppercase tracking-tighter text-[#a31a1a]">{formatYearMonth()}</div>
         </div>
 
         <div className="flex flex-1 gap-8 overflow-hidden">
           {/* Vertical Text */}
           <div className="[writing-mode:vertical-lr] rotate-180 flex items-center justify-center shrink-0">
-            <h1 className="text-7xl font-black tracking-tighter uppercase whitespace-nowrap">
+            <h1 className="text-[4.25rem] font-black tracking-tight uppercase whitespace-nowrap text-[#a31a1a]">
               UPCOMING EVENTS
             </h1>
           </div>
@@ -140,29 +141,43 @@ export default function ExportPosterPage() {
               const dayName = dayNames[dateObj.getDay()]
               const dayNum = dateObj.getDate()
               const [startTime, endTime] = (event.time || '').split(' ~ ')
+              const isPrimary = idx % 2 === 0
 
               return (
                 <div key={event.id} className="flex gap-4 h-[125px]">
                   {/* Date Box */}
-                  <div className={cn("w-[90px] rounded-[32px] flex flex-col items-center justify-center shrink-0", colors[idx % colors.length])}>
-                    <div className="text-sm font-black leading-none uppercase mb-1">{dayName}</div>
+                  <div className={cn(
+                    "w-[90px] rounded-[32px] flex flex-col items-center justify-center shrink-0 transition-colors bg-[#a31a1a] text-white"
+                  )}>
+                    <div className="text-lg font-black leading-none uppercase mb-1">{dayName}</div>
                     <div className="text-3xl font-black">{dayNum}</div>
                   </div>
 
-                  {/* Time Box */}
-                  <div className="w-[90px] border-2 border-[#4A1D1D] rounded-[32px] flex flex-col items-center justify-center shrink-0 text-[11px] font-black leading-tight bg-white/50">
-                    <div className="text-center">{startTime || 'TBD'}</div>
-                    {endTime && <div className="mt-1 text-center">{endTime}</div>}
-                  </div>
-
-                  {/* Content Box */}
-                  <div className="flex-1 border-2 border-[#4A1D1D] rounded-[32px] p-4 flex flex-col justify-center bg-white/30 min-w-0 overflow-hidden">
-                    <h3 className="text-base font-black italic leading-[1.2] break-keep">
-                      {lang === 'en' ? (event.title_en || event.title) : event.title}
-                    </h3>
-                    <p className="text-[12px] font-bold mt-2 leading-[1.4] break-keep opacity-90">
-                      {lang === 'en' ? (event.subtitle_en || event.subtitle) : event.subtitle}
-                    </p>
+                  {/* Content Box (Carousel Style) */}
+                  <div className="flex-1 border-2 border-[#a31a1a] rounded-[32px] flex flex-col justify-center relative min-w-0 overflow-hidden group">
+                    {/* Background Image */}
+                    {event.image_url ? (
+                      <img 
+                        src={event.image_url} 
+                        alt="" 
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-[#e9d5c3]/30" />
+                    )}
+                    
+                    {/* Gradient Overlay */}
+                    <div className="absolute inset-0 bg-linear-to-r from-[#a31a1a] via-[#a31a1a]/60 to-transparent" />
+                    
+                    {/* Text Content */}
+                    <div className="relative z-10 px-6 py-4 flex flex-col justify-center">
+                      <p className="text-xs font-medium text-white/90 uppercase tracking-wider mb-1 line-clamp-1">
+                        {lang === 'en' ? (event.subtitle_en || event.subtitle) : event.subtitle}
+                      </p>
+                      <h3 className="text-xl font-bold text-white leading-tight break-keep line-clamp-2 drop-shadow-sm">
+                        {lang === 'en' ? (event.title_en || event.title) : event.title}
+                      </h3>
+                    </div>
                   </div>
                 </div>
               )
@@ -171,18 +186,18 @@ export default function ExportPosterPage() {
         </div>
 
         {/* Footer */}
-        <div className="mt-8 pt-6 border-t-2 border-[#4A1D1D] flex justify-between items-end text-xs font-black">
+        <div className="mt-8 pt-6 border-t-2 border-[#a31a1a] flex justify-between items-end text-xs font-black text-[#a31a1a]">
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
-              <span className="opacity-60 text-[10px]">INSTA</span> @langbuddy_official
+              <span className="text-[10px]">INSTA</span> @langbuddy_official
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="opacity-60 text-[10px]">WEB</span> https://langbuddy-club.vercel.app/
+              <span className="text-[10px]">WEB</span> https://langbuddy-club.vercel.app/
             </div>
           </div>
           <div className="text-right uppercase leading-tight tracking-tight">
             LEARN LANGUAGES,<br />
-            <span className="text-primary">MAKE FRIENDS!</span>
+            <span className="text-[#a31a1a]">MAKE FRIENDS!</span>
           </div>
         </div>
       </div>
