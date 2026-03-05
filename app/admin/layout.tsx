@@ -15,7 +15,8 @@ import {
   Menu,
   X,
   Globe,
-  MessageSquare
+  MessageSquare,
+  Share2
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -107,7 +108,10 @@ export default function AdminLayout({
   const menuItems = [
     { href: '/admin/dashboard', label: locale === 'en' ? 'Dashboard' : '대시보드', icon: LayoutDashboard },
     { href: '/admin/meetups', label: locale === 'en' ? 'Social' : '번개 관리', icon: Zap },
-    ...(isSuperAdmin ? [{ href: '/admin/instagram', label: locale === 'en' ? 'Instagram' : '인스타 연동', icon: Instagram }] : []),
+    ...(isSuperAdmin ? [
+      { href: '/admin/instagram', label: locale === 'en' ? 'Instagram' : '인스타 연동', icon: Instagram },
+      { href: '/admin/export', label: locale === 'en' ? 'Export Poster' : '포스터 내보내기', icon: Share2 }
+    ] : []),
     { href: '/admin/settings', label: locale === 'en' ? 'Settings' : '설정', icon: Settings },
   ]
 
