@@ -375,66 +375,6 @@ function NewPostingContent() {
                 * 마감 기한이 지나면 해당 번개 모임은 목록에서 자동으로 사라집니다.
               </p>
 
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="cost" className="text-sm font-bold text-muted-foreground flex items-center gap-2">
-                    <Wallet className="w-4 h-4 text-primary" />
-                    비용 (KO)
-                  </Label>
-                  <Input
-                    id="cost"
-                    placeholder="예: 10,000원"
-                    value={formData.cost}
-                    onChange={(e) => setFormData({...formData, cost: e.target.value.replace(/\\/g, '₩')})}
-                    className="h-12 rounded-xl border-border focus:ring-primary text-sm font-medium transition-all"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cost_en" className="text-sm font-bold text-primary flex items-center gap-2">
-                    <Wallet className="w-4 h-4 text-primary" />
-                    비용 (EN)
-                  </Label>
-                  <Input
-                    id="cost_en"
-                    placeholder="e.g. 10,000 KRW"
-                    value={formData.cost_en}
-                    onChange={(e) => setFormData({...formData, cost_en: e.target.value.replace(/\\/g, '₩')})}
-                    className="h-12 rounded-xl border-primary/30 focus:ring-primary bg-surface/10 text-sm font-medium transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-4 pt-4 border-t border-border">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-bold text-muted-foreground flex items-center gap-2">
-                    <Wallet className="w-4 h-4 text-primary" />
-                    입금 계좌 정보 (선택)
-                  </Label>
-                  <label className="flex items-center gap-2 cursor-pointer group">
-                    <input 
-                      type="checkbox" 
-                      checked={isBankAccountEnabled}
-                      onChange={(e) => setIsBankAccountEnabled(e.target.checked)}
-                      className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
-                    />
-                    <span className="text-xs font-bold text-muted-foreground group-hover:text-foreground transition-colors">활성화</span>
-                  </label>
-                </div>
-                {isBankAccountEnabled && (
-                  <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                    <Input
-                      placeholder="예: 카카오뱅크 3333-01-1234567 홍길동"
-                      value={formData.bank_account}
-                      onChange={(e) => setFormData({...formData, bank_account: e.target.value})}
-                      className="h-12 rounded-xl border-border focus:ring-primary text-sm font-medium transition-all"
-                    />
-                    <p className="text-[11px] text-muted-foreground font-medium mt-2">
-                      * 계좌 정보를 입력하면 신청 완료 팝업에서 신청자에게 계좌 번호가 노출됩니다.
-                    </p>
-                  </div>
-                )}
-              </div>
-
             </CardContent>
           </Card>
 

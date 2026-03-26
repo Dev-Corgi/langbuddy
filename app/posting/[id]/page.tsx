@@ -237,14 +237,7 @@ export default function PostingDetailPage() {
                 )}
               </div>
               
-              <div className="grid grid-cols-2 gap-4 p-6 rounded-[24px] bg-muted border border-border">
-                <div className="space-y-1">
-                  <p className="text-xs font-black text-muted-foreground uppercase">{tDict.common.cost}</p>
-                  <div className="flex items-center gap-2">
-                    <Wallet className="w-4 h-4 text-foreground" />
-                    <p className="text-lg font-black text-foreground">{displayCost}</p>
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 p-6 rounded-[24px] bg-muted border border-border">
                 <div className="space-y-1">
                   <p className="text-xs font-black text-muted-foreground uppercase">{tDict.common.host}</p>
                   <div className="flex items-center gap-2">
@@ -272,9 +265,6 @@ export default function PostingDetailPage() {
               <div className="border-black shadow-2xl rounded-[32px] p-8 space-y-8">
                 <div className="space-y-4">
                   <div className="text-sm font-black text-muted-foreground uppercase tracking-widest">{locale === 'en' ? 'Registration' : '참가 신청'}</div>
-                  <div className="text-3xl font-black text-foreground">
-                    {displayCost || (locale === 'en' ? 'Free Access' : '무료 참여')}
-                  </div>
                 </div>
                 
                 <div className="space-y-3">

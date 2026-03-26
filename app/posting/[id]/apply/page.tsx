@@ -373,10 +373,6 @@ export default function ApplicationFormPage() {
             <h1 className="text-3xl md:text-4xl font-black text-foreground tracking-tight leading-tight">
               {locale === 'en' && form.title_en ? form.title_en : form.title}
             </h1>
-            <div className="flex items-center gap-2 text-primary font-black">
-              <Wallet className="w-5 h-5" />
-              <span className="text-xl">{displayCost || (locale === 'en' ? 'Free' : '무료 참여')}</span>
-            </div>
             {(form.description || form.description_en) && (
               <p className="text-lg text-muted-foreground font-medium whitespace-pre-line">
                 {locale === 'en' && form.description_en ? form.description_en : form.description}

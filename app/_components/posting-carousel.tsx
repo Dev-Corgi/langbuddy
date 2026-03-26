@@ -213,12 +213,9 @@ export function PostingCarousel() {
                     {/* 5. Additional Info Row */}
                     <div className="mt-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[12px] md:text-[13px] text-primary font-black">
-                          {item.cost || (locale === 'en' ? 'Free' : '무료')}
-                        </span>
                         {item.max_participants && (
                           <span className="text-[11px] text-muted-foreground/60 font-medium">
-                            | {locale === 'en' ? 'Max' : '최대'} {item.max_participants.toString().replace(/명/g, '')}{locale === 'en' ? '' : '명'}
+                            {locale === 'en' ? 'Max' : '최대'} {item.max_participants.toString().replace(/명/g, '')}{locale === 'en' ? '' : '명'}
                           </span>
                         )}
                       </div>
