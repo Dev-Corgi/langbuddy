@@ -16,7 +16,9 @@ import {
   X,
   Globe,
   MessageSquare,
-  Share2
+  Share2,
+  QrCode,
+  LayoutGrid
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -107,6 +109,12 @@ export default function AdminLayout({
 
   const menuItems = [
     { href: '/admin/dashboard', label: locale === 'en' ? 'Dashboard' : '대시보드', icon: LayoutDashboard },
+    ...(isSuperAdmin ? [
+      { href: '/admin/checkin', label: locale === 'en' ? 'Check-in' : '현장 출석', icon: QrCode },
+      { href: '/admin/arrange', label: locale === 'en' ? 'Seating' : '자리 배치', icon: LayoutGrid },
+      { href: '/admin/study', label: locale === 'en' ? 'Study' : '스터디 관리', icon: BookOpen },
+      { href: '/admin/language', label: locale === 'en' ? 'Language' : '언어교환 관리', icon: Languages },
+    ] : []),
     { href: '/admin/meetups', label: locale === 'en' ? 'Social' : '번개 관리', icon: Zap },
     ...(isSuperAdmin ? [
       { href: '/admin/instagram', label: locale === 'en' ? 'Instagram' : '인스타 연동', icon: Instagram },

@@ -20,14 +20,35 @@ export function PostingList() {
 
   useEffect(() => {
     async function fetchPostings() {
+      const { data: { user } } = await supabase.auth.getUser()
+      let isSuperAdmin = false
+      if (user) {
+        if (user.email === 'pomato5959@gmail.com') {
+          isSuperAdmin = true
+        } else {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('is_superadmin')
+            .eq('id', user.id)
+            .single()
+          isSuperAdmin = !!profile?.is_superadmin
+        }
+      }
+
       const now = new Date().toISOString()
-      const { data, error } = await supabase
+      let query = supabase
         .from('postings')
         .select('*')
-        .eq('category', '번개')
         .eq('status', 'active')
         .or(`deadline.is.null,deadline.gt.${now}`)
-        .order('date', { ascending: true, nullsFirst: false })
+      
+      if (!isSuperAdmin) {
+        query = query.eq('category', '번개')
+      } else {
+        query = query.in('category', ['번개', '스터디', '언어교환'])
+      }
+
+      const { data } = await query.order('date', { ascending: true, nullsFirst: false })
       
       if (data) setItems(data)
       setLoading(false)
@@ -126,7 +147,7 @@ export function PostingList() {
                   {/* Poster Image */}
                   <div className="relative w-[120px] md:w-full aspect-3/4 rounded-[20px] overflow-hidden shrink-0 border border-border shadow-sm transition-all duration-300 group-hover:shadow-md group-hover:-translate-y-1 group-hover:border-primary/20">
                     <Image
-                      src={item.image_url || "/postingpage/imgi_5_26001991_p.gif"}
+                      src={item.image_url || "/imagebuttons/meetup.jpg"}
                       alt={item.title}
                       fill
                       className="object-cover transition-transform duration-500 group-hover:scale-110"

@@ -22,6 +22,7 @@ type CarouselSlide = {
   description_en?: string
   period?: string
   location?: string
+  location_en?: string
   image_url: string
   mobile_image_url?: string
   thumbnail_url?: string
@@ -83,7 +84,7 @@ export function MainCarousel({ className, autoPlayMs = 5000 }: MainCarouselProps
       
       if (data && data.length > 0) {
         // Map postings to carousel slide format
-        const fallbackImage = "/carousel/imgi_3_250917060052_25013145.gif"
+        const fallbackImage = "/imagebuttons/meetup.jpg"
         const mappedSlides = data.map(posting => ({
           id: posting.id,
           title: posting.title,
@@ -102,18 +103,7 @@ export function MainCarousel({ className, autoPlayMs = 5000 }: MainCarouselProps
         console.log('✅ Mapped slides:', mappedSlides.length)
         setSlides(mappedSlides)
       } else {
-        setSlides([
-          {
-            id: '1',
-            title: "2026 GS아트센터\n기획 시즌",
-            description: "경계 없는 예술가들의 우주적 만남",
-            location: "GS아트센터",
-            period: "2026.3.27 - 2026.6.30",
-            image_url: "/carousel/imgi_3_250917060052_25013145.gif",
-            mobile_image_url: "/carousel/imgi_156_250917061213_25013145.gif",
-            thumbnail_url: "/carousel/imgi_20_9d20093d-8424-4420-b670-c3516595ff46.jpg"
-          }
-        ])
+        setSlides([])
       }
       setLoading(false)
     }
@@ -197,6 +187,26 @@ export function MainCarousel({ className, autoPlayMs = 5000 }: MainCarouselProps
       </div>
     </section>
   )
+
+  if (!loading && slides.length === 0) {
+    return (
+      <section className={cn("w-full min-w-0 overflow-x-hidden relative", className)}>
+        <div className={cn(
+          "relative w-full overflow-hidden bg-muted flex items-center justify-center",
+          isDesktop ? "h-[400px]" : "aspect-video rounded-2xl mx-auto w-[calc(100%-2rem)]"
+        )}>
+          <div className="text-center px-6">
+            <h2 className="text-xl md:text-2xl font-black text-muted-foreground">
+              {locale === 'en' ? 'No featured events at the moment.' : '현재 진행 중인 주요 모임이 없습니다.'}
+            </h2>
+            <p className="text-muted-foreground mt-2 font-medium">
+              {locale === 'en' ? 'Check back later for new updates!' : '새로운 소식을 곧 전해드릴게요!'}
+            </p>
+          </div>
+        </div>
+      </section>
+    )
+  }
 
   const active = slides[activeIndex]
   

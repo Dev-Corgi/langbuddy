@@ -12,7 +12,9 @@ import {
   Users,
   Image as ImageIcon,
   Loader2,
-  ClipboardList
+  ClipboardList,
+  QrCode,
+  LayoutGrid
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -32,6 +34,10 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
 
+  const [todaySession, setTodaySession] = useState<any>(null)
+  const [checkinCount, setCheckinCount] = useState(0)
+  const [totalApplications, setTotalApplications] = useState(0)
+
   useEffect(() => {
     async function fetchData() {
       setLoading(true)
@@ -49,6 +55,35 @@ export default function AdminDashboardPage() {
         setIsSuperAdmin(!!profile?.is_superadmin)
       }
       
+      // Fetch today's session for seating system
+      if (userProfile?.is_superadmin) {
+        const todayStr = new Date().toISOString().split('T')[0]
+        const { data: sessions } = await supabase
+          .from('postings')
+          .select('*')
+          .eq('category', '언어교환')
+          .eq('status', 'active')
+          .gte('date', todayStr)
+          .order('date', { ascending: true })
+          .limit(1)
+
+        if (sessions && sessions.length > 0) {
+          const session = sessions[0]
+          setTodaySession(session)
+
+          // Fetch check-in stats
+          const { data: responses } = await supabase
+            .from('form_responses')
+            .select('id, checked_in_at')
+            .eq('form_id', session.form_id)
+
+          if (responses) {
+            setTotalApplications(responses.length)
+            setCheckinCount(responses.filter(r => r.checked_in_at).length)
+          }
+        }
+      }
+      
       // Fetch stats
       let statsQuery = supabase
         .from('postings')
@@ -57,6 +92,14 @@ export default function AdminDashboardPage() {
       if (!userProfile?.is_superadmin && user) {
         statsQuery = statsQuery.eq('created_by', user.id)
       }
+
+      const { count: studyCount } = await (userProfile?.is_superadmin 
+        ? supabase.from('postings').select('*', { count: 'exact', head: true }).eq('category', '스터디')
+        : Promise.resolve({ count: 0 }))
+
+      const { count: languageCount } = await (userProfile?.is_superadmin 
+        ? supabase.from('postings').select('*', { count: 'exact', head: true }).eq('category', '언어교환')
+        : Promise.resolve({ count: 0 }))
 
       const { count: meetupCount } = await statsQuery.eq('category', '번개')
 
@@ -86,31 +129,36 @@ export default function AdminDashboardPage() {
       
       setRecentPostings(recent || [])
 
-      setStats([
-        /*
-        { 
-          label: locale === 'en' ? 'Study' : '스터디', 
-          value: (studyCount || 0).toString(), 
-          icon: BookOpen, 
-          color: 'text-primary',
-          href: '/admin/study'
-        },
-        { 
-          label: locale === 'en' ? 'Language' : '언어교환', 
-          value: (languageCount || 0).toString(), 
-          icon: Languages, 
-          color: 'text-primary',
-          href: '/admin/language'
-        },
-        */
-        { 
-          label: locale === 'en' ? 'Social' : '번개 모임', 
-          value: (meetupCount || 0).toString(), 
-          icon: Zap, 
-          color: 'text-primary',
-          href: '/admin/meetups'
-        },
-      ])
+      const statsItems = []
+      
+      if (userProfile?.is_superadmin) {
+        statsItems.push(
+          { 
+            label: locale === 'en' ? 'Study' : '스터디', 
+            value: (studyCount || 0).toString(), 
+            icon: BookOpen, 
+            color: 'text-primary',
+            href: '/admin/study'
+          },
+          { 
+            label: locale === 'en' ? 'Language' : '언어교환', 
+            value: (languageCount || 0).toString(), 
+            icon: Languages, 
+            color: 'text-primary',
+            href: '/admin/language'
+          }
+        )
+      }
+
+      statsItems.push({ 
+        label: locale === 'en' ? 'Social' : '번개 모임', 
+        value: (meetupCount || 0).toString(), 
+        icon: Zap, 
+        color: 'text-primary',
+        href: '/admin/meetups'
+      })
+
+      setStats(statsItems)
       
       setLoading(false)
     }
@@ -203,8 +251,71 @@ export default function AdminDashboardPage() {
           </Button>
         </div>
 
+        {/* Seating System Quick Access (SuperAdmin Only) */}
+        {isSuperAdmin && todaySession && (
+          <Card className="border-primary/20 shadow-lg rounded-[32px] overflow-hidden bg-surface/5">
+            <CardHeader className="p-6 md:p-8 pb-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                    <LayoutGrid className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl font-black">
+                      {locale === 'en' ? "Today's Session Seating" : "오늘의 모임 자리배치"}
+                    </CardTitle>
+                    <p className="text-sm font-bold text-muted-foreground mt-0.5">
+                      {todaySession.title} ({todaySession.date})
+                    </p>
+                  </div>
+                </div>
+                <div className="hidden sm:flex items-center gap-2">
+                  <div className="text-right mr-4">
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">Check-in Status</p>
+                    <p className="text-lg font-black text-primary">{checkinCount} / {totalApplications}</p>
+                  </div>
+                  <Button asChild className="rounded-xl font-black gap-2">
+                    <Link href="/admin/arrange">
+                      <LayoutGrid className="w-4 h-4" />
+                      {locale === 'en' ? 'Arrange Seats' : '자리 배치하기'}
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6 md:p-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Link href="/admin/checkin">
+                  <div className="p-4 rounded-2xl bg-card border border-border hover:border-primary/30 transition-all flex items-center gap-4 group">
+                    <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                      <QrCode className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-black text-foreground">{locale === 'en' ? 'Check-in Scanner' : '현장 출석 스캐너'}</p>
+                      <p className="text-xs font-bold text-muted-foreground">{locale === 'en' ? 'Scan participant QR codes' : '참가자 QR 코드 스캔 및 출석'}</p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground/40 group-hover:text-primary transition-colors" />
+                  </div>
+                </Link>
+                <Link href="/admin/arrange" className="sm:hidden">
+                  <div className="p-4 rounded-2xl bg-card border border-border hover:border-primary/30 transition-all flex items-center gap-4 group">
+                    <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                      <LayoutGrid className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-black text-foreground">{locale === 'en' ? 'Seat Arrangement' : '자리 배치 관리'}</p>
+                      <p className="text-xs font-bold text-muted-foreground">{locale === 'en' ? 'Manage rounds and DnD' : '라운드 관리 및 드래그 배치'}</p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground/40 group-hover:text-primary transition-colors" />
+                  </div>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-1 max-w-md gap-4 md:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           {stats.map((stat) => (
             <Link key={stat.label} href={stat.href}>
               <Card className="border-border shadow-sm rounded-[24px] border-none hover:ring-2 hover:ring-primary/20 transition-all">
@@ -249,6 +360,7 @@ export default function AdminDashboardPage() {
                             {locale === 'en' && post.title_en ? post.title_en : post.title}
                           </p>
                           <p className="text-[10px] md:xs font-bold text-muted-foreground truncate">
+                            <span className="text-primary mr-2">[{post.category}]</span>
                             {post.is_recurring 
                               ? (locale === 'en' ? `Every ${post.recurring_days?.join(', ')}` : `매주 ${post.recurring_days?.join(', ')}`)
                               : post.date
@@ -271,6 +383,16 @@ export default function AdminDashboardPage() {
           <Link href="/admin/meetups" className="text-sm font-bold text-primary hover:underline">
             {locale === 'en' ? 'Social' : '번개'}
           </Link>
+          {isSuperAdmin && (
+            <>
+              <Link href="/admin/study" className="text-sm font-bold text-primary hover:underline">
+                {locale === 'en' ? 'Study' : '스터디'}
+              </Link>
+              <Link href="/admin/language" className="text-sm font-bold text-primary hover:underline">
+                {locale === 'en' ? 'Language' : '언어교환'}
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </CardContent>

@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase"
 import { Loader2 } from "lucide-react"
 import { useLocale } from "@/hooks/use-locale"
 
-export function RecommendationSection() {
+export function RecommendationSection({ excludeId }: { excludeId?: string }) {
   const [recommendations, setRecommendations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
@@ -17,33 +17,30 @@ export function RecommendationSection() {
 
   useEffect(() => {
     async function fetchRecommendations() {
-      const { data } = await supabase
+      const now = new Date().toISOString()
+      let query = supabase
         .from('postings')
         .select('*')
         .eq('status', 'active')
+        .eq('category', '번개') // Only recommend meetups
+        .or(`deadline.is.null,deadline.gt.${now}`)
         .order('created_at', { ascending: false })
-        .limit(5)
+      
+      if (excludeId) {
+        query = query.neq('id', excludeId)
+      }
+
+      const { data } = await query.limit(5)
       
       if (data && data.length > 0) {
         setRecommendations(data)
       } else {
-        // Fallback data
-        setRecommendations([
-          {
-            id: "rec-1",
-            title: "연극 〈운베난트〉",
-            title_en: "Play 〈Unbenannt〉",
-            location: "예스24 스테이지 3관",
-            location_en: "YES24 Stage Hall 3",
-            date: "02.23(월) 15:00",
-            image_url: "/postingpage/imgi_9_26001823_p.gif",
-          }
-        ])
+        setRecommendations([])
       }
       setLoading(false)
     }
     fetchRecommendations()
-  }, [supabase])
+  }, [supabase, excludeId])
 
   if (loading) {
     return (
@@ -65,6 +62,10 @@ export function RecommendationSection() {
     )
   }
 
+  if (!loading && recommendations.length === 0) {
+    return null
+  }
+
   return (
     <section className="w-full py-12 md:py-24 bg-white">
       <h3 className="text-[20px] md:text-[24px] font-black text-zinc-900 mb-8 md:mb-12">
@@ -81,7 +82,7 @@ export function RecommendationSection() {
           >
             <div className="relative aspect-3/4 rounded-2xl overflow-hidden mb-5 shadow-sm border border-zinc-100">
               <Image
-                src={item.image_url || "/postingpage/imgi_9_26001823_p.gif"}
+                src={item.image_url || "/imagebuttons/meetup.jpg"}
                 alt={locale === 'en' && item.title_en ? item.title_en : item.title}
                 fill
                 className="object-cover transition-transform duration-500 group-hover:scale-105"

@@ -74,6 +74,7 @@ export default function ApplicationFormPage() {
   const [selectedDay, setSelectedDay] = useState<string>("")
   const [availableLangs, setAvailableLangs] = useState<string[]>([])
   const [selectedLang, setSelectedLang] = useState<string>("")
+  const [availableDays, setAvailableDays] = useState<string[]>([])
 
   useEffect(() => {
     async function fetchData() {
@@ -151,10 +152,41 @@ export default function ApplicationFormPage() {
         router.push(`/posting/${id}`)
         return
       }
+      // Calculate available days (filter out past days for recurring events)
+      if (postingData?.is_recurring && postingData?.recurring_days) {
+        const today = new Date()
+        const currentDayOfWeek = today.getDay() // 0=일, 1=월, 2=화, 3=수, 4=목, 5=금, 6=토
+        const dayMap: Record<string, number> = {
+          '일': 0, '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6
+        }
+        
+        const available = postingData.recurring_days.filter((day: string) => {
+          const dayNum = dayMap[day]
+          return dayNum !== undefined && dayNum >= currentDayOfWeek
+        })
+        
+        setAvailableDays(available)
+      } else {
+        setAvailableDays(postingData?.recurring_days || [])
+      }
+      
       setLoading(false)
     }
     fetchData()
   }, [id, supabase, router])
+
+  // Update available languages when selected day changes
+  useEffect(() => {
+    if (selectedDay && posting?.recurring_settings?.[selectedDay]) {
+      const langs = posting.recurring_settings[selectedDay].languages || []
+      setAvailableLangs(langs)
+      // Reset selected language when day changes
+      setSelectedLang('')
+    } else {
+      setAvailableLangs([])
+      setSelectedLang('')
+    }
+  }, [selectedDay, posting])
 
   const handleInputChange = (questionId: string, value: any) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }))
@@ -199,11 +231,14 @@ export default function ApplicationFormPage() {
       }
     }
 
+    const qrCode = crypto.randomUUID()
+
     const { data: responseData, error } = await supabase
       .from('form_responses')
       .insert([
         {
           form_id: form.id,
+          qr_code: qrCode,
           answers: {
             ...answers,
             _selected_day: selectedDay,
@@ -225,6 +260,7 @@ export default function ApplicationFormPage() {
           const webhookData = {
             form_title: form.title,
             submitted_at: new Date(responseData.created_at).toLocaleString(),
+            qr_code: qrCode,
             responses: [
               ...questions.map(q => ({
                 question: q.question_text,
@@ -247,8 +283,7 @@ export default function ApplicationFormPage() {
           console.error('Webhook trigger error:', webhookErr)
         }
       }
-      setShowSuccessModal(true)
-      setShowPaymentModal(false)
+      router.push(`/apply/complete?id=${responseData.id}`)
     }
     setSubmitting(false)
   }
@@ -391,21 +426,28 @@ export default function ApplicationFormPage() {
                       {locale === 'en' ? 'Select Meeting Day' : '참여 요일 선택'} *
                     </Label>
                     <div className="flex flex-wrap gap-2">
-                      {posting.recurring_days?.map((day: string) => (
-                        <button
-                          key={day}
-                          type="button"
-                          onClick={() => setSelectedDay(day)}
-                          className={cn(
-                            "px-6 py-3 rounded-2xl font-black transition-all border-2",
-                            selectedDay === day 
-                              ? "bg-primary text-white border-primary shadow-lg scale-105" 
-                              : "bg-card text-muted-foreground border-border hover:border-primary/30"
-                          )}
-                        >
-                          {day}{locale === 'en' ? '' : '요일'}
-                        </button>
-                      ))}
+                      {posting.recurring_days?.map((day: string) => {
+                        const isAvailable = availableDays.includes(day)
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => isAvailable && setSelectedDay(day)}
+                            disabled={!isAvailable}
+                            className={cn(
+                              "px-6 py-3 rounded-2xl font-black transition-all border-2",
+                              selectedDay === day 
+                                ? "bg-primary text-white border-primary shadow-lg scale-105" 
+                                : isAvailable
+                                  ? "bg-card text-muted-foreground border-border hover:border-primary/30"
+                                  : "bg-muted/50 text-muted-foreground/30 border-border/30 cursor-not-allowed"
+                            )}
+                          >
+                            {day}{locale === 'en' ? '' : '요일'}
+                            {!isAvailable && <span className="ml-1 text-xs">(마감)</span>}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
 
@@ -454,7 +496,8 @@ export default function ApplicationFormPage() {
               </Card>
             )}
 
-            {questions.map((q, idx) => {
+            {/* 요일 선택 후에만 질문 폼 표시 */}
+            {(!posting?.is_recurring || selectedDay) && questions.map((q, idx) => {
               const qText = locale === 'en' && q.question_text_en ? q.question_text_en : q.question_text
               const qOptions = locale === 'en' && q.options_en ? q.options_en : q.options
 

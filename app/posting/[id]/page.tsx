@@ -52,23 +52,7 @@ export default function PostingDetailPage() {
       if (result) {
         setData(result)
       } else {
-        setData({
-          title: id === 'study' ? "글로벌 비즈니스 영어 스터디" : id === 'language' ? "한-영 언어교환 카페 모임" : "데이터가 없습니다",
-          title_en: id === 'study' ? "Global Business English Study" : id === 'language' ? "KO-EN Language Exchange Meetup" : "No Data",
-          category: id === 'study' ? "스터디" : "언어교환",
-          location: "강남역 인근 카페",
-          location_en: "Cafe near Gangnam Station",
-          date: "매주 토요일",
-          time: "14:00 ~ 16:00",
-          cost: "15,000원",
-          cost_en: "15,000 KRW",
-          host: "강남 리더",
-          host_en: "Gangnam Leader",
-          image_url: "/carousel/imgi_3_250917060052_25013145.gif",
-          description: "함께 공부하고 성장하는 모임입니다.",
-          rich_content: "<p>상세 내용이 아직 등록되지 않았습니다.</p>",
-          rich_content_en: "<p>Detailed content has not been registered yet.</p>"
-        })
+        setData(null)
       }
       setLoading(false)
     }
@@ -135,6 +119,25 @@ export default function PostingDetailPage() {
     )
   }
 
+  if (!loading && !data) {
+    return (
+      <div className="min-h-screen bg-background">
+        <MainNav />
+        <main className="mx-auto max-w-screen-2xl px-6 py-32 text-center">
+          <h1 className="text-3xl font-black text-foreground">
+            {locale === 'en' ? 'Posting Not Found' : '포스팅을 찾을 수 없습니다'}
+          </h1>
+          <p className="text-muted-foreground mt-4 font-medium">
+            {locale === 'en' ? 'The posting you are looking for does not exist or has been removed.' : '찾으시는 포스팅이 존재하지 않거나 삭제되었습니다.'}
+          </p>
+          <Button asChild className="mt-8 rounded-2xl h-14 px-8 font-black">
+            <Link href="/posting">{locale === 'en' ? 'Back to List' : '목록으로 돌아가기'}</Link>
+          </Button>
+        </main>
+      </div>
+    )
+  }
+
   const handleApply = () => {
     // Study and Language Exchange categories always use the custom form
     if (data?.category === '스터디' || data?.category === '언어교환') {
@@ -177,7 +180,7 @@ export default function PostingDetailPage() {
           <div className="space-y-10">
             <div className="relative aspect-video rounded-[32px] overflow-hidden border border-border shadow-xl">
               <Image 
-                src={data?.image_url || "/carousel/imgi_3_250917060052_25013145.gif"} 
+                src={data?.image_url || "/imagebuttons/meetup.jpg"} 
                 alt={displayTitle} 
                 fill 
                 className="object-cover"
@@ -307,7 +310,7 @@ export default function PostingDetailPage() {
         </div>
 
         <div className="mt-20">
-          <RecommendationSection />
+          <RecommendationSection excludeId={data?.id} />
         </div>
       </main>
 

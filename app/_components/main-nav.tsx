@@ -1,10 +1,11 @@
 'use client'
 
 import Link from "next/link"
+import { useState, useEffect, Suspense } from "react"
+import { createClient } from "@/lib/supabase"
 import { Search, User, ReceiptText, ChevronRight, Globe, Zap } from "lucide-react"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { useState, useEffect, Suspense } from "react"
 import { motion } from "framer-motion"
 
 import { cn } from "@/lib/utils"
@@ -19,14 +20,40 @@ const PRIMARY_LINKS = (t: any) => [
 ];
 
 export function MainNav(props: { activePrimaryLabel?: string }) {
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const supabase = createClient()
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        if (user.email === 'pomato5959@gmail.com') {
+          setIsSuperAdmin(true)
+          return
+        }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_superadmin')
+          .eq('id', user.id)
+          .single()
+        
+        if (profile?.is_superadmin) {
+          setIsSuperAdmin(true)
+        }
+      }
+    }
+    checkAdmin()
+  }, [supabase])
+
   return (
     <Suspense fallback={<div className="h-[72px] bg-background border-b border-border" />}>
-      <MainNavContent {...props} />
+      <MainNavContent {...props} isSuperAdmin={isSuperAdmin} />
     </Suspense>
   )
 }
 
-function MainNavContent({ activePrimaryLabel }: { activePrimaryLabel?: string }) {
+function MainNavContent({ activePrimaryLabel, isSuperAdmin }: { activePrimaryLabel?: string, isSuperAdmin: boolean }) {
   const pathname = usePathname();
   const locale = useLocale();
   
@@ -37,7 +64,13 @@ function MainNavContent({ activePrimaryLabel }: { activePrimaryLabel?: string })
   };
 
   const t = i18n[locale];
-  const links = PRIMARY_LINKS(t);
+  const allLinks = PRIMARY_LINKS(t);
+  const links = allLinks.filter(link => {
+    if (link.href === '/posting/study' || link.href === '/posting/language') {
+      return isSuperAdmin;
+    }
+    return true;
+  });
   
   // 현재 경로를 기반으로 활성 탭 결정
   // 1. pathname으로 매칭 시도

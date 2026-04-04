@@ -15,9 +15,10 @@ interface TiptapEditorCardProps {
   value: string
   onChange: (value: string) => void
   isEnglish?: boolean
+  placeholder?: string
 }
 
-export function TiptapEditorCard({ title, value, onChange, isEnglish = false }: TiptapEditorCardProps) {
+export function TiptapEditorCard({ title, value, onChange, isEnglish = false, placeholder }: TiptapEditorCardProps) {
   return (
     <Card className={isEnglish ? "border-primary/20 shadow-xl rounded-[32px] overflow-hidden bg-surface/10" : "border-black shadow-xl rounded-[32px] overflow-hidden"}>
       <CardHeader className={isEnglish ? "bg-surface/20 border-b border-surface/30 p-8" : "bg-muted/50 border-b border-border p-8"}>
@@ -30,6 +31,7 @@ export function TiptapEditorCard({ title, value, onChange, isEnglish = false }: 
         <NovelEditor 
           value={value} 
           onChange={onChange} 
+          placeholder={placeholder}
         />
       </CardContent>
     </Card>

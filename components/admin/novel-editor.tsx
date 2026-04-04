@@ -10,6 +10,7 @@ import {
   EditorBubble,
   ImageResizer,
   handleCommandNavigation,
+  Placeholder,
   type JSONContent 
 } from 'novel'
 import { defaultExtensions } from './novel-extensions'
@@ -24,9 +25,10 @@ import { createClient } from '@/lib/supabase'
 interface NovelEditorProps {
   value: string
   onChange: (value: string) => void
+  placeholder?: string
 }
 
-export function NovelEditor({ value, onChange }: NovelEditorProps) {
+export function NovelEditor({ value, onChange, placeholder }: NovelEditorProps) {
   const [openNode, setOpenNode] = useState(false)
   const [openLink, setOpenLink] = useState(false)
   const [openColor, setOpenColor] = useState(false)
@@ -43,7 +45,13 @@ export function NovelEditor({ value, onChange }: NovelEditorProps) {
   return (
     <EditorRoot>
       <EditorContent
-        extensions={[...defaultExtensions, slashCommand] as any}
+        extensions={[
+          ...defaultExtensions.filter(ext => ext.name !== 'placeholder'), 
+          slashCommand,
+          Placeholder.configure({
+            placeholder: placeholder || '내용을 입력하거나 "/"를 눌러 명령어를 사용하세요...',
+          })
+        ] as any}
         initialContent={initialContent}
         onUpdate={({ editor }) => {
           const json = editor.getJSON()

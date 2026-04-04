@@ -178,7 +178,7 @@ export default function AdminSettingsPage() {
               </CardHeader>
               <CardContent className="p-6 md:p-8">
                 <p className="text-sm font-bold text-muted-foreground leading-relaxed">
-                  {locale === 'en' ? 'Receive notifications for new member registrations or bookings. (Coming Soon)' : '새로운 동아리원 가입이나 예매 신청 시 알림을 받습니다. (준비 중)'}
+                  {locale === 'en' ? 'Receive notifications for new member registrations or applications. (Coming Soon)' : '새로운 동아리원 가입이나 참가 신청 시 알림을 받습니다. (준비 중)'}
                 </p>
               </CardContent>
             </Card>

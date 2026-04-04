@@ -41,17 +41,7 @@ export default function BookingPage() {
       if (result) {
         setData(result)
       } else {
-        setData({
-          title: "로드씨어터 〈클럽 라틴〉",
-          location: "예술의전당 자유소극장",
-          month: "2026.02",
-          cast: "김다흰, 박동욱, 전석호",
-          seats: [
-            { grade: "R석", count: "80석" },
-            { grade: "S석", count: "13석" },
-            { grade: "A석", count: "28석" },
-          ]
-        })
+        setData(null)
       }
       setLoading(false)
     }
@@ -69,6 +59,22 @@ export default function BookingPage() {
     )
   }
 
+  if (!loading && !data) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
+        <h1 className="text-2xl font-black text-foreground">
+          {locale === 'en' ? 'Session Information Not Found' : '모임 정보를 찾을 수 없습니다'}
+        </h1>
+        <p className="text-muted-foreground mt-2 font-medium">
+          {locale === 'en' ? 'The requested session does not exist.' : '요청하신 모임 항목이 존재하지 않습니다.'}
+        </p>
+        <Button onClick={() => router.back()} className="mt-8 rounded-2xl h-12 px-8 font-black">
+          {locale === 'en' ? 'Go Back' : '뒤로 가기'}
+        </Button>
+      </div>
+    )
+  }
+
   const displayTitle = locale === 'en' && data?.title_en ? data.title_en : data?.title;
   const displayLocation = locale === 'en' && data?.location_en ? data.location_en : data?.location;
 
@@ -78,7 +84,7 @@ export default function BookingPage() {
       <header className="relative h-[200px] md:h-[280px] w-full overflow-hidden bg-zinc-950">
         <div className="absolute inset-0">
           <Image
-            src={data?.image_url || "/carousel/imgi_3_250917060052_25013145.gif"}
+            src={data?.image_url || "/imagebuttons/meetup.jpg"}
             alt=""
             fill
             className="object-cover blur-md scale-110 opacity-50"
@@ -115,9 +121,8 @@ export default function BookingPage() {
         <section className="p-6 md:p-0">
           <div className="flex items-center justify-center gap-6 mb-10">
             <span className="text-[26px] md:text-[32px] font-black tracking-tighter">
-              {locale === 'en' ? 'February 2026' : data.month || '2026.02'}
+              {locale === 'en' ? 'Upcoming Dates' : '참가 가능 일정'}
             </span>
-            <ChevronRight className="w-8 h-8 text-muted-foreground/60 cursor-pointer hover:text-foreground transition-colors" />
           </div>
 
           <div className="grid grid-cols-7 text-center mb-6 text-[14px] md:text-[16px] font-black text-muted-foreground">
@@ -164,7 +169,7 @@ export default function BookingPage() {
         <section className="border-t border-border md:border-none">
           <div className="px-6 py-4 md:px-0 bg-muted md:bg-transparent flex items-center gap-2 text-[13px] md:text-[15px] text-muted-foreground font-bold">
             <Info className="w-4.5 h-4.5 opacity-60" />
-            {locale === 'en' ? 'This item is not available for waiting list.' : '예매대기가 불가한 상품입니다.'}
+            {locale === 'en' ? 'Please select your preferred date.' : '참가하실 날짜를 선택해 주세요.'}
           </div>
 
           <div className="p-6 md:p-0 mt-4 space-y-8 pb-32 md:pb-0">
@@ -180,18 +185,18 @@ export default function BookingPage() {
 
             <div className="bg-muted/50 rounded-[24px] border border-border p-8 md:p-10">
               <p className="text-muted-foreground text-[15px] md:text-[17px] font-black mb-8">
-                {locale === 'en' && data?.host_en ? data.host_en : (data?.host || data?.cast)}
+                {locale === 'en' && data?.host_en ? data.host_en : data?.host}
               </p>
               
               <div className="space-y-5 md:space-y-6">
-                {(data.seats || [
-                  { grade: locale === 'en' ? "Regular" : "일반석", count: "Available" },
-                ]).map((seat: any) => (
-                  <div key={seat.grade} className="flex justify-between items-center border-b border-border pb-3 last:border-0 last:pb-0">
-                    <span className="text-foreground text-[16px] md:text-[18px] font-bold">{seat.grade}</span>
-                    <span className="text-red-500 text-[16px] md:text-[18px] font-black">{seat.count}</span>
-                  </div>
-                ))}
+                <div className="flex justify-between items-center border-b border-border pb-3 last:border-0 last:pb-0">
+                  <span className="text-foreground text-[16px] md:text-[18px] font-bold">
+                    {locale === 'en' ? 'Status' : '상태'}
+                  </span>
+                  <span className="text-primary text-[16px] md:text-[18px] font-black">
+                    {locale === 'en' ? 'Recruiting' : '모집 중'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

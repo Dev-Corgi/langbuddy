@@ -21,6 +21,7 @@ interface BasicInfoFieldsProps {
   isDateUndecided: boolean
   isTimeUndecided: boolean
   isLocationUndecided: boolean
+  hideDateField?: boolean
   onTitleChange: (value: string) => void
   onTitleEnChange: (value: string) => void
   onSubtitleChange?: (value: string) => void
@@ -62,7 +63,8 @@ export function BasicInfoFields({
   onImageUrlChange,
   onDateUndecidedChange,
   onTimeUndecidedChange,
-  onLocationUndecidedChange
+  onLocationUndecidedChange,
+  hideDateField
 }: BasicInfoFieldsProps) {
   return (
     <>
@@ -145,14 +147,19 @@ export function BasicInfoFields({
         />
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-border/50">
-        <DatePickerField
-          label="진행 날짜"
-          value={date}
-          onChange={onDateChange}
-          isUndecided={isDateUndecided}
-          onUndecidedChange={onDateUndecidedChange}
-        />
+      <div className={cn(
+        "grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-border/50",
+        hideDateField && "md:grid-cols-1"
+      )}>
+        {!hideDateField && (
+          <DatePickerField
+            label="진행 날짜"
+            value={date}
+            onChange={onDateChange}
+            isUndecided={isDateUndecided}
+            onUndecidedChange={onDateUndecidedChange}
+          />
+        )}
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">

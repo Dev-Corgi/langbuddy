@@ -27,13 +27,35 @@ export function PostingCarousel() {
 
   useEffect(() => {
     async function fetchPostings() {
+      const { data: { user } } = await supabase.auth.getUser()
+      let isSuperAdmin = false
+      if (user) {
+        if (user.email === 'pomato5959@gmail.com') {
+          isSuperAdmin = true
+        } else {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('is_superadmin')
+            .eq('id', user.id)
+            .single()
+          isSuperAdmin = !!profile?.is_superadmin
+        }
+      }
+
       const now = new Date().toISOString()
-      const { data } = await supabase
+      let query = supabase
         .from('postings')
         .select('*')
-        .eq('category', '번개')
         .eq('status', 'active')
         .or(`deadline.is.null,deadline.gt.${now}`)
+
+      if (!isSuperAdmin) {
+        query = query.eq('category', '번개')
+      } else {
+        query = query.in('category', ['번개', '스터디', '언어교환'])
+      }
+      
+      const { data } = await query
       
       if (data) setItems(data)
       setLoading(false)
@@ -181,7 +203,7 @@ export function PostingCarousel() {
                   <div className="relative aspect-square md:aspect-4/3 rounded-2xl overflow-hidden bg-muted group/card">
                     {/* Background Blur Image */}
                     <Image
-                      src={item.image_url || "/postingpage/imgi_4_2026012915421534.jpg"}
+                      src={item.image_url || "/imagebuttons/meetup.jpg"}
                       alt=""
                       fill
                       className="object-cover blur-2xl scale-110 opacity-50"
@@ -193,7 +215,7 @@ export function PostingCarousel() {
                     >
                       <div className="relative w-full h-full shadow-2xl transition-transform duration-300 group-hover/card:scale-[1.05]">
                         <Image
-                          src={item.image_url || "/postingpage/imgi_4_2026012915421534.jpg"}
+                          src={item.image_url || "/imagebuttons/meetup.jpg"}
                           alt={locale === 'en' && item.title_en ? item.title_en : item.title}
                           fill
                           className="object-contain rounded-lg"
