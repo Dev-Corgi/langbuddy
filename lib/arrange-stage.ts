@@ -31,3 +31,13 @@ export function targetRoundForLateJoin(stage: ArrangeStage): number | null {
   if (stage === 3) return 2
   return 3
 }
+
+/**
+ * QR/현장 안내용: DB에 저장된 배치 단계만 보고 “지금 참가자에게 보여줄 좌석 라운드”.
+ * 자리배치 프로그램이 돌린 결과(snapshots)와 동일한 deriveArrangeStage를 쓴 뒤 매핑만 함.
+ * stage 1 → 아직 아무 라운드도 배정 없음 → UI에서 "미정".
+ */
+export function displayRoundForQr(stage: ArrangeStage): number | null {
+  if (stage === 1) return null
+  return stage - 1
+}

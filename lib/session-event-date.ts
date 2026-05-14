@@ -46,6 +46,20 @@ export function todayYYYYMMDDSeoul(from: Date = new Date()): string {
   return KO_DATE.format(from)
 }
 
+/** 반복 모임 신청 응답이 "오늘 운영 중인 회차"와 맞는지 (자리배치·QR 스캐너와 동일 규칙) */
+export function formResponseMatchesTodaySession(
+  answers: Record<string, unknown> | null | undefined,
+  todayYmdSeoul: string,
+  currentDayKoLetter: string
+): boolean {
+  const ans = (answers || {}) as Record<string, unknown>
+  const ev = typeof ans._event_date === 'string' ? ans._event_date.slice(0, 10) : ''
+  const sel = typeof ans._selected_day === 'string' ? ans._selected_day.trim() : ''
+  if (ev === todayYmdSeoul) return true
+  if (!ev && sel === currentDayKoLetter) return true
+  return false
+}
+
 /** YYYY-MM-DD 한 장(서울 달력)의 요일 글자(월~일). 날짜 경계는 정오 서울 앵커 사용. */
 export function koreanWeekdayLetterFromYmdSeoul(isoYmd: string): string | null {
   if (!isoYmd || isoYmd.length < 10) return null

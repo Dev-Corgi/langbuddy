@@ -111,6 +111,7 @@ export default function AdminLayout({
     { href: '/admin/dashboard', label: locale === 'en' ? 'Dashboard' : '대시보드', icon: LayoutDashboard },
     ...(isSuperAdmin ? [
       { href: '/admin/arrange', label: locale === 'en' ? 'Seating' : '자리 배치', icon: LayoutGrid },
+      { href: '/admin/qr-scanner', label: locale === 'en' ? 'QR check-in' : 'QR 체크인', icon: QrCode },
       { href: '/admin/study', label: locale === 'en' ? 'Study' : '스터디 관리', icon: BookOpen },
       { href: '/admin/language', label: locale === 'en' ? 'Language' : '언어교환 관리', icon: Languages },
     ] : []),
