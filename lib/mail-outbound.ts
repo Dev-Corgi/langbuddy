@@ -22,6 +22,11 @@ export async function sendHtmlEmail(opts: {
   to: string
   subject: string
   html: string
+  attachments?: Array<{
+    filename: string
+    content: Buffer
+    contentType?: string
+  }>
 }): Promise<{ ok: true } | { ok: false; error: 'email_not_configured' | 'smtp_failed' }> {
   const gmailUser = process.env.GMAIL_USER?.trim()
   const gmailPass = process.env.GMAIL_APP_PASSWORD?.replace(/\s/g, '')
@@ -42,6 +47,11 @@ export async function sendHtmlEmail(opts: {
       to: opts.to,
       subject: opts.subject,
       html: opts.html,
+      attachments: opts.attachments?.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+        contentType: a.contentType ?? 'application/octet-stream',
+      })),
     })
     return { ok: true }
   } catch (e) {

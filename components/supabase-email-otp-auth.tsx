@@ -1,11 +1,16 @@
 'use client'
 
 /**
- * Uses Supabase Email OTP (`signInWithOtp` + `verifyOtp` type `email`).
- * If new users receive "Confirm your signup" link emails instead of a 6-digit code,
- * turn OFF "Confirm email" in Supabase → Authentication → Providers → Email (or disable
- * requiring email confirmation before sign-in), and set the Magic Link email template
- * to include `{{ .Token }}` for the OTP. See Supabase Auth → Email Templates.
+ * Supabase email passwordless: `signInWithOtp` + `verifyOtp` (type `email`).
+ * Hosted project must use the **Magic link** template with `{{ .Token }}` so mail shows a 6-digit code
+ * (not only a clickable link). See Supabase → Auth → Email templates.
+ *
+ * Apply the repo template via Management API:
+ *   SUPABASE_ACCESS_TOKEN=sbp_... npm run supabase:apply-otp-mail
+ * Or paste `supabase/templates/magic_link_otp.html` in the dashboard.
+ *
+ * If new users still get "confirm signup" link emails, disable "Confirm email" for the Email provider
+ * or adjust the Confirm signup template similarly.
  */
 
 import { useRef, useState } from 'react'

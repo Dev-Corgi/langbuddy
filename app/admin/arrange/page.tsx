@@ -767,7 +767,45 @@ export default function AdminArrangePage() {
     setCurrentRound(configRound)
     setIsConfigOpen(false)
     setConfigRound(null)
-  }, [configRound, configCounts, participants, rounds])
+
+    const sessionForNotify = session
+    if (sessionForNotify?.id && newRoundData.assignments.length > 0) {
+      const attendees = participants.filter((p) => p.checked_in_at)
+      void fetch('/api/admin/notify-seating-round', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postingId: sessionForNotify.id,
+          sessionDate: todayYYYYMMDDSeoul(),
+          round: configRound,
+          tableLanguages: newRoundData.tableLanguages || {},
+          assignments: newRoundData.assignments,
+          participants: attendees.map((p) => ({
+            id: p.id,
+            name: p.name,
+            nationality: String(p.nationality),
+            gender: String(p.gender),
+            language: p.language,
+          })),
+          eventTitle: sessionForNotify.title || 'LangBuddy',
+        }),
+      })
+        .then(async (res) => {
+          const j = (await res.json().catch(() => ({}))) as {
+            sent?: { kakao?: number; email?: number; skipped?: number }
+          }
+          if (!res.ok) {
+            toast.error('테이블 알림 발송에 실패했습니다. (배치는 반영됨)')
+            return
+          }
+          const s = j.sent
+          toast.success(
+            `알림 완료 — 카카오 ${s?.kakao ?? 0} · 이메일 ${s?.email ?? 0} · 건너뜀 ${s?.skipped ?? 0}`
+          )
+        })
+        .catch(() => toast.error('테이블 알림 요청 중 오류'))
+    }
+  }, [configRound, configCounts, participants, rounds, session])
 
   const handleExportRoundCsv = useCallback(
     (roundNum: number) => {
