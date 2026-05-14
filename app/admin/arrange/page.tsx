@@ -793,15 +793,38 @@ export default function AdminArrangePage() {
         .then(async (res) => {
           const j = (await res.json().catch(() => ({}))) as {
             sent?: { kakao?: number; email?: number; skipped?: number }
+            errors?: string[]
+            message?: string
+            debug?: {
+              summary?: Record<string, unknown>
+              steps?: string[]
+              recipients?: unknown[]
+            }
           }
           if (!res.ok) {
-            toast.error('테이블 알림 발송에 실패했습니다. (배치는 반영됨)')
+            console.error('[seating-notify] HTTP error', res.status, j.debug ?? j)
+            toast.error(
+              `테이블 알림 실패 (${res.status}): ${j.message || 'see console'}`
+            )
             return
+          }
+          if (j.debug && typeof console !== 'undefined') {
+            console.groupCollapsed('[seating-notify] debug — Network에서도 동일 JSON 확인 가능')
+            console.log('summary', j.debug.summary)
+            console.log('steps', j.debug.steps)
+            if (j.debug.recipients?.length) console.table(j.debug.recipients)
+            if (j.errors?.length) console.warn('errors', j.errors)
+            console.groupEnd()
           }
           const s = j.sent
           toast.success(
             `알림 완료 — 카카오 ${s?.kakao ?? 0} · 이메일 ${s?.email ?? 0} · 건너뜀 ${s?.skipped ?? 0}`
           )
+          if (j.errors?.length) {
+            toast.info(`알림 일부 오류: ${j.errors.slice(0, 4).join(' · ')}`, {
+              duration: 12000,
+            })
+          }
         })
         .catch(() => toast.error('테이블 알림 요청 중 오류'))
     }

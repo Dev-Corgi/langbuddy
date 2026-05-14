@@ -108,13 +108,16 @@ export async function GET(request: Request) {
         }
 
         const admin = createSupabaseAdmin()
-        const { error: upsertError } = await admin
-          .from('users')
-          .update(kakaoPatch)
-          .eq('id', user.id)
-        
+        const { error: upsertError } = await admin.from('users').upsert(
+          {
+            id: user.id,
+            ...kakaoPatch,
+          },
+          { onConflict: 'id' }
+        )
+
         if (upsertError) {
-          console.error('❌ [Auth Callback] Error saving Kakao data:', upsertError)
+          console.error('❌ [Auth Callback] Error upserting Kakao data:', upsertError)
         } else {
           console.log('✅ [Auth Callback] Kakao data saved successfully:', {
             uuid: kakaoUuid,

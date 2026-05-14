@@ -7,30 +7,32 @@ export type SeatingNotifyParticipant = {
   language: string
 }
 
-async function fetchWoff2FromGoogleCss(weight: number): Promise<ArrayBuffer> {
-  const css = await fetch(
-    `https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@${weight}&display=swap`,
-    {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-      next: { revalidate: 86400 },
-    }
-  ).then((r) => r.text())
-  const m = css.match(/src:\s*url\(([^)]+)\)\s+format\(['"]woff2['"]\)/)
-  if (!m) throw new Error('Could not parse Noto Sans KR font URL from Google CSS')
-  const fontUrl = m[1].replace(/^["']|["']$/g, '')
-  const buf = await fetch(fontUrl, { next: { revalidate: 86400 } }).then((r) => r.arrayBuffer())
-  return buf
+/**
+ * next/og(Satori)는 WOFF2(시그니처 wOF2)를 지원하지 않음.
+ * Google CSS가 기본으로 주는 woff2 대신 WOFF v1 또는 TTF를 쓴다.
+ */
+const NOTO_KR_WOFF_BASE =
+  'https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.2.9/files'
+
+async function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
+  const res = await fetch(url, { next: { revalidate: 604800 } })
+  if (!res.ok) throw new Error(`Font fetch failed ${res.status}: ${url}`)
+  return res.arrayBuffer()
+}
+
+/** unicode 블록 0 — 한글·라틴 기본 글리프 (OG 이미지용으로 충분한 경우가 많음) */
+async function loadNotoSansKrOggCompatible(weight: 400 | 700): Promise<ArrayBuffer> {
+  const w = weight === 400 ? '400' : '700'
+  const woffUrl = `${NOTO_KR_WOFF_BASE}/noto-sans-kr-0-${w}-normal.woff`
+  return fetchArrayBuffer(woffUrl)
 }
 
 let fonts400: ArrayBuffer | null = null
 let fonts700: ArrayBuffer | null = null
 
 async function getFonts() {
-  if (!fonts400) fonts400 = await fetchWoff2FromGoogleCss(400)
-  if (!fonts700) fonts700 = await fetchWoff2FromGoogleCss(700)
+  if (!fonts400) fonts400 = await loadNotoSansKrOggCompatible(400)
+  if (!fonts700) fonts700 = await loadNotoSansKrOggCompatible(700)
   return { fonts400, fonts700 }
 }
 
