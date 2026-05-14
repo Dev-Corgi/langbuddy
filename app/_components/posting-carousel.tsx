@@ -27,21 +27,6 @@ export function PostingCarousel() {
 
   useEffect(() => {
     async function fetchPostings() {
-      const { data: { user } } = await supabase.auth.getUser()
-      let isSuperAdmin = false
-      if (user) {
-        if (user.email === 'pomato5959@gmail.com') {
-          isSuperAdmin = true
-        } else {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('is_superadmin')
-            .eq('id', user.id)
-            .single()
-          isSuperAdmin = !!profile?.is_superadmin
-        }
-      }
-
       const now = new Date().toISOString()
       let query = supabase
         .from('postings')
@@ -49,11 +34,8 @@ export function PostingCarousel() {
         .eq('status', 'active')
         .or(`deadline.is.null,deadline.gt.${now}`)
 
-      if (!isSuperAdmin) {
-        query = query.eq('category', '번개')
-      } else {
-        query = query.in('category', ['번개', '스터디', '언어교환'])
-      }
+      // posting-carousel은 번개만 표시
+      query = query.eq('category', '번개')
       
       const { data } = await query
       
@@ -65,16 +47,34 @@ export function PostingCarousel() {
 
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
+      // 1순위: 카테고리 (언어교환 > 스터디 > 번개)
+      const categoryPriority = (item: any) => {
+        if (item.category === '언어교환') return 0
+        if (item.category === '스터디') return 1
+        return 2 // 번개
+      }
+      
+      const catA = categoryPriority(a)
+      const catB = categoryPriority(b)
+      
+      if (catA !== catB) {
+        return catA - catB
+      }
+      
+      // 2순위: 같은 카테고리 내에서 D-Day 순
       const getDdayValue = (item: any) => {
         if (item.is_recurring) return 2000
         if (!item.date || item.date === '미정' || item.is_date_undecided) return 1000
         
-        const targetDate = new Date(item.date)
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
+        // 한국 시간(UTC+9) 기준으로 계산
+        const targetDate = new Date(item.date + 'T00:00:00+09:00')
+        const now = new Date()
+        const kstOffset = 9 * 60 // 한국은 UTC+9
+        const kstNow = new Date(now.getTime() + (now.getTimezoneOffset() + kstOffset) * 60000)
+        kstNow.setHours(0, 0, 0, 0)
         
-        const diffTime = targetDate.getTime() - today.getTime()
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        const diffTime = targetDate.getTime() - kstNow.getTime()
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
         
         if (diffDays < 0) return 3000 + Math.abs(diffDays)
         return diffDays
@@ -85,11 +85,16 @@ export function PostingCarousel() {
 
   const calculateDday = (dateStr: string) => {
     if (!dateStr || dateStr === '미정') return null
-    const targetDate = new Date(dateStr)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const diffTime = targetDate.getTime() - today.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    // 한국 시간(UTC+9) 기준으로 계산
+    const targetDate = new Date(dateStr + 'T00:00:00+09:00')
+    const now = new Date()
+    const kstOffset = 9 * 60 // 한국은 UTC+9
+    const kstNow = new Date(now.getTime() + (now.getTimezoneOffset() + kstOffset) * 60000)
+    kstNow.setHours(0, 0, 0, 0)
+    
+    const diffTime = targetDate.getTime() - kstNow.getTime()
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
     
     if (diffDays === 0) return 'D-Day'
     if (diffDays > 0) return `D-${diffDays}`

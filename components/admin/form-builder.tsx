@@ -83,6 +83,8 @@ export interface FormQuestionData {
   options: string[]
   options_en: string[]
   is_new?: boolean
+  system_key?: string
+  show_in_qr?: boolean
 }
 
 export interface FormData {
@@ -97,9 +99,19 @@ export interface FormData {
 interface FormBuilderProps {
   initialData?: FormData
   onChange: (data: FormData) => void
+  lockedSystemKeys?: string[]
+  /** 언어교환/스터디: 제목은 요일·날짜 기반 자동 (관리자 입력 필드 숨김) */
+  titleMode?: 'editable' | 'auto'
+  autoTitles?: { title: string; title_en: string }
 }
 
-export function FormBuilder({ initialData, onChange }: FormBuilderProps) {
+export function FormBuilder({
+  initialData,
+  onChange,
+  lockedSystemKeys,
+  titleMode = 'editable',
+  autoTitles,
+}: FormBuilderProps) {
   const locale = useLocale()
   
   const [title, setTitle] = useState(initialData?.title || '')
@@ -134,9 +146,20 @@ export function FormBuilder({ initialData, onChange }: FormBuilderProps) {
     }
   }, [initialData?.title, initialData?.title_en, initialData?.description, initialData?.description_en, initialData?.webhook_url, initialData?.questions])
 
+  const isAutoTitle = titleMode === 'auto' && !!autoTitles
+
+  useEffect(() => {
+    if (!isAutoTitle || !autoTitles) return
+    setTitle(autoTitles.title)
+    setTitleEn(autoTitles.title_en)
+  }, [isAutoTitle, autoTitles?.title, autoTitles?.title_en])
+
+  const effTitle = isAutoTitle ? autoTitles!.title : title
+  const effTitleEn = isAutoTitle ? autoTitles!.title_en : title_en
+
   const notifyChange = (
-    newTitle: string, 
-    newTitleEn: string, 
+    newTitle: string,
+    newTitleEn: string,
     newDesc: string, 
     newDescEn: string, 
     newWebhookUrl: string,
@@ -153,28 +176,30 @@ export function FormBuilder({ initialData, onChange }: FormBuilderProps) {
   }
 
   const handleTitleChange = (val: string) => {
+    if (isAutoTitle) return
     setTitle(val)
     notifyChange(val, title_en, description, description_en, webhook_url, questions)
   }
 
   const handleTitleEnChange = (val: string) => {
+    if (isAutoTitle) return
     setTitleEn(val)
     notifyChange(title, val, description, description_en, webhook_url, questions)
   }
 
   const handleDescChange = (val: string) => {
     setDescription(val)
-    notifyChange(title, title_en, val, description_en, webhook_url, questions)
+    notifyChange(effTitle, effTitleEn, val, description_en, webhook_url, questions)
   }
 
   const handleDescEnChange = (val: string) => {
     setDescriptionEn(val)
-    notifyChange(title, title_en, description, val, webhook_url, questions)
+    notifyChange(effTitle, effTitleEn, description, val, webhook_url, questions)
   }
 
   const handleWebhookChange = (val: string) => {
     setWebhookUrl(val)
-    notifyChange(title, title_en, description, description_en, val, questions)
+    notifyChange(effTitle, effTitleEn, description, description_en, val, questions)
   }
 
   const addQuestion = () => {
@@ -190,20 +215,20 @@ export function FormBuilder({ initialData, onChange }: FormBuilderProps) {
     }
     const newQuestions = [...questions, newQuestion]
     setQuestions(newQuestions)
-    notifyChange(title, title_en, description, description_en, webhook_url, newQuestions)
+    notifyChange(effTitle, effTitleEn, description, description_en, webhook_url, newQuestions)
   }
 
   const removeQuestion = (qId: string) => {
     if (questions.length === 1) return
     const newQuestions = questions.filter(q => q.id !== qId)
     setQuestions(newQuestions)
-    notifyChange(title, title_en, description, description_en, webhook_url, newQuestions)
+    notifyChange(effTitle, effTitleEn, description, description_en, webhook_url, newQuestions)
   }
 
   const updateQuestion = (qId: string, updates: Partial<FormQuestionData>) => {
     const newQuestions = questions.map(q => q.id === qId ? { ...q, ...updates } : q)
     setQuestions(newQuestions)
-    notifyChange(title, title_en, description, description_en, webhook_url, newQuestions)
+    notifyChange(effTitle, effTitleEn, description, description_en, webhook_url, newQuestions)
   }
 
   const addOption = (qId: string) => {
@@ -218,7 +243,7 @@ export function FormBuilder({ initialData, onChange }: FormBuilderProps) {
       return q
     })
     setQuestions(newQuestions)
-    notifyChange(title, title_en, description, description_en, webhook_url, newQuestions)
+    notifyChange(effTitle, effTitleEn, description, description_en, webhook_url, newQuestions)
   }
 
   const updateOption = (qId: string, optIdx: number, value: string, isEn: boolean = false) => {
@@ -237,7 +262,7 @@ export function FormBuilder({ initialData, onChange }: FormBuilderProps) {
       return q
     })
     setQuestions(newQuestions)
-    notifyChange(title, title_en, description, description_en, webhook_url, newQuestions)
+    notifyChange(effTitle, effTitleEn, description, description_en, webhook_url, newQuestions)
   }
 
   const removeOption = (qId: string, optIdx: number) => {
@@ -252,7 +277,7 @@ export function FormBuilder({ initialData, onChange }: FormBuilderProps) {
       return q
     })
     setQuestions(newQuestions)
-    notifyChange(title, title_en, description, description_en, webhook_url, newQuestions)
+    notifyChange(effTitle, effTitleEn, description, description_en, webhook_url, newQuestions)
   }
 
   const getQuestionIcon = (type: QuestionType) => {
@@ -270,33 +295,59 @@ export function FormBuilder({ initialData, onChange }: FormBuilderProps) {
       {/* 폼 기본 정보 섹션 */}
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-3">
-            <Label className="text-sm font-bold text-muted-foreground flex items-center gap-2">
-              <TypeOutline className="w-4 h-4 text-primary" />
-              폼 제목 (KO)
-            </Label>
-            <AutoResizeTextarea
-              placeholder="폼 제목을 입력하세요"
-              value={title || ''}
-              onChange={handleTitleChange}
-              className="text-sm font-medium rounded-2xl border-border focus:ring-primary bg-muted/30"
-            />
-          </div>
-          <div className="space-y-3">
-            <Label className="text-sm font-bold text-primary flex items-center gap-2">
-              <TypeOutline className="w-4 h-4 text-primary" />
-              Form Title (EN)
-            </Label>
-            <AutoResizeTextarea
-              placeholder="Enter form title in English"
-              value={title_en || ''}
-              onChange={handleTitleEnChange}
-              className="text-sm font-medium rounded-2xl border-primary/20 focus:ring-primary bg-primary/5"
-            />
-          </div>
+          {isAutoTitle ? (
+            <div className="md:col-span-2 space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
+              <Label className="text-sm font-bold text-primary flex items-center gap-2">
+                <TypeOutline className="w-4 h-4" />
+                {locale === 'en' ? 'Form title (auto)' : '폼 제목 (자동)'}
+              </Label>
+              <p className="text-xs font-medium text-muted-foreground">
+                {locale === 'en'
+                  ? 'Title is set from this week’s date for the selected weekday. It updates each time you save.'
+                  : '선택한 요일의 이번 주(일~토) 날짜로 제목이 정해집니다. 저장 시 최신 날짜로 갱신됩니다.'}
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2 text-sm font-bold">
+                <div>
+                  <span className="text-muted-foreground text-xs font-semibold block mb-1">KO</span>
+                  {autoTitles?.title}
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-xs font-semibold block mb-1">EN</span>
+                  {autoTitles?.title_en}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-3">
+                <Label className="text-sm font-bold text-muted-foreground flex items-center gap-2">
+                  <TypeOutline className="w-4 h-4 text-primary" />
+                  폼 제목 (KO)
+                </Label>
+                <AutoResizeTextarea
+                  placeholder="폼 제목을 입력하세요"
+                  value={title || ''}
+                  onChange={handleTitleChange}
+                  className="text-sm font-medium rounded-2xl border-border focus:ring-primary bg-muted/30"
+                />
+              </div>
+              <div className="space-y-3">
+                <Label className="text-sm font-bold text-primary flex items-center gap-2">
+                  <TypeOutline className="w-4 h-4 text-primary" />
+                  Form Title (EN)
+                </Label>
+                <AutoResizeTextarea
+                  placeholder="Enter form title in English"
+                  value={title_en || ''}
+                  onChange={handleTitleEnChange}
+                  className="text-sm font-medium rounded-2xl border-primary/20 focus:ring-primary bg-primary/5"
+                />
+              </div>
+            </>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-6">
           <div className="space-y-3">
             <Label className="text-sm font-bold text-muted-foreground flex items-center gap-2">
               <TextAlignStart className="w-4 h-4 text-primary" />
@@ -350,16 +401,30 @@ export function FormBuilder({ initialData, onChange }: FormBuilderProps) {
         </div>
         
         <div className="grid grid-cols-1 gap-6 md:gap-8">
-          {questions.map((q, qIdx) => (
-            <Card key={q.id} className="border border-border shadow-sm hover:shadow-md rounded-[24px] md:rounded-[32px] overflow-hidden bg-card transition-all duration-300 group">
-              <CardContent className="p-4 md:p-10 space-y-6 md:space-y-8">
-                {/* 상단 컨트롤 바 (모바일에서 중요) */}
+          {questions.map((q, qIdx) => {
+            const isSystemQuestion = q.system_key && lockedSystemKeys?.includes(q.system_key)
+            return (
+              <Card key={q.id} className={cn(
+                "border shadow-sm hover:shadow-md rounded-[24px] md:rounded-[32px] overflow-hidden transition-all duration-300 group",
+                isSystemQuestion 
+                  ? "border-primary/30 bg-primary/5 ring-2 ring-primary/10" 
+                  : "border-border bg-card"
+              )}>
+                <CardContent className="p-4 md:p-10 space-y-6 md:space-y-8">
                 <div className="flex items-center justify-between gap-4 pb-4 border-b border-border/50">
                   <div className="flex items-center gap-2 md:gap-4">
                     <span className="text-primary font-black text-lg md:text-xl">Q{qIdx + 1}.</span>
+                    {isSystemQuestion && (
+                      <span className="px-2 py-1 text-xs font-black bg-primary text-white rounded-lg">
+                        필수 기본 질문
+                      </span>
+                    )}
                     <Select 
                       value={q.question_type} 
-                      onValueChange={(v: QuestionType) => updateQuestion(q.id || '', { question_type: v })}
+                      onValueChange={(v: QuestionType) => {
+                        if (isSystemQuestion) return
+                        updateQuestion(q.id || '', { question_type: v })
+                      }}
                     >
                       <SelectTrigger className="w-auto h-10 md:h-12 px-3 md:px-4 rounded-xl border-border bg-muted font-bold text-xs md:text-sm gap-2 focus:ring-primary">
                         {getQuestionIcon(q.question_type)}
@@ -376,28 +441,55 @@ export function FormBuilder({ initialData, onChange }: FormBuilderProps) {
                   </div>
                   
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-muted border border-border">
-                      <Label className="text-[10px] md:text-xs font-black text-muted-foreground uppercase tracking-tight">필수</Label>
+                    {/* QR 표시 체크박스 (시스템 질문은 항상 활성화) */}
+                    <div className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-xl border",
+                      isSystemQuestion ? "bg-primary/10 border-primary/30" : "bg-muted border-border"
+                    )}>
+                      <Label className="text-[10px] md:text-xs font-black text-muted-foreground uppercase tracking-tight">QR</Label>
                       <input 
                         type="checkbox"
-                        checked={q.is_required}
-                        onChange={(e) => updateQuestion(q.id || '', { is_required: e.target.checked })}
-                        className="w-4 h-4 md:w-5 md:h-5 rounded border-border text-primary focus:ring-primary"
+                        checked={isSystemQuestion ? true : Boolean(q.show_in_qr)}
+                        disabled={Boolean(isSystemQuestion)}
+                        onChange={(e) => {
+                          if (!isSystemQuestion) {
+                            updateQuestion(q.id || '', { show_in_qr: e.target.checked })
+                          }
+                        }}
+                        className="w-4 h-4 md:w-5 md:h-5 rounded border-border text-primary focus:ring-primary disabled:opacity-100 disabled:cursor-not-allowed"
                       />
                     </div>
-                    <button 
-                      type="button"
-                      onClick={() => removeQuestion(q.id || '')}
-                      className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all rounded-xl"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+                    
+                    {!isSystemQuestion && (
+                      <>
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-muted border border-border">
+                          <Label className="text-[10px] md:text-xs font-black text-muted-foreground uppercase tracking-tight">필수</Label>
+                          <input 
+                            type="checkbox"
+                            checked={q.is_required}
+                            onChange={(e) => {
+                              updateQuestion(q.id || '', { is_required: e.target.checked })
+                            }}
+                            className="w-4 h-4 md:w-5 md:h-5 rounded border-border text-primary focus:ring-primary"
+                          />
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            removeQuestion(q.id || '')
+                          }}
+                          className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all rounded-xl"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 
                 <div className="space-y-6 md:space-y-8">
                   {/* 질문 텍스트 입력 */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-6">
                     <div className="space-y-2">
                       <Label className="text-sm font-bold text-muted-foreground flex items-center gap-2">
                         <Type className="w-4 h-4 text-primary" />
@@ -476,7 +568,8 @@ export function FormBuilder({ initialData, onChange }: FormBuilderProps) {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            )
+          })}
         </div>
       </div>
 

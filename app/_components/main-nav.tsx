@@ -17,45 +17,48 @@ const PRIMARY_LINKS = (t: any) => [
   { href: "/posting/study", label: t.nav.study },
   { href: "/posting/language", label: t.nav.language },
   { href: "/posting", label: t.nav.social },
+  { href: "/my", label: t.nav.myPage },
 ];
 
 export function MainNav(props: { activePrimaryLabel?: string }) {
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const [userData, setUserData] = useState<any>(null)
   const supabase = createClient()
 
   useEffect(() => {
-    const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        if (user.email === 'pomato5959@gmail.com') {
-          setIsSuperAdmin(true)
-          return
-        }
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('is_superadmin')
-          .eq('id', user.id)
+    const loadUser = async () => {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      setUser(authUser)
+      
+      if (authUser) {
+        const { data: userInfo } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', authUser.id)
           .single()
         
-        if (profile?.is_superadmin) {
-          setIsSuperAdmin(true)
-        }
+        setUserData(userInfo)
       }
     }
-    checkAdmin()
+    loadUser()
   }, [supabase])
 
   return (
     <Suspense fallback={<div className="h-[72px] bg-background border-b border-border" />}>
-      <MainNavContent {...props} isSuperAdmin={isSuperAdmin} />
+      <MainNavContent {...props} user={user} userData={userData} />
     </Suspense>
   )
 }
 
-function MainNavContent({ activePrimaryLabel, isSuperAdmin }: { activePrimaryLabel?: string, isSuperAdmin: boolean }) {
+function MainNavContent({ activePrimaryLabel, user, userData }: { activePrimaryLabel?: string, user: any, userData: any }) {
   const pathname = usePathname();
   const locale = useLocale();
+  const supabase = createClient();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    window.location.href = '/'
+  };
   
   const toggleLocale = () => {
     const newLocale = locale === 'ko' ? 'en' : 'ko';
@@ -64,13 +67,7 @@ function MainNavContent({ activePrimaryLabel, isSuperAdmin }: { activePrimaryLab
   };
 
   const t = i18n[locale];
-  const allLinks = PRIMARY_LINKS(t);
-  const links = allLinks.filter(link => {
-    if (link.href === '/posting/study' || link.href === '/posting/language') {
-      return isSuperAdmin;
-    }
-    return true;
-  });
+  const links = PRIMARY_LINKS(t);
   
   // 현재 경로를 기반으로 활성 탭 결정
   // 1. pathname으로 매칭 시도
@@ -101,29 +98,24 @@ function MainNavContent({ activePrimaryLabel, isSuperAdmin }: { activePrimaryLab
               </p>
             </div>
 
-            {/* Community Live Pulse */}
+            {/* Community pulse — 실데이터 연동 전까지 카운트 미표시 (가짜 숫자 제거) */}
             <div className="flex items-center gap-3 ml-4">
-              {/* Pulse 1: Online Buddies (Member Count) */}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-muted/50 border border-border/50">
                 <div className="relative flex h-1.5 w-1.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                 </div>
-                <div className="flex flex-col leading-none">
-                  <span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider mb-0.5">Live</span>
-                  <span className="text-[12px] font-bold text-foreground/70">1,248 Online</span>
-                </div>
+                <span className="text-[12px] font-bold text-foreground/70">
+                  {locale === 'en' ? 'Open community' : '함께하는 모임'}
+                </span>
               </div>
-
-              {/* Pulse 2: Today's Active Events */}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-primary/5 border border-primary/10">
                 <div className="p-0.5 rounded-md bg-primary/10 text-primary">
                   <Zap className="w-3 h-3 fill-primary" />
                 </div>
-                <div className="flex flex-col leading-none">
-                  <span className="text-[9px] font-black text-primary/60 uppercase tracking-wider mb-0.5">Today</span>
-                  <span className="text-[12px] font-bold text-foreground/70">12 Active</span>
-                </div>
+                <span className="text-[12px] font-bold text-foreground/70">
+                  {locale === 'en' ? 'This week' : '이번 주'}
+                </span>
               </div>
             </div>
 
@@ -137,18 +129,33 @@ function MainNavContent({ activePrimaryLabel, isSuperAdmin }: { activePrimaryLab
                 {locale}
               </button>
               
-              {/* <Link 
-                href="#" 
-                className="flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-[12px] font-black transition-all shadow-sm active:scale-95"
-              >
-                <User className="w-3.5 h-3.5" />
-                {t.nav.login}
-              </Link> */}
+              {user ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border">
+                    <User className="w-3.5 h-3.5 text-primary" />
+                    <span className="text-[12px] font-black text-foreground">{userData?.name || 'User'}</span>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="h-9 px-3 rounded-lg hover:bg-accent text-[12px] font-black text-muted-foreground hover:text-destructive transition-all"
+                  >
+                    {locale === 'en' ? 'Logout' : '로그아웃'}
+                  </button>
+                </div>
+              ) : (
+                <Link 
+                  href="/auth/login" 
+                  className="flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-[12px] font-black transition-all shadow-sm active:scale-95"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  {locale === 'en' ? 'Login' : '로그인'}
+                </Link>
+              )}
             </div>
           </div>
 
           {/* Bottom Row - More compact */}
-          {/* <div className="flex items-center h-[48px] justify-between">
+          <div className="flex items-center h-[48px] justify-between">
             <nav className="flex items-center gap-8 h-full">
               {links.map((link) => (
                 <Link
@@ -171,12 +178,12 @@ function MainNavContent({ activePrimaryLabel, isSuperAdmin }: { activePrimaryLab
             </nav>
 
             <div className="flex items-center gap-5">
-              <Link href="#" className="flex items-center gap-2 text-[13px] font-black text-muted-foreground hover:text-primary transition-colors">
+              <Link href="/my" className="flex items-center gap-2 text-[13px] font-black text-muted-foreground hover:text-primary transition-colors">
                 <ReceiptText className="w-4 h-4" />
                 {t.nav.myBookings}
               </Link>
             </div>
-          </div> */}
+          </div>
         </div>
       </div>
 
@@ -191,10 +198,26 @@ function MainNavContent({ activePrimaryLabel, isSuperAdmin }: { activePrimaryLab
             <div className="flex items-center gap-3">
               <button 
                 onClick={toggleLocale}
-                className="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground transition-colors active:bg-primary/90"
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-muted text-foreground transition-colors active:bg-muted/80"
               >
                 <Globe className="w-5 h-5" />
               </button>
+              
+              {user ? (
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground transition-colors active:bg-primary/90"
+                >
+                  <User className="w-5 h-5" />
+                </button>
+              ) : (
+                <Link
+                  href="/auth/login"
+                  className="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground transition-colors active:bg-primary/90"
+                >
+                  <User className="w-5 h-5" />
+                </Link>
+              )}
             </div>
           </div>
         </div>

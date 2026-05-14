@@ -460,7 +460,10 @@ function NewPostingContent() {
                   ) : (
                     <div className="mt-4 border-2 border-dashed border-primary/20 rounded-[40px] p-2 bg-surface/5 transition-all">
                       <div className="p-4 md:p-8">
-                        <FormBuilder onChange={(data) => setInlineFormData(data)} />
+                        <FormBuilder 
+                          onChange={(data) => setInlineFormData(data)} 
+                          lockedSystemKeys={['name', 'gender', 'nationality', 'language', 'kakao_id', 'drink']}
+                        />
                       </div>
                     </div>
                   )}

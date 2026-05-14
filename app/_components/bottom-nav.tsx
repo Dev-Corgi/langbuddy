@@ -1,67 +1,32 @@
 'use client'
 
 import Link from "next/link"
-import { Home, BookOpen, Languages, Zap } from "lucide-react"
+import { Home, BookOpen, Languages, Zap, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePathname } from "next/navigation"
 
 import { useLocale } from "@/hooks/use-locale"
-
-import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase"
 
 const NAV_ITEMS = (locale: string) => [
   { icon: Home, label: locale === 'en' ? 'Home' : '홈', href: "/" },
   { icon: BookOpen, label: locale === 'en' ? 'Study' : '스터디', href: "/posting/study" },
   { icon: Languages, label: locale === 'en' ? 'Language' : '언어교환', href: "/posting/language" },
   { icon: Zap, label: locale === 'en' ? 'Lightning' : '번개', href: "/posting" },
+  { icon: User, label: locale === 'en' ? 'My' : '마이', href: "/my" },
 ]
 
 export function BottomNav() {
   const pathname = usePathname()
   const locale = useLocale()
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
-  const supabase = createClient()
-
-  useEffect(() => {
-    const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        if (user.email === 'pomato5959@gmail.com') {
-          setIsSuperAdmin(true)
-          return
-        }
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('is_superadmin')
-          .eq('id', user.id)
-          .single()
-        
-        if (profile?.is_superadmin) {
-          setIsSuperAdmin(true)
-        }
-      }
-    }
-    checkAdmin()
-  }, [supabase])
 
   // Hide BottomNav on booking pages
   if (pathname?.startsWith('/booking')) return null
 
   const items = NAV_ITEMS(locale)
 
-  const filteredItems = items.filter(item => {
-    if (item.label === (locale === 'en' ? 'Study' : '스터디') || 
-        item.label === (locale === 'en' ? 'Language' : '언어교환')) {
-      return isSuperAdmin;
-    }
-    return true;
-  });
-
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around h-16 px-6 bg-card/80 backdrop-blur-lg border-t border-border md:hidden">
-      {filteredItems.map((item) => {
+    <nav className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around h-16 px-2 bg-card/80 backdrop-blur-lg border-t border-border md:hidden">
+      {items.map((item) => {
         const isActive = pathname === item.href
         return (
           <Link

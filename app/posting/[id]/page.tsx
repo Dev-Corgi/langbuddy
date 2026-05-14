@@ -40,9 +40,9 @@ export default function PostingDetailPage() {
       let query = supabase.from('postings').select('*')
       
       if (id === 'study') {
-        query = query.eq('category', '스터디').order('created_at', { ascending: false }).limit(1)
+        query = query.eq('category', '스터디').is('day_of_week', null).order('created_at', { ascending: false }).limit(1)
       } else if (id === 'language') {
-        query = query.eq('category', '언어교환').order('created_at', { ascending: false }).limit(1)
+        query = query.eq('category', '언어교환').is('day_of_week', null).order('created_at', { ascending: false }).limit(1)
       } else {
         query = query.eq('id', id)
       }
@@ -50,6 +50,32 @@ export default function PostingDetailPage() {
       const { data: result, error } = await query.single()
       
       if (result) {
+        // 언어교환 또는 스터디의 경우 활성화된 스케줄 가져오기
+        if (result.category === '언어교환') {
+          const { data: schedules } = await supabase
+            .from('language_exchange_schedules')
+            .select('*')
+            .eq('posting_id', result.id)
+            .eq('is_active', true)
+            .order('day_of_week')
+          
+          if (schedules && schedules.length > 0) {
+            result.recurring_days = schedules.map(s => s.day_of_week)
+            result.is_recurring = true
+          }
+        } else if (result.category === '스터디') {
+          const { data: schedules } = await supabase
+            .from('study_schedules')
+            .select('*')
+            .eq('posting_id', result.id)
+            .eq('is_active', true)
+            .order('day_of_week')
+          
+          if (schedules && schedules.length > 0) {
+            result.recurring_days = schedules.map(s => s.day_of_week)
+            result.is_recurring = true
+          }
+        }
         setData(result)
       } else {
         setData(null)
@@ -159,13 +185,25 @@ export default function PostingDetailPage() {
   const displayLocation = locale === 'en' && data?.location_en ? data.location_en : data?.location;
   const displayCost = locale === 'en' && data?.cost_en ? data.cost_en : data?.cost;
   const displayHost = locale === 'en' && data?.host_en ? data.host_en : data?.host;
-  const displayContent = locale === 'en' && data?.rich_content_en ? data.rich_content_en : (data?.rich_content || data?.description);
+  const displayContent = locale === 'en' && data?.description_en ? data.description_en : (data?.description_ko || data?.rich_content_en || data?.rich_content || data?.description);
 
+  const isLanguageExchange = data?.category === '언어교환';
+  const isStudy = data?.category === '스터디';
+  const isRecurringEvent = isLanguageExchange || isStudy;
+  
   const displayDate = data?.is_recurring 
     ? (locale === 'en' 
         ? `Every ${data.recurring_days?.join(', ')}` 
-        : `매주 ${data.recurring_days?.join(', ')}`)
+        : `매주 ${data.recurring_days?.join(',')}`)
     : data?.date;
+  
+  const displayTime = isRecurringEvent 
+    ? (locale === 'en' ? 'See application form' : '신청폼 참고')
+    : data?.time;
+  
+  const displayLocationText = isRecurringEvent
+    ? (locale === 'en' ? 'See application form' : '신청폼 참고')
+    : displayLocation;
 
   const isStudyOrLanguage = data?.category === '스터디' || data?.category === '언어교환';
   const hasRecurringSettings = data?.is_recurring && data?.recurring_settings;
@@ -197,11 +235,11 @@ export default function PostingDetailPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Clock className="w-5 h-5 text-primary" />
-                    {data?.time}
+                    {displayTime}
                   </div>
                   <div className="flex items-center gap-2">
                     <MapPin className="w-5 h-5 text-primary" />
-                    {displayLocation}
+                    {displayLocationText}
                   </div>
                 </div>
 

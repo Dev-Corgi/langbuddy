@@ -15,6 +15,7 @@ export const i18n = {
       category: "카테고리",
       search: "검색",
       my: "마이",
+      myPage: "마이 페이지",
     },
     home: {
       hero: {
@@ -44,6 +45,8 @@ export const i18n = {
       select: "선택",
       notice: "모임 일정은 상황에 따라 변경될 수 있으며, 취소 시 사전 공지됩니다.",
       today: "오늘",
+      noSelectableDaysThisWeek:
+        "이번주차에는 신청 가능한 요일이 없습니다",
     },
     forms: {
       management: "폼 관리",
@@ -81,6 +84,28 @@ export const i18n = {
       edit: "수정",
       status: "상태",
       category: "카테고리",
+    },
+    myPage: {
+      title: "마이 페이지",
+      greeting: "안녕하세요",
+      calendarTitle: "일정",
+      applicationsTitle: "내 신청",
+      noApplications: "아직 신청한 모임이 없습니다.",
+      seatingTitle: "언어교환 테이블 히스토리",
+      noSeating: "저장된 자리 배치 기록이 없습니다. 체크인 후 관리자가 배치를 저장하면 여기에 표시됩니다.",
+      round: "라운드",
+      table: "테이블",
+      with: "함께한 분들",
+      stampTitle: "언어교환 스탬프",
+      stampHint: "체크인할 때마다 스탬프 1개. 10개 모으면 무료 쿠폰 1장이에요.",
+      coupons: "무료 쿠폰",
+      couponCount: "장 보유",
+      categoryLe: "언어교환",
+      categoryStudy: "스터디",
+      categoryMeetup: "번개",
+      prevMonth: "이전",
+      nextMonth: "다음",
+      loading: "불러오는 중…",
     }
   },
   en: {
@@ -94,6 +119,7 @@ export const i18n = {
       category: "Category",
       search: "Search",
       my: "My",
+      myPage: "My Page",
     },
     home: {
       hero: {
@@ -123,6 +149,8 @@ export const i18n = {
       select: "Select",
       notice: "Schedule is subject to change. Cancellation will be notified in advance.",
       today: "TODAY",
+      noSelectableDaysThisWeek:
+        "There are no meeting days left to apply for this week",
     },
     forms: {
       management: "Form Management",
@@ -160,6 +188,28 @@ export const i18n = {
       edit: "Edit",
       status: "Status",
       category: "Category",
+    },
+    myPage: {
+      title: "My Page",
+      greeting: "Hello",
+      calendarTitle: "Schedule",
+      applicationsTitle: "My registrations",
+      noApplications: "No registrations yet.",
+      seatingTitle: "Language exchange table history",
+      noSeating: "No saved seating history yet. After check-in, it appears once admins save seating.",
+      round: "Round",
+      table: "Table",
+      with: "Tablemates",
+      stampTitle: "Language exchange stamps",
+      stampHint: "Earn 1 stamp per check-in. Collect 10 for a free session coupon.",
+      coupons: "Free coupons",
+      couponCount: "available",
+      categoryLe: "Language exchange",
+      categoryStudy: "Study",
+      categoryMeetup: "Meetup",
+      prevMonth: "Prev",
+      nextMonth: "Next",
+      loading: "Loading…",
     }
   }
 } as const;

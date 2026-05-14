@@ -284,32 +284,18 @@ export default function AdminDashboardPage() {
               </div>
             </CardHeader>
             <CardContent className="p-6 md:p-8">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Link href="/admin/checkin">
-                  <div className="p-4 rounded-2xl bg-card border border-border hover:border-primary/30 transition-all flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                      <QrCode className="w-6 h-6" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-black text-foreground">{locale === 'en' ? 'Check-in Scanner' : '현장 출석 스캐너'}</p>
-                      <p className="text-xs font-bold text-muted-foreground">{locale === 'en' ? 'Scan participant QR codes' : '참가자 QR 코드 스캔 및 출석'}</p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-muted-foreground/40 group-hover:text-primary transition-colors" />
+              <Link href="/admin/arrange">
+                <div className="p-4 rounded-2xl bg-card border border-border hover:border-primary/30 transition-all flex items-center gap-4 group">
+                  <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                    <LayoutGrid className="w-6 h-6" />
                   </div>
-                </Link>
-                <Link href="/admin/arrange" className="sm:hidden">
-                  <div className="p-4 rounded-2xl bg-card border border-border hover:border-primary/30 transition-all flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                      <LayoutGrid className="w-6 h-6" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-black text-foreground">{locale === 'en' ? 'Seat Arrangement' : '자리 배치 관리'}</p>
-                      <p className="text-xs font-bold text-muted-foreground">{locale === 'en' ? 'Manage rounds and DnD' : '라운드 관리 및 드래그 배치'}</p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-muted-foreground/40 group-hover:text-primary transition-colors" />
+                  <div className="flex-1">
+                    <p className="font-black text-foreground">{locale === 'en' ? 'Seat Arrangement' : '자리 배치 관리'}</p>
+                    <p className="text-xs font-bold text-muted-foreground">{locale === 'en' ? 'QR check-in, rounds, and DnD' : 'QR 출석 체크, 라운드 관리 및 드래그 배치'}</p>
                   </div>
-                </Link>
-              </div>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground/40 group-hover:text-primary transition-colors" />
+                </div>
+              </Link>
             </CardContent>
           </Card>
         )}

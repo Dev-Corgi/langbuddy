@@ -34,7 +34,8 @@ export function useFormManager(formId: string | null) {
           question_type: q.question_type,
           is_required: q.is_required,
           options: q.options || [''],
-          options_en: q.options_en || ['']
+          options_en: q.options_en || [''],
+          system_key: q.system_key || undefined
         }))
       })
     } else {
@@ -71,7 +72,8 @@ export function useFormManager(formId: string | null) {
         is_required: q.is_required,
         options: q.options,
         options_en: q.options_en,
-        display_order: idx
+        display_order: idx,
+        system_key: q.system_key || null
       }))
       
       await supabase.from('form_questions').insert(questionData)
@@ -100,7 +102,8 @@ export function useFormManager(formId: string | null) {
           is_required: q.is_required,
           options: q.options,
           options_en: q.options_en,
-          display_order: idx
+          display_order: idx,
+          system_key: q.system_key || null
         }))
         await supabase.from('form_questions').insert(questionData)
         return newFormId

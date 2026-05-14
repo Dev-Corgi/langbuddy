@@ -1,5 +1,3 @@
-import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase"
 import Image from "next/image"
 import Link from "next/link"
 
@@ -43,39 +41,6 @@ type ImageButtonsProps = {
 }
 
 export function ImageButtons({ className }: ImageButtonsProps) {
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
-  const supabase = createClient()
-
-  useEffect(() => {
-    const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        if (user.email === 'pomato5959@gmail.com') {
-          setIsSuperAdmin(true)
-          return
-        }
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('is_superadmin')
-          .eq('id', user.id)
-          .single()
-        
-        if (profile?.is_superadmin) {
-          setIsSuperAdmin(true)
-        }
-      }
-    }
-    checkAdmin()
-  }, [supabase])
-
-  const filteredItems = ITEMS.filter(item => {
-    if (item.href === '/posting/language' || item.href === '/posting/study') {
-      return isSuperAdmin
-    }
-    return true
-  })
-
   return (
     <section className={cn("w-full min-w-0 overflow-hidden", className)}>
       <SectionHeader 
@@ -85,15 +50,15 @@ export function ImageButtons({ className }: ImageButtonsProps) {
       />
       <div className={cn(
         "grid gap-6 md:gap-8 min-w-0",
-        filteredItems.length === 1 ? "grid-cols-1 max-w-md" : "md:grid-cols-3"
+        ITEMS.length === 1 ? "grid-cols-1 max-w-md" : "md:grid-cols-3"
       )}>
-        {filteredItems.map((item, idx) => (
+        {ITEMS.map((item, idx) => (
           <Link
             key={item.title}
             href={item.href}
             className={cn(
               "group relative overflow-hidden rounded-[32px] border border-border bg-card transition-all duration-500 hover:shadow-2xl hover:shadow-primary/10 hover:border-primary/30 hover:-translate-y-2",
-              filteredItems.length === 3 && idx === 1 ? "md:scale-105 z-10" : ""
+              ITEMS.length === 3 && idx === 1 ? "md:scale-105 z-10" : ""
             )}
           >
             <div className="relative min-h-[200px] md:aspect-3/4">

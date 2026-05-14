@@ -20,21 +20,6 @@ export function PostingList() {
 
   useEffect(() => {
     async function fetchPostings() {
-      const { data: { user } } = await supabase.auth.getUser()
-      let isSuperAdmin = false
-      if (user) {
-        if (user.email === 'pomato5959@gmail.com') {
-          isSuperAdmin = true
-        } else {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('is_superadmin')
-            .eq('id', user.id)
-            .single()
-          isSuperAdmin = !!profile?.is_superadmin
-        }
-      }
-
       const now = new Date().toISOString()
       let query = supabase
         .from('postings')
@@ -42,11 +27,8 @@ export function PostingList() {
         .eq('status', 'active')
         .or(`deadline.is.null,deadline.gt.${now}`)
       
-      if (!isSuperAdmin) {
-        query = query.eq('category', '번개')
-      } else {
-        query = query.in('category', ['번개', '스터디', '언어교환'])
-      }
+      // Upcoming Meetups는 번개만 표시
+      query = query.eq('category', '번개')
 
       const { data } = await query.order('date', { ascending: true, nullsFirst: false })
       
@@ -62,12 +44,15 @@ export function PostingList() {
         if (item.is_recurring) return 2000 // 매주 반복은 미정 뒤로
         if (!item.date || item.date === '미정' || item.is_date_undecided) return 1000 // 일시 미정
         
-        const targetDate = new Date(item.date)
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
+        // 한국 시간(UTC+9) 기준으로 계산
+        const targetDate = new Date(item.date + 'T00:00:00+09:00')
+        const now = new Date()
+        const kstOffset = 9 * 60 // 한국은 UTC+9
+        const kstNow = new Date(now.getTime() + (now.getTimezoneOffset() + kstOffset) * 60000)
+        kstNow.setHours(0, 0, 0, 0)
         
-        const diffTime = targetDate.getTime() - today.getTime()
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        const diffTime = targetDate.getTime() - kstNow.getTime()
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
         
         if (diffDays < 0) return 3000 + Math.abs(diffDays) // 지난 일정은 가장 뒤로
         return diffDays // 오늘(0)부터 미래순
@@ -78,11 +63,16 @@ export function PostingList() {
 
   const calculateDday = (dateStr: string) => {
     if (!dateStr || dateStr === '미정') return null
-    const targetDate = new Date(dateStr)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const diffTime = targetDate.getTime() - today.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    // 한국 시간(UTC+9) 기준으로 계산
+    const targetDate = new Date(dateStr + 'T00:00:00+09:00')
+    const now = new Date()
+    const kstOffset = 9 * 60 // 한국은 UTC+9
+    const kstNow = new Date(now.getTime() + (now.getTimezoneOffset() + kstOffset) * 60000)
+    kstNow.setHours(0, 0, 0, 0)
+    
+    const diffTime = targetDate.getTime() - kstNow.getTime()
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
     
     if (diffDays === 0) return 'D-Day'
     if (diffDays > 0) return `D-${diffDays}`

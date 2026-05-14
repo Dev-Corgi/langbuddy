@@ -9,12 +9,23 @@ import {
   Download,
   User,
   Calendar,
-  ClipboardList
+  ClipboardList,
+  CreditCard,
+  CheckCircle2,
+  ImageIcon,
+  MessageCircle,
+  Clock
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { useLocale } from '@/hooks/use-locale'
+import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
+import {
+  kakaoParticipantReconnectAdminHint,
+  kakaoSendNeedsParticipantKakaoReconnect,
+} from '@/lib/kakao-send-status'
 
 export default function FormResponsesPage() {
   const params = useParams()
@@ -27,6 +38,8 @@ export default function FormResponsesPage() {
   const [questions, setQuestions] = useState<any[]>([])
   const [responses, setResponses] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [sendingQR, setSendingQR] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchData() {
@@ -62,6 +75,99 @@ export default function FormResponsesPage() {
     }
     fetchData()
   }, [id, supabase])
+
+  // Confirm payment and send QR via KakaoTalk
+  const handleConfirmPayment = async (response: any) => {
+    setConfirmingId(response.id)
+    
+    try {
+      // 1. Update payment status to confirmed
+      const { error: updateError } = await supabase
+        .from('form_responses')
+        .update({ 
+          payment_status: 'confirmed'
+        })
+        .eq('id', response.id)
+
+      if (updateError) {
+        toast.error(locale === 'en' ? 'Failed to confirm payment' : '입금 확인에 실패했습니다')
+        return
+      }
+
+      // 2. Send QR to KakaoTalk
+      setSendingQR(response.id)
+      
+      // Get user's kakao_uuid from database
+      const { data: userData } = await supabase
+        .from('users')
+        .select('id, kakao_uuid, name, kakao_access_token, kakao_token_expires_at')
+        .eq('id', response.user_id)
+        .single()
+
+      if (!userData?.kakao_uuid) {
+        toast.warning(locale === 'en' ? 'User has no Kakao UUID' : '사용자의 카카오 UUID가 없습니다')
+        setSendingQR(null)
+        setConfirmingId(null)
+        // Refresh data
+        const { data: updatedResponses } = await supabase
+          .from('form_responses')
+          .select('*')
+          .eq('form_id', id)
+          .order('created_at', { ascending: false })
+        if (updatedResponses) setResponses(updatedResponses)
+        return
+      }
+
+      const nameQuestion = questions.find(q => q.system_key === 'name')
+      const userName = nameQuestion ? response.answers?.[nameQuestion.id] : userData.name || 'User'
+
+      // Call server API to send via Kakao
+      const kakaoResponse = await fetch('/api/send-kakao-qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kakaoId: userData.kakao_uuid,
+          qrCode: response.qr_code,
+          formTitle: form?.title || 'LangBuddy',
+          name: userName,
+          responseId: response.id,
+          userId: userData.id,
+        }),
+      })
+
+      const result = await kakaoResponse.json()
+
+      if (result.success) {
+        toast.success(locale === 'en' ? 'Payment confirmed and QR sent!' : '입금 확인 완료 및 QR 전송됨!')
+      } else {
+        const detail = typeof result.message === 'string' ? result.message : ''
+        const reconnect = kakaoSendNeedsParticipantKakaoReconnect(result.kakaoSendStatus)
+        const hint = reconnect ? ` ${kakaoParticipantReconnectAdminHint(locale)}` : ''
+        toast.warning(
+          (locale === 'en'
+            ? 'Payment confirmed but Kakao send failed.'
+            : '입금은 확인되었으나 카카오 전송에 실패했습니다.') +
+            (detail ? `: ${detail}` : '') +
+            (hint ? ` ${hint}` : '')
+        )
+      }
+
+      // Refresh data
+      const { data: updatedResponses } = await supabase
+        .from('form_responses')
+        .select('*')
+        .eq('form_id', id)
+        .order('created_at', { ascending: false })
+      if (updatedResponses) setResponses(updatedResponses)
+
+    } catch (error) {
+      console.error('Error confirming payment:', error)
+      toast.error(locale === 'en' ? 'Failed to confirm payment' : '입금 확인에 실패했습니다')
+    } finally {
+      setSendingQR(null)
+      setConfirmingId(null)
+    }
+  }
 
   const exportToCSV = () => {
     if (responses.length === 0) return
@@ -173,10 +279,128 @@ export default function FormResponsesPage() {
                           </div>
                         </div>
                       </div>
+                      {/* Payment Status Badge */}
+                      {res.answers?._payment_method === '계좌송금' && (
+                        <div className={cn(
+                          "px-3 py-1.5 rounded-full text-xs font-black flex items-center gap-1.5",
+                          res.payment_status === 'confirmed' 
+                            ? "bg-emerald-100 text-emerald-700" 
+                            : "bg-amber-100 text-amber-700"
+                        )}>
+                          {res.payment_status === 'confirmed' ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              {locale === 'en' ? 'Confirmed' : '입금 확인됨'}
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="w-3.5 h-3.5" />
+                              {locale === 'en' ? 'Pending' : '입금 대기중'}
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent className="p-8">
                     <div className="grid gap-8 md:grid-cols-2">
+                      {/* Payment Info Section */}
+                      {res.answers?._payment_method && (
+                        <div className="md:col-span-2 p-5 rounded-2xl bg-muted border border-border space-y-4">
+                          <div className="flex items-center gap-2">
+                            <CreditCard className="w-4 h-4 text-primary" />
+                            <span className="text-sm font-bold text-foreground">
+                              {locale === 'en' ? 'Payment Information' : '결제 정보'}
+                            </span>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground">{locale === 'en' ? 'Method' : '결제 방식'}</p>
+                              <p className="font-black text-foreground">{res.answers._payment_method}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground">{locale === 'en' ? 'Status' : '결제 상태'}</p>
+                              <p className={cn(
+                                "font-black",
+                                res.payment_status === 'confirmed' ? "text-emerald-600" : "text-amber-600"
+                              )}>
+                                {res.payment_status === 'confirmed' 
+                                  ? (locale === 'en' ? 'Confirmed' : '확인 완료')
+                                  : (locale === 'en' ? 'Pending' : '확인 대기중')
+                                }
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Payment Receipt */}
+                          {res.payment_receipt_url && (
+                            <div className="space-y-2 pt-3 border-t border-border">
+                              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                <ImageIcon className="w-3 h-3" />
+                                {locale === 'en' ? 'Payment Receipt' : '입금 영수증'}
+                              </p>
+                              <a 
+                                href={res.payment_receipt_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="block relative aspect-video max-w-sm rounded-xl overflow-hidden border border-border hover:opacity-90 transition-opacity"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img 
+                                  src={res.payment_receipt_url} 
+                                  alt="Payment receipt" 
+                                  className="w-full h-full object-cover"
+                                />
+                              </a>
+                            </div>
+                          )}
+
+                          {/* Confirm Payment Button - only for bank transfer + pending */}
+                          {res.answers._payment_method === '계좌송금' && res.payment_status !== 'confirmed' && (
+                            <div className="pt-2">
+                              <Button
+                                onClick={() => handleConfirmPayment(res)}
+                                disabled={confirmingId === res.id}
+                                className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black"
+                              >
+                                {confirmingId === res.id ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    {sendingQR === res.id 
+                                      ? (locale === 'en' ? 'Sending QR...' : 'QR 전송중...')
+                                      : (locale === 'en' ? 'Confirming...' : '확인중...')
+                                    }
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                                    {locale === 'en' ? 'Confirm Payment & Send QR' : '입금 확인 및 QR 전송'}
+                                  </>
+                                )}
+                              </Button>
+                              <p className="text-xs text-muted-foreground mt-2 text-center">
+                                {locale === 'en' 
+                                  ? 'Click to verify payment and send QR code via KakaoTalk'
+                                  : '클릭하면 입금이 확인되고 카카오톡으로 QR이 전송됩니다'}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Already confirmed message */}
+                          {res.answers._payment_method === '계좌송금' && res.payment_status === 'confirmed' && (
+                            <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              <span className="text-sm font-bold text-emerald-700">
+                                {locale === 'en' ? 'Payment verified & QR sent' : '입금 확인 완료 및 QR 전송됨'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <Separator className="md:col-span-2 my-2 opacity-50" />
+
                       {/* Special Study Fields */}
                       {res.answers?._selected_day && (
                         <div className="space-y-2 p-4 rounded-2xl bg-accent border border-border">

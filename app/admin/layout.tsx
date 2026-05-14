@@ -110,7 +110,6 @@ export default function AdminLayout({
   const menuItems = [
     { href: '/admin/dashboard', label: locale === 'en' ? 'Dashboard' : '대시보드', icon: LayoutDashboard },
     ...(isSuperAdmin ? [
-      { href: '/admin/checkin', label: locale === 'en' ? 'Check-in' : '현장 출석', icon: QrCode },
       { href: '/admin/arrange', label: locale === 'en' ? 'Seating' : '자리 배치', icon: LayoutGrid },
       { href: '/admin/study', label: locale === 'en' ? 'Study' : '스터디 관리', icon: BookOpen },
       { href: '/admin/language', label: locale === 'en' ? 'Language' : '언어교환 관리', icon: Languages },

@@ -123,7 +123,30 @@ export function ResponseResetSettings({ formId }: ResponseResetSettingsProps) {
 
   async function resetNow() {
     if (!confirm(locale === 'en' ? 'Delete all responses now?' : '지금 모든 응답을 삭제하시겠습니까?')) return
-    
+
+    const { data: rows, error: idsErr } = await supabase
+      .from('form_responses')
+      .select('id')
+      .eq('form_id', formId)
+
+    if (idsErr) {
+      alert(locale === 'en' ? 'Failed to load responses.' : '응답 목록을 불러오지 못했습니다.')
+      return
+    }
+
+    const ids = (rows ?? []).map((r) => r.id).filter(Boolean)
+    if (ids.length > 0) {
+      const { error: seatingDelErr } = await supabase
+        .from('seating_assignments')
+        .delete()
+        .in('participant_id', ids)
+
+      if (seatingDelErr) {
+        alert(locale === 'en' ? 'Failed to clear seating for responses.' : '자리 배치 데이터 초기화에 실패했습니다.')
+        return
+      }
+    }
+
     const { error } = await supabase
       .from('form_responses')
       .delete()
@@ -163,9 +186,9 @@ export function ResponseResetSettings({ formId }: ResponseResetSettingsProps) {
           {locale === 'en' ? 'Automatic Response Reset' : '응답 자동 초기화'}
         </CardTitle>
         <CardDescription className="font-medium">
-          {locale === 'en' 
-            ? 'Set a schedule to automatically delete all responses weekly.' 
-            : '매주 정해진 시간에 모든 응답을 자동으로 삭제합니다.'}
+          {locale === 'en'
+            ? 'A database job runs every minute and clears responses at your scheduled Seoul time (see last reset below).'
+            : 'DB 스케줄러가 매분 확인해, 서울 기준으로 정한 요일·시간에 해당 폼 응답을 자동 삭제합니다(아래 마지막 초기화 시각 참고).'}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
