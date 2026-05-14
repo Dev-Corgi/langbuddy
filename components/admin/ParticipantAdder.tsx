@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { UserPlus, X, QrCode } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
-import { Html5QrcodeScanner } from 'html5-qrcode'
+import { Html5Qrcode } from 'html5-qrcode'
 import { extractParticipantInfoFromAnswers, randomUuidV4, type CoreFormQuestion } from '@/lib/utils'
 
 type Participant = {
@@ -28,7 +28,7 @@ interface ParticipantAdderProps {
 }
 
 export function ParticipantAdder({ onAddParticipant, formId, formQuestions, existingParticipantIds = [] }: ParticipantAdderProps) {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [isOpen, setIsOpen] = useState(false)
   const [name, setName] = useState('')
   const [gender, setGender] = useState<'남' | '여'>('남')
@@ -36,34 +36,20 @@ export function ParticipantAdder({ onAddParticipant, formId, formQuestions, exis
   const [language, setLanguage] = useState('영어')
   const [tab, setTab] = useState<'manual' | 'qr'>('manual')
   const [scannerActive, setScannerActive] = useState(false)
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null)
+  const html5QrRef = useRef<Html5Qrcode | null>(null)
+  const existingIdsRef = useRef(existingParticipantIds)
+  const formQuestionsRef = useRef(formQuestions)
+  existingIdsRef.current = existingParticipantIds
+  formQuestionsRef.current = formQuestions
+  const onAddRef = useRef(onAddParticipant)
+  onAddRef.current = onAddParticipant
 
-  useEffect(() => {
-    if (scannerActive && !scannerRef.current && tab === 'qr') {
-      const scanner = new Html5QrcodeScanner(
-        "participant-qr-reader",
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        false
-      )
-      
-      scanner.render(onScanSuccess, onScanFailure)
-      scannerRef.current = scanner
-    }
-
-    return () => {
-      if (scannerRef.current) {
-        scannerRef.current.clear().catch(console.error)
-        scannerRef.current = null
-      }
-    }
-  }, [scannerActive, tab])
-
-  async function onScanSuccess(decodedText: string) {
+  const onScanSuccess = useCallback(async (decodedText: string) => {
     setScannerActive(false)
-    
+
     try {
       console.log('🔍 [QR스캔] QR 코드:', decodedText)
-      
+
       const { data: responseData, error: responseError } = await supabase
         .from('form_responses')
         .select('*')
@@ -89,17 +75,17 @@ export function ParticipantAdder({ onAddParticipant, formId, formQuestions, exis
         setScannerActive(true)
         return
       }
-      
+
       console.log('✅ [QR스캔] form_id 일치 확인!')
 
-      const alreadyListed = existingParticipantIds.includes(responseData.id)
+      const alreadyListed = existingIdsRef.current.includes(responseData.id)
       if (alreadyListed && responseData.checked_in_at) {
         toast.warning('이미 체크인된 참가자입니다.')
         setScannerActive(true)
         return
       }
 
-      const info = extractParticipantInfoFromAnswers(responseData.answers || {}, formQuestions)
+      const info = extractParticipantInfoFromAnswers(responseData.answers || {}, formQuestionsRef.current)
       const displayName = info.name || responseData.answers?.name || responseData.answers?.이름 || 'Anonymous'
 
       let checkedInAt: string | null = responseData.checked_in_at
@@ -131,16 +117,17 @@ export function ParticipantAdder({ onAddParticipant, formId, formQuestions, exis
         checked_in_at: checkedInAt,
       }
 
-      onAddParticipant(newParticipant)
-      
-      // QR 표시 질문들의 답변 표시
-      const qrQuestions = formQuestions.filter(q => q.show_in_qr || q.system_key)
-      const qrInfo = qrQuestions.map(q => {
-        const answer = responseData.answers?.[q.id]
-        const displayAnswer = Array.isArray(answer) ? answer.join(', ') : (answer || '-')
-        return `${q.question_text}: ${displayAnswer}`
-      }).join(' | ')
-      
+      onAddRef.current(newParticipant)
+
+      const qrQuestions = formQuestionsRef.current.filter((q) => q.show_in_qr || q.system_key)
+      const qrInfo = qrQuestions
+        .map((q) => {
+          const answer = responseData.answers?.[q.id]
+          const displayAnswer = Array.isArray(answer) ? answer.join(', ') : (answer || '-')
+          return `${q.question_text}: ${displayAnswer}`
+        })
+        .join(' | ')
+
       toast.success(
         <div className="space-y-1">
           <div className="font-black">{displayName}님이 추가되었습니다.</div>
@@ -148,20 +135,84 @@ export function ParticipantAdder({ onAddParticipant, formId, formQuestions, exis
         </div>,
         { duration: 5000 }
       )
-      
+
       if ('vibrate' in navigator) navigator.vibrate(200)
-      
     } catch (err) {
       console.error(err)
       toast.error('참가자 추가에 실패했습니다.')
     }
-    
-    setTimeout(() => setScannerActive(true), 2000)
-  }
 
-  function onScanFailure(error: any) {
-    // Silent failure
-  }
+    setTimeout(() => setScannerActive(true), 2000)
+  }, [formId])
+
+  useEffect(() => {
+    if (!scannerActive || tab !== 'qr') return
+
+    const elementId = 'participant-qr-reader'
+    let cancelled = false
+    const qr = new Html5Qrcode(elementId, { verbose: false })
+
+    const stopAndClear = async () => {
+      try {
+        if (qr.isScanning) await qr.stop()
+      } catch {
+        /* ignore */
+      }
+      try {
+        qr.clear()
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const startCamera = async () => {
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } } as const
+      const onDecoded = async (decodedText: string) => {
+        await stopAndClear()
+        html5QrRef.current = null
+        if (!cancelled) void onScanSuccess(decodedText)
+      }
+      const onFrameError = () => {
+        /* 스캔 중 미검출 — 무시 */
+      }
+      try {
+        await qr.start({ facingMode: 'environment' }, config, onDecoded, onFrameError)
+        if (cancelled) {
+          await stopAndClear()
+          return
+        }
+        html5QrRef.current = qr
+      } catch (envErr) {
+        console.warn('[QR] environment camera failed, trying user-facing', envErr)
+        try {
+          qr.clear()
+        } catch {
+          /* ignore */
+        }
+        try {
+          await qr.start({ facingMode: 'user' }, config, onDecoded, onFrameError)
+          if (cancelled) {
+            await stopAndClear()
+            return
+          }
+          html5QrRef.current = qr
+        } catch {
+          if (!cancelled) {
+            toast.error('카메라를 켤 수 없습니다. 브라우저에서 카메라 권한을 허용했는지, HTTPS로 접속했는지 확인해 주세요.')
+            setScannerActive(false)
+          }
+        }
+      }
+    }
+
+    void startCamera()
+
+    return () => {
+      cancelled = true
+      if (html5QrRef.current === qr) html5QrRef.current = null
+      void stopAndClear()
+    }
+  }, [scannerActive, tab, onScanSuccess])
 
   const handleManualSubmit = useCallback(() => {
     if (!name.trim()) {
@@ -324,7 +375,10 @@ export function ParticipantAdder({ onAddParticipant, formId, formQuestions, exis
               </Button>
             ) : (
               <div className="space-y-4">
-                <div id="participant-qr-reader" className="overflow-hidden rounded-2xl border-4 border-muted" />
+                <div
+                  id="participant-qr-reader"
+                  className="min-h-[260px] overflow-hidden rounded-2xl border-4 border-muted bg-black/5"
+                />
                 <Button 
                   variant="outline" 
                   onClick={() => setScannerActive(false)}
