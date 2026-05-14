@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -408,8 +408,11 @@ function UncheckedInList({ participants, onEdit }: { participants: Participant[]
 // --- Main Page ---
 
 export default function AdminArrangePage() {
-  const supabase = createClient()
-  
+  const supabase = useMemo(() => createClient(), [])
+  const sessionRef = useRef<ArrangePostingSession | null>(null)
+  const formQuestionsRef = useRef<CoreFormQuestion[]>([])
+  const participantsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const [loading, setLoading] = useState(true)
   const [session, setTodaySession] = useState<ArrangePostingSession | null>(null)
   const [participants, setParticipants] = useState<Participant[]>([])
@@ -429,6 +432,49 @@ export default function AdminArrangePage() {
   const [debugLogs, setDebugLogs] = useState<string[]>([])
   const [showDebugLogs, setShowDebugLogs] = useState(false)
 
+  sessionRef.current = session
+  formQuestionsRef.current = formQuestions
+
+  const scheduleParticipantsRefresh = useCallback(() => {
+    if (participantsRefreshTimerRef.current) {
+      clearTimeout(participantsRefreshTimerRef.current)
+    }
+    participantsRefreshTimerRef.current = setTimeout(() => {
+      participantsRefreshTimerRef.current = null
+      void (async () => {
+        const s = sessionRef.current
+        const questionsForExtract = formQuestionsRef.current
+        if (!s?.form_id) return
+        const todayStr = todayYYYYMMDDSeoul()
+        const currentDay = koreanWeekdayLetterSeoul()
+        const { data: responsesRaw } = await supabase
+          .from('form_responses')
+          .select('*')
+          .eq('form_id', s.form_id)
+        const responses = (responsesRaw || []).filter((r) => {
+          const ans = (r.answers || {}) as Record<string, unknown>
+          const ev = typeof ans._event_date === 'string' ? ans._event_date.slice(0, 10) : ''
+          const sel = typeof ans._selected_day === 'string' ? ans._selected_day.trim() : ''
+          if (ev === todayStr) return true
+          if (!ev && sel === currentDay) return true
+          return false
+        })
+        const mapped: Participant[] = responses.map((r) => {
+          const info = extractParticipantInfoFromAnswers(r.answers || {}, questionsForExtract)
+          return {
+            id: r.id,
+            name: info.name || r.answers?.name || r.answers?.이름 || 'Anonymous',
+            gender: info.gender || r.answers?.gender || r.answers?.성별 || '?',
+            nationality: info.nationality || r.answers?.nationality || r.answers?.국적 || '?',
+            language: r.answers?._selected_language || info.language || '-',
+            checked_in_at: r.checked_in_at,
+          }
+        })
+        setParticipants(mapped)
+      })()
+    }, 350)
+  }, [supabase])
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
@@ -443,32 +489,37 @@ export default function AdminArrangePage() {
 
   useEffect(() => {
     void fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
+  }, [supabase])
 
-    // Subscribe to check-ins
+  useEffect(() => {
+    const formId = session?.form_id
+    if (!formId) return
+
     const channel = supabase
-      .channel('checkin-updates')
+      .channel(`checkin-updates-${formId}`)
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: '*',
           schema: 'public',
-          table: 'form_responses'
+          table: 'form_responses',
+          filter: `form_id=eq.${formId}`,
         },
-        (payload) => {
-          setParticipants(prev => prev.map(p => 
-            p.id === payload.new.id 
-              ? { ...p, checked_in_at: payload.new.checked_in_at } 
-              : p
-          ))
+        () => {
+          scheduleParticipantsRefresh()
         }
       )
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (participantsRefreshTimerRef.current) {
+        clearTimeout(participantsRefreshTimerRef.current)
+        participantsRefreshTimerRef.current = null
+      }
+      void supabase.removeChannel(channel)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount load + channel; fetchData is stable intent
-  }, [supabase])
+  }, [supabase, session?.form_id, scheduleParticipantsRefresh])
 
   const fetchData = async () => {
     setLoading(true)
