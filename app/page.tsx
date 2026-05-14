@@ -4,7 +4,7 @@ import { MainCarousel } from "./_components/main-carousel";
 import { PostingCarousel } from "./_components/posting-carousel";
 import { PostingList } from "./_components/posting-list";
 import { LangBuddyNews } from "./_components/langbuddy-news";
-// hello world
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-background w-full overflow-x-hidden relative">
