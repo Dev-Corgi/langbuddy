@@ -1,5 +1,6 @@
 'use client'
 
+import Link from "next/link"
 import { Instagram } from "lucide-react"
 import { useLocale } from "@/hooks/use-locale"
 
@@ -34,6 +35,13 @@ export function Footer() {
             >
               <Instagram size={18} className="md:w-5 md:h-5 group-hover:scale-110 transition-transform" />
             </a>
+
+            <Link
+              href="/privacy"
+              className="text-[10px] md:text-xs font-black tracking-tight text-muted-foreground hover:text-primary transition-colors underline-offset-4 hover:underline"
+            >
+              {locale === 'en' ? 'Privacy Policy' : '개인정보 처리방침'}
+            </Link>
 
             {/* Copyright */}
             <p className="text-muted-foreground/60 text-[9px] md:text-xs font-black tracking-tight whitespace-nowrap">
