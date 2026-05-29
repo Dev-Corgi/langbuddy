@@ -191,28 +191,15 @@ export async function POST(request: NextRequest) {
       notifyDetail = 'no_user_id_skipped_notify'
     }
 
-    const { error: delSeatErr } = await admin
-      .from('seating_assignments')
-      .delete()
-      .eq('participant_id', responseId)
+    const { error: delErr } = await admin.rpc('admin_delete_form_response', {
+      p_response_id: responseId,
+      p_refund_coupon: true,
+    })
 
-    if (delSeatErr) {
-      console.error('[cancel-form-response] seating_assignments', delSeatErr)
+    if (delErr) {
+      console.error('[cancel-form-response] admin_delete_form_response', delErr)
       return NextResponse.json(
-        { error: 'delete_seating_failed', details: delSeatErr.message },
-        { status: 500 }
-      )
-    }
-
-    const { error: delRespErr } = await admin
-      .from('form_responses')
-      .delete()
-      .eq('id', responseId)
-
-    if (delRespErr) {
-      console.error('[cancel-form-response] form_responses', delRespErr)
-      return NextResponse.json(
-        { error: 'delete_response_failed', details: delRespErr.message },
+        { error: 'delete_response_failed', details: delErr.message },
         { status: 500 }
       )
     }

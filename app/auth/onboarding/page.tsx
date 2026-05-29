@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { PRIVACY_POLICY_VERSION } from '@/lib/privacy-policy'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -25,6 +27,7 @@ export default function OnboardingPage() {
   const [gender, setGender] = useState<'남' | '여'>('남')
   const [nationality, setNationality] = useState<'한국인' | '외국인'>('한국인')
   const [kakaoId, setKakaoId] = useState('')
+  const [privacyAgreed, setPrivacyAgreed] = useState(false)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -63,6 +66,16 @@ export default function OnboardingPage() {
       return
     }
 
+    if (!privacyAgreed) {
+      toast.error(
+        locale === 'en'
+          ? 'Please agree to the Privacy Policy to continue.'
+          : '계속하려면 개인정보 처리방침에 동의해 주세요.'
+      )
+      setSubmitting(false)
+      return
+    }
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       toast.error(locale === 'en' ? 'Authentication error' : '인증 오류가 발생했습니다')
@@ -79,6 +92,8 @@ export default function OnboardingPage() {
         nationality,
         kakao_id: kakaoId.trim(),
         onboarding_completed: true,
+        privacy_accepted_at: new Date().toISOString(),
+        privacy_policy_version: PRIVACY_POLICY_VERSION,
         updated_at: new Date().toISOString()
       })
 
@@ -191,6 +206,38 @@ export default function OnboardingPage() {
                 className="h-12 rounded-xl border-border bg-muted/50 focus:bg-card focus:ring-primary transition-all font-medium"
                 required
               />
+            </div>
+
+            {/* 개인정보 처리방침 동의 */}
+            <div className="flex items-start gap-3 rounded-2xl border border-border bg-muted/30 p-4">
+              <input
+                id="privacy-agree"
+                type="checkbox"
+                checked={privacyAgreed}
+                onChange={(e) => setPrivacyAgreed(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-input text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              />
+              <Label
+                htmlFor="privacy-agree"
+                className="text-sm font-medium leading-snug text-muted-foreground cursor-pointer [&_a]:font-bold [&_a]:text-primary [&_a]:underline-offset-2 hover:[&_a]:underline"
+              >
+                {locale === 'en' ? (
+                  <>
+                    I have read and agree to the{' '}
+                    <Link href="/privacy" target="_blank" rel="noopener noreferrer">
+                      Privacy Policy
+                    </Link>
+                    . *
+                  </>
+                ) : (
+                  <>
+                    <Link href="/privacy" target="_blank" rel="noopener noreferrer">
+                      개인정보 처리방침
+                    </Link>
+                    을 읽었으며 내용에 동의합니다. *
+                  </>
+                )}
+              </Label>
             </div>
 
             <Button

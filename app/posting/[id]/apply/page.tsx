@@ -769,19 +769,34 @@ export default function ApplicationFormPage() {
       .single()
 
     if (error) {
-      const dup =
-        error.code === '23505' &&
-        posting?.is_recurring &&
-        (posting?.category === '스터디' || posting?.category === '언어교환')
-      if (dup) {
-        setHasDuplicateApplication(true)
+      const errMsg = error.message || ''
+      if (errMsg.includes('no_coupon_available')) {
         alert(
           locale === 'en'
-            ? 'You already have an application for this session. If this is unexpected, please contact the organizer.'
-            : '이번 회차에 이미 신청 내역이 있습니다. 문제가 있다면 운영진에게 문의해 주세요.'
+            ? 'No free coupon available.'
+            : '사용 가능한 무료 쿠폰이 없습니다.'
+        )
+      } else if (errMsg.includes('coupon_not_applicable')) {
+        alert(
+          locale === 'en'
+            ? 'Coupons can only be used for language exchange sessions.'
+            : '쿠폰은 언어교환 세션 신청에만 사용할 수 있습니다.'
         )
       } else {
-        alert(error.message)
+        const dup =
+          error.code === '23505' &&
+          posting?.is_recurring &&
+          (posting?.category === '스터디' || posting?.category === '언어교환')
+        if (dup) {
+          setHasDuplicateApplication(true)
+          alert(
+            locale === 'en'
+              ? 'You already have an application for this session. If this is unexpected, please contact the organizer.'
+              : '이번 회차에 이미 신청 내역이 있습니다. 문제가 있다면 운영진에게 문의해 주세요.'
+          )
+        } else {
+          alert(error.message)
+        }
       }
     } else {
       // Move receipt to permanent location with response_id
@@ -816,19 +831,21 @@ export default function ApplicationFormPage() {
       }
 
       if ((leCouponWaived || paymentMethod === 'coupon') && user?.id) {
-        const nextC = Math.max(0, Number(userData?.le_reward_coupons ?? 1) - 1)
-        await supabase
+        const { data: refreshedUser } = await supabase
           .from('users')
-          .update({
-            le_reward_coupons: nextC,
-            updated_at: new Date().toISOString(),
-          })
+          .select('le_reward_coupons')
           .eq('id', user.id)
-        setUserData((prev: any) => (prev ? { ...prev, le_reward_coupons: nextC } : prev))
+          .single()
+        if (refreshedUser) {
+          setUserData((prev: { le_reward_coupons?: number } | null) =>
+            prev
+              ? { ...prev, le_reward_coupons: refreshedUser.le_reward_coupons }
+              : prev
+          )
+        }
       }
 
-      // Note: QR is NOT sent to KakaoTalk immediately
-      // It will be sent after admin confirms payment
+      // QR is sent on the application complete page (Kakao/email), not on admin confirm.
 
       // 4. Trigger Webhook if exists
       if (form.webhook_url) {
@@ -1576,8 +1593,8 @@ export default function ApplicationFormPage() {
                           ? 'Complete below to finish your application.'
                           : '아래에서 신청을 완료해 주세요.'
                         : locale === 'en' 
-                          ? 'Your QR code will be sent via KakaoTalk after payment verification.' 
-                          : '입금 확인 후 카카오톡으로 QR 코드가 전송됩니다.'}
+                          ? 'Your QR code will be sent via KakaoTalk or email right after you apply.' 
+                          : '신청 직후 카카오톡 또는 이메일로 QR 코드가 발송됩니다.'}
                     </span>
                   </p>
                 </div>

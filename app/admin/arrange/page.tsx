@@ -23,8 +23,17 @@ import {
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { cn, extractParticipantInfoFromAnswers, type CoreFormQuestion } from '@/lib/utils'
-import { koreanWeekdayLetterSeoul, todayYYYYMMDDSeoul } from '@/lib/session-event-date'
+import {
+  formResponseMatchesTodaySession,
+  koreanWeekdayLetterSeoul,
+  todayYYYYMMDDSeoul,
+} from '@/lib/session-event-date'
 import { deriveArrangeStage, targetRoundForLateJoin } from '@/lib/arrange-stage'
+import { buildLangCheckinModalPayload } from '@/lib/admin-checkin-display'
+import {
+  QrScanResultSheet,
+  type QrScanResultSheetPayload,
+} from '@/components/admin/qr-scan-result-sheet'
 import { ParticipantAdder } from '@/components/admin/ParticipantAdder'
 import { ParticipantEditor } from '@/components/admin/ParticipantEditor'
 import {
@@ -49,7 +58,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import _ from 'lodash'
-import { arrangeRound as runSeatingArrangeRound, calculateAutoTableCounts, getTableWarnings } from '@/lib/seating-algorithm'
+import { arrangeRound as runSeatingArrangeRound, calculateAutoTableCounts, getTableWarnings, pickBestTableForLateJoin, evaluateRoundQuality, formatDuplicateWarningMessage, reunionCountIfJoinedTable } from '@/lib/seating-algorithm'
 import type { Assignment, RoundData } from '@/lib/seating-algorithm'
 import { formatDebugLog, generateDebugLog } from '@/lib/seating-debug-logger'
 import { RoundImageExporter } from '@/components/admin/round-image-exporter'
@@ -412,6 +421,12 @@ export default function AdminArrangePage() {
   const sessionRef = useRef<ArrangePostingSession | null>(null)
   const formQuestionsRef = useRef<CoreFormQuestion[]>([])
   const participantsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastCheckinModalRef = useRef<{ id: string; at: number } | null>(null)
+  const seenCheckedInIdsRef = useRef<Set<string>>(new Set())
+
+  const [checkinModalOpen, setCheckinModalOpen] = useState(false)
+  const [checkinModalPayload, setCheckinModalPayload] =
+    useState<QrScanResultSheetPayload | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [session, setTodaySession] = useState<ArrangePostingSession | null>(null)
@@ -434,6 +449,51 @@ export default function AdminArrangePage() {
 
   sessionRef.current = session
   formQuestionsRef.current = formQuestions
+
+  const showCheckinModalForResponse = useCallback(
+    async (row: {
+      id: string
+      answers?: Record<string, unknown> | null
+      payment_status?: string | null
+      checked_in_at?: string | null
+    }) => {
+      const s = sessionRef.current
+      const questions = formQuestionsRef.current
+      if (!s?.id || !row.checked_in_at) return
+
+      const todayStr = todayYYYYMMDDSeoul()
+      const currentDay = koreanWeekdayLetterSeoul()
+      if (
+        !formResponseMatchesTodaySession(
+          (row.answers || {}) as Record<string, unknown>,
+          todayStr,
+          currentDay
+        )
+      ) {
+        return
+      }
+
+      const now = Date.now()
+      const last = lastCheckinModalRef.current
+      if (last && last.id === row.id && now - last.at < 2500) return
+      lastCheckinModalRef.current = { id: row.id, at: now }
+
+      try {
+        const payload = await buildLangCheckinModalPayload(
+          supabase,
+          row,
+          questions,
+          s.id,
+          todayStr
+        )
+        setCheckinModalPayload(payload)
+        setCheckinModalOpen(true)
+      } catch (e) {
+        console.error('[arrange] check-in modal:', e)
+      }
+    },
+    [supabase]
+  )
 
   const scheduleParticipantsRefresh = useCallback(() => {
     if (participantsRefreshTimerRef.current) {
@@ -471,6 +531,9 @@ export default function AdminArrangePage() {
           }
         })
         setParticipants(mapped)
+        seenCheckedInIdsRef.current = new Set(
+          mapped.filter((p) => p.checked_in_at).map((p) => p.id)
+        )
       })()
     }, 350)
   }, [supabase])
@@ -506,8 +569,24 @@ export default function AdminArrangePage() {
           table: 'form_responses',
           filter: `form_id=eq.${formId}`,
         },
-        () => {
+        (payload) => {
           scheduleParticipantsRefresh()
+
+          const row = payload.new as {
+            id?: string
+            answers?: Record<string, unknown> | null
+            payment_status?: string | null
+            checked_in_at?: string | null
+          }
+
+          if (
+            row?.id &&
+            row.checked_in_at &&
+            !seenCheckedInIdsRef.current.has(row.id)
+          ) {
+            seenCheckedInIdsRef.current.add(row.id)
+            void showCheckinModalForResponse(row)
+          }
         }
       )
       .subscribe()
@@ -519,7 +598,12 @@ export default function AdminArrangePage() {
       }
       void supabase.removeChannel(channel)
     }
-  }, [supabase, session?.form_id, scheduleParticipantsRefresh])
+  }, [
+    supabase,
+    session?.form_id,
+    scheduleParticipantsRefresh,
+    showCheckinModalForResponse,
+  ])
 
   const fetchData = async () => {
     setLoading(true)
@@ -630,6 +714,9 @@ export default function AdminArrangePage() {
         }
       })
       setParticipants(mapped)
+      seenCheckedInIdsRef.current = new Set(
+        mapped.filter((p) => p.checked_in_at).map((p) => p.id)
+      )
 
       const languageGroups = _.groupBy(mapped, 'language')
       const initialCounts: Record<string, number> = { ...langTableCounts }
@@ -762,6 +849,11 @@ export default function AdminArrangePage() {
     }))
     const debugLog = generateDebugLog(configRound, newRoundData, updatedRounds, dbgParticipants)
     setDebugLogs((prev) => [...prev, formatDebugLog(debugLog)])
+
+    const quality = evaluateRoundQuality(newRoundData, updatedRounds, dbgParticipants)
+    if (quality.duplicatedPairCount > 0) {
+      toast.warning(formatDuplicateWarningMessage(quality), { duration: 12000 })
+    }
 
     toast.success(`${configRound}라운드 배치가 완료되었습니다.`)
     setCurrentRound(configRound)
@@ -902,31 +994,25 @@ export default function AdminArrangePage() {
     }
 
     const tableLanguages = roundData.tableLanguages || {}
-    const matchingTables = Object.keys(tableLanguages).filter(
-      (label) => tableLanguages[label] === newParticipant.language
+    const previousRounds = rounds.filter(
+      (r) => r.round < targetRound && r.assignments.length > 0
+    )
+    const allAttendees = [...participants.filter((p) => p.checked_in_at), newParticipant]
+    const bestTable = pickBestTableForLateJoin(
+      newParticipant,
+      roundData.assignments,
+      tableLanguages,
+      allAttendees,
+      previousRounds
     )
 
-    if (matchingTables.length === 0) {
+    if (!bestTable) {
       toast.warning(
         `${newParticipant.name}님이 추가되었습니다. ${targetRound}라운드에 ${newParticipant.language} 테이블이 없어 미배정 상태입니다.`,
         { duration: 5000 }
       )
       return
     }
-
-    const tableAssignments = roundData.assignments
-    const assignmentsByTable = _.groupBy(tableAssignments, 'table_label')
-
-    let minTable = matchingTables[0]
-    let minCount = (assignmentsByTable[minTable] || []).length
-
-    matchingTables.forEach((label) => {
-      const count = (assignmentsByTable[label] || []).length
-      if (count < minCount) {
-        minCount = count
-        minTable = label
-      }
-    })
 
     setRounds((prev) => {
       const updated = [...prev]
@@ -936,7 +1022,7 @@ export default function AdminArrangePage() {
           ...updated[roundIdx],
           assignments: [
             ...updated[roundIdx].assignments,
-            { participant_id: newParticipant.id, table_label: minTable },
+            { participant_id: newParticipant.id, table_label: bestTable },
           ],
         }
       }
@@ -944,7 +1030,7 @@ export default function AdminArrangePage() {
     })
 
     toast.success(
-      `${newParticipant.name}님이 ${targetRound}라운드 ${minTable} 테이블에 배치되었습니다.`,
+      `${newParticipant.name}님이 ${targetRound}라운드 ${bestTable} 테이블에 배치되었습니다.`,
       { duration: 5000 }
     )
   }
@@ -1054,13 +1140,10 @@ export default function AdminArrangePage() {
     try {
       setDeletingParticipantId(p.id)
 
-      const { error: seatingErr } = await supabase
-        .from('seating_assignments')
-        .delete()
-        .eq('participant_id', p.id)
-      if (seatingErr) throw seatingErr
-
-      const { error: responseErr } = await supabase.from('form_responses').delete().eq('id', p.id)
+      const { error: responseErr } = await supabase.rpc('admin_delete_form_response', {
+        p_response_id: p.id,
+        p_refund_coupon: true,
+      })
       if (responseErr) throw responseErr
 
       setParticipants((prev) => prev.filter((x) => x.id !== p.id))
@@ -1200,6 +1283,22 @@ export default function AdminArrangePage() {
           return
         }
 
+        const previousRoundsForDrag = rounds.filter(
+          (r) => r.round < currentRound && r.assignments.length > 0
+        )
+        const { maxReunions } = reunionCountIfJoinedTable(
+          activeId,
+          newTableLabel,
+          currentRoundData?.assignments || [],
+          previousRoundsForDrag
+        )
+        if (maxReunions > 0) {
+          toast.info(
+            `이 테이블에는 이전 라운드에서 ${maxReunions}번 만난 참가자가 있습니다.`,
+            { id: 'reunion-hint', duration: 5000 }
+          )
+        }
+
         setRounds((prev) => {
           const newRounds = [...prev]
           const roundIdx = newRounds.findIndex((r) => r.round === currentRound)
@@ -1230,6 +1329,22 @@ export default function AdminArrangePage() {
             id: 'lang-mismatch',
           })
           return
+        }
+
+        const previousRoundsForDrag = rounds.filter(
+          (r) => r.round < currentRound && r.assignments.length > 0
+        )
+        const { maxReunions } = reunionCountIfJoinedTable(
+          activeId,
+          newTableLabel,
+          currentRoundAssignments,
+          previousRoundsForDrag
+        )
+        if (maxReunions > 0) {
+          toast.info(
+            `이 테이블에는 이전 라운드에서 ${maxReunions}번 만난 참가자가 있습니다.`,
+            { id: 'reunion-hint-participant', duration: 5000 }
+          )
         }
 
         setRounds((prev) => {
@@ -1715,6 +1830,15 @@ export default function AdminArrangePage() {
           isDeleting={deletingParticipantId === editingParticipant.id}
         />
       )}
+
+      <QrScanResultSheet
+        open={checkinModalOpen}
+        onOpenChange={(open) => {
+          setCheckinModalOpen(open)
+          if (!open) setCheckinModalPayload(null)
+        }}
+        payload={checkinModalPayload}
+      />
     </div>
   )
 }

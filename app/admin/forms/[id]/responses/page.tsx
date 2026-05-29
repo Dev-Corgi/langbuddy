@@ -22,10 +22,6 @@ import { Separator } from '@/components/ui/separator'
 import { useLocale } from '@/hooks/use-locale'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import {
-  kakaoParticipantReconnectAdminHint,
-  kakaoSendNeedsParticipantKakaoReconnect,
-} from '@/lib/kakao-send-status'
 
 export default function FormResponsesPage() {
   const params = useParams()
@@ -39,7 +35,6 @@ export default function FormResponsesPage() {
   const [responses, setResponses] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
-  const [sendingQR, setSendingQR] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchData() {
@@ -76,17 +71,13 @@ export default function FormResponsesPage() {
     fetchData()
   }, [id, supabase])
 
-  // Confirm payment and send QR via KakaoTalk
   const handleConfirmPayment = async (response: any) => {
     setConfirmingId(response.id)
     
     try {
-      // 1. Update payment status to confirmed
       const { error: updateError } = await supabase
         .from('form_responses')
-        .update({ 
-          payment_status: 'confirmed'
-        })
+        .update({ payment_status: 'confirmed' })
         .eq('id', response.id)
 
       if (updateError) {
@@ -94,65 +85,8 @@ export default function FormResponsesPage() {
         return
       }
 
-      // 2. Send QR to KakaoTalk
-      setSendingQR(response.id)
-      
-      // Get user's kakao_uuid from database
-      const { data: userData } = await supabase
-        .from('users')
-        .select('id, kakao_uuid, name, kakao_access_token, kakao_token_expires_at')
-        .eq('id', response.user_id)
-        .single()
+      toast.success(locale === 'en' ? 'Payment confirmed.' : '입금 확인 완료.')
 
-      if (!userData?.kakao_uuid) {
-        toast.warning(locale === 'en' ? 'User has no Kakao UUID' : '사용자의 카카오 UUID가 없습니다')
-        setSendingQR(null)
-        setConfirmingId(null)
-        // Refresh data
-        const { data: updatedResponses } = await supabase
-          .from('form_responses')
-          .select('*')
-          .eq('form_id', id)
-          .order('created_at', { ascending: false })
-        if (updatedResponses) setResponses(updatedResponses)
-        return
-      }
-
-      const nameQuestion = questions.find(q => q.system_key === 'name')
-      const userName = nameQuestion ? response.answers?.[nameQuestion.id] : userData.name || 'User'
-
-      // Call server API to send via Kakao
-      const kakaoResponse = await fetch('/api/send-kakao-qr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kakaoId: userData.kakao_uuid,
-          qrCode: response.qr_code,
-          formTitle: form?.title || 'LangBuddy',
-          name: userName,
-          responseId: response.id,
-          userId: userData.id,
-        }),
-      })
-
-      const result = await kakaoResponse.json()
-
-      if (result.success) {
-        toast.success(locale === 'en' ? 'Payment confirmed and QR sent!' : '입금 확인 완료 및 QR 전송됨!')
-      } else {
-        const detail = typeof result.message === 'string' ? result.message : ''
-        const reconnect = kakaoSendNeedsParticipantKakaoReconnect(result.kakaoSendStatus)
-        const hint = reconnect ? ` ${kakaoParticipantReconnectAdminHint(locale)}` : ''
-        toast.warning(
-          (locale === 'en'
-            ? 'Payment confirmed but Kakao send failed.'
-            : '입금은 확인되었으나 카카오 전송에 실패했습니다.') +
-            (detail ? `: ${detail}` : '') +
-            (hint ? ` ${hint}` : '')
-        )
-      }
-
-      // Refresh data
       const { data: updatedResponses } = await supabase
         .from('form_responses')
         .select('*')
@@ -164,7 +98,6 @@ export default function FormResponsesPage() {
       console.error('Error confirming payment:', error)
       toast.error(locale === 'en' ? 'Failed to confirm payment' : '입금 확인에 실패했습니다')
     } finally {
-      setSendingQR(null)
       setConfirmingId(null)
     }
   }
@@ -367,22 +300,19 @@ export default function FormResponsesPage() {
                                 {confirmingId === res.id ? (
                                   <>
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    {sendingQR === res.id 
-                                      ? (locale === 'en' ? 'Sending QR...' : 'QR 전송중...')
-                                      : (locale === 'en' ? 'Confirming...' : '확인중...')
-                                    }
+                                    {locale === 'en' ? 'Confirming...' : '확인중...'}
                                   </>
                                 ) : (
                                   <>
                                     <CheckCircle2 className="w-4 h-4 mr-2" />
-                                    {locale === 'en' ? 'Confirm Payment & Send QR' : '입금 확인 및 QR 전송'}
+                                    {locale === 'en' ? 'Confirm' : '확인'}
                                   </>
                                 )}
                               </Button>
                               <p className="text-xs text-muted-foreground mt-2 text-center">
                                 {locale === 'en' 
-                                  ? 'Click to verify payment and send QR code via KakaoTalk'
-                                  : '클릭하면 입금이 확인되고 카카오톡으로 QR이 전송됩니다'}
+                                  ? 'Mark bank transfer as verified for your records'
+                                  : '입금 확인 처리(기록용)입니다. QR 발송과는 별도입니다.'}
                               </p>
                             </div>
                           )}
@@ -392,7 +322,7 @@ export default function FormResponsesPage() {
                             <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
                               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                               <span className="text-sm font-bold text-emerald-700">
-                                {locale === 'en' ? 'Payment verified & QR sent' : '입금 확인 완료 및 QR 전송됨'}
+                                {locale === 'en' ? 'Payment verified' : '입금 확인 완료'}
                               </span>
                             </div>
                           )}

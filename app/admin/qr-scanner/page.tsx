@@ -4,30 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Html5Qrcode } from 'html5-qrcode'
 import { toast } from 'sonner'
-import { QrCode, Loader2 } from 'lucide-react'
+import { QrCode, Loader2, SwitchCamera } from 'lucide-react'
 import { PageHeader } from '@/components/admin/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import {
-  extractParticipantInfoFromAnswers,
-  type CoreFormQuestion,
-} from '@/lib/utils'
 import {
   formResponseMatchesTodaySession,
   koreanWeekdayLetterSeoul,
   todayYYYYMMDDSeoul,
 } from '@/lib/session-event-date'
-import {
-  loadTodayQrSessions,
-  fetchSeatingRowsForToday,
-  tableLabelForParticipantFromDb,
-  type TodayQrSessionInfo,
-} from '@/lib/admin-qr-sessions'
+import { loadTodayQrSessions, type TodayQrSessionInfo } from '@/lib/admin-qr-sessions'
 import { QrScannerModeSheet, type QrScannerMode } from '@/components/admin/qr-scanner-mode-sheet'
-import {
-  QrScanResultSheet,
-  type QrScanResultSheetPayload,
-} from '@/components/admin/qr-scan-result-sheet'
 
 const READER_ID = 'standalone-admin-qr-reader'
 
@@ -45,8 +32,6 @@ export default function AdminQrScannerPage() {
   const [authChecked, setAuthChecked] = useState(false)
   const [contextLoading, setContextLoading] = useState(true)
   const [sessions, setSessions] = useState<TodayQrSessionInfo | null>(null)
-  const [studyQuestions, setStudyQuestions] = useState<CoreFormQuestion[]>([])
-  const [langQuestions, setLangQuestions] = useState<CoreFormQuestion[]>([])
 
   const [modeSheetOpen, setModeSheetOpen] = useState(false)
   const [scanMode, setScanMode] = useState<QrScannerMode | null>(null)
@@ -54,17 +39,12 @@ export default function AdminQrScannerPage() {
   scanModeRef.current = scanMode
 
   const [cameraOn, setCameraOn] = useState(false)
-  const [resultOpen, setResultOpen] = useState(false)
-  const [resultPayload, setResultPayload] = useState<QrScanResultSheetPayload | null>(null)
+  const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user')
 
   const html5QrRef = useRef<Html5Qrcode | null>(null)
   const lastScanRef = useRef<{ at: number; text: string } | null>(null)
   const sessionsRef = useRef(sessions)
   sessionsRef.current = sessions
-  const studyQuestionsRef = useRef(studyQuestions)
-  studyQuestionsRef.current = studyQuestions
-  const langQuestionsRef = useRef(langQuestions)
-  langQuestionsRef.current = langQuestions
 
   const acceptScan = useCallback((text: string) => {
     const now = Date.now()
@@ -96,28 +76,6 @@ export default function AdminQrScannerPage() {
       try {
         const s = await loadTodayQrSessions(supabase)
         setSessions(s)
-
-        if (s.study?.formId) {
-          const { data: q } = await supabase
-            .from('form_questions')
-            .select('*')
-            .eq('form_id', s.study.formId)
-            .order('display_order', { ascending: true })
-          setStudyQuestions((q ?? []) as CoreFormQuestion[])
-        } else {
-          setStudyQuestions([])
-        }
-
-        if (s.lang?.formId) {
-          const { data: q } = await supabase
-            .from('form_questions')
-            .select('*')
-            .eq('form_id', s.lang.formId)
-            .order('display_order', { ascending: true })
-          setLangQuestions((q ?? []) as CoreFormQuestion[])
-        } else {
-          setLangQuestions([])
-        }
       } finally {
         setContextLoading(false)
       }
@@ -176,20 +134,6 @@ export default function AdminQrScannerPage() {
           return
         }
 
-        const questions =
-          mode === 'study'
-            ? studyQuestionsRef.current
-            : langQuestionsRef.current
-        const info = extractParticipantInfoFromAnswers(
-          responseData.answers || {},
-          questions
-        )
-        const ans = (responseData.answers || {}) as Record<string, string>
-        const displayName =
-          info.name || ans.name || ans.이름 || 'Anonymous'
-        const language = ans._selected_language || info.language || '-'
-        const drink = info.drink || '-'
-
         if (!responseData.checked_in_at) {
           const nowIso = new Date().toISOString()
           const { error: upErr } = await supabase
@@ -202,41 +146,6 @@ export default function AdminQrScannerPage() {
           }
         }
 
-        if (mode === 'study') {
-          setResultPayload({
-            variant: 'study',
-            name: displayName,
-            language,
-            drink,
-          })
-          setResultOpen(true)
-          if ('vibrate' in navigator) navigator.vibrate(200)
-          return
-        }
-
-        const langPostingId = ctx.lang!.postingId
-        const rows = await fetchSeatingRowsForToday(
-          supabase,
-          langPostingId,
-          todayStr
-        )
-        const { label, undecided } = tableLabelForParticipantFromDb(
-          rows,
-          responseData.id
-        )
-        const nationalityLabel =
-          info.nationality || ans.nationality || ans.국적 || '—'
-
-        setResultPayload({
-          variant: 'lang',
-          name: displayName,
-          nationalityLabel,
-          language,
-          drink,
-          tableUndecided: undecided,
-          tableLabel: label,
-        })
-        setResultOpen(true)
         if ('vibrate' in navigator) navigator.vibrate(200)
       } catch (e) {
         console.error(e)
@@ -267,22 +176,26 @@ export default function AdminQrScannerPage() {
     }
 
     const runDecoded = async (text: string) => {
-      await stopAndClear()
-      html5QrRef.current = null
-      setCameraOn(false)
       if (!cancelled) await onDecoded(text)
     }
 
     const startCamera = async () => {
       const config = { fps: 10, qrbox: { width: 280, height: 280 } } as const
       const onFrameError = () => {}
-      try {
+      const fallbackFacing: 'user' | 'environment' =
+        cameraFacing === 'user' ? 'environment' : 'user'
+
+      const tryStart = async (facing: 'user' | 'environment') => {
         await qr.start(
-          { facingMode: 'environment' },
+          { facingMode: facing },
           config,
           (t) => void runDecoded(t),
           onFrameError
         )
+      }
+
+      try {
+        await tryStart(cameraFacing)
         if (cancelled) {
           await stopAndClear()
           return
@@ -295,17 +208,13 @@ export default function AdminQrScannerPage() {
           /* ignore */
         }
         try {
-          await qr.start(
-            { facingMode: 'user' },
-            config,
-            (t) => void runDecoded(t),
-            onFrameError
-          )
+          await tryStart(fallbackFacing)
           if (cancelled) {
             await stopAndClear()
             return
           }
           html5QrRef.current = qr
+          if (!cancelled) setCameraFacing(fallbackFacing)
         } catch {
           if (!cancelled) {
             toast.error(
@@ -324,17 +233,7 @@ export default function AdminQrScannerPage() {
       if (html5QrRef.current === qr) html5QrRef.current = null
       void stopAndClear()
     }
-  }, [cameraOn, scanMode, onDecoded])
-
-  const handleResultOpenChange = useCallback((open: boolean) => {
-    setResultOpen(open)
-    if (!open) {
-      setResultPayload(null)
-      if (scanModeRef.current) {
-        setTimeout(() => setCameraOn(true), 200)
-      }
-    }
-  }, [])
+  }, [cameraOn, scanMode, cameraFacing, onDecoded])
 
   if (!authChecked || contextLoading) {
     return (
@@ -406,14 +305,32 @@ export default function AdminQrScannerPage() {
                 id={READER_ID}
                 className="min-h-[280px] overflow-hidden rounded-2xl border-4 border-muted bg-black/5"
               />
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full h-12 rounded-2xl font-bold"
-                onClick={() => setCameraOn(false)}
-              >
-                스캐너 일시 중지
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="flex-1 h-12 rounded-2xl font-bold gap-2"
+                  onClick={() =>
+                    setCameraFacing((f) =>
+                      f === 'user' ? 'environment' : 'user'
+                    )
+                  }
+                >
+                  <SwitchCamera className="size-5 shrink-0" />
+                  {cameraFacing === 'user' ? '후면 카메라' : '전면 카메라'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 h-12 rounded-2xl font-bold"
+                  onClick={() => setCameraOn(false)}
+                >
+                  일시 중지
+                </Button>
+              </div>
+              <p className="text-xs text-center text-muted-foreground font-bold">
+                현재: {cameraFacing === 'user' ? '전면' : '후면'} 카메라
+              </p>
             </div>
           )}
         </CardContent>
@@ -428,12 +345,6 @@ export default function AdminQrScannerPage() {
           setScanMode(mode)
           setCameraOn(true)
         }}
-      />
-
-      <QrScanResultSheet
-        open={resultOpen}
-        onOpenChange={handleResultOpenChange}
-        payload={resultPayload}
       />
     </div>
   )

@@ -5,10 +5,6 @@ import { PageHeader } from '@/components/admin/page-header'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { useLocale } from '@/hooks/use-locale'
-import {
-  kakaoParticipantReconnectAdminHint,
-  kakaoSendNeedsParticipantKakaoReconnect,
-} from '@/lib/kakao-send-status'
 import { buildAutoRecurringFormTitles } from '@/lib/session-event-date'
 import { 
   ChevronLeft,
@@ -90,7 +86,6 @@ function StudyManagementContent() {
   const [loadingResponses, setLoadingResponses] = useState(false);
   const [formQuestions, setFormQuestions] = useState<any[]>([]);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const [sendingQR, setSendingQR] = useState<string | null>(null);
   const [deletingResponseId, setDeletingResponseId] = useState<string | null>(null);
 
   const { formDetails, setFormDetails, saveForm, loadingForm } = useFormManager(schedules[activeTab]?.form_id);
@@ -199,17 +194,13 @@ function StudyManagementContent() {
     }
   };
 
-  // Confirm payment and send QR via KakaoTalk
   const handleConfirmPayment = async (response: any) => {
     setConfirmingId(response.id);
 
     try {
-      // 1. Update payment status to confirmed
       const { error: updateError } = await supabase
         .from('form_responses')
-        .update({
-          payment_status: 'confirmed',
-        })
+        .update({ payment_status: 'confirmed' })
         .eq('id', response.id);
 
       if (updateError) {
@@ -217,70 +208,12 @@ function StudyManagementContent() {
         return;
       }
 
-      // 2. Send QR to KakaoTalk
-      setSendingQR(response.id);
-
-      // Get user's kakao_uuid from database
-      const { data: userData } = await supabase
-        .from('users')
-        .select('id, kakao_uuid, name, kakao_access_token, kakao_token_expires_at')
-        .eq('id', response.user_id)
-        .single();
-
-      if (!userData?.kakao_uuid) {
-        alert(locale === 'en' ? 'User has no Kakao UUID' : '사용자의 카카오 UUID가 없습니다');
-        setSendingQR(null);
-        setConfirmingId(null);
-        // Refresh data
-        fetchResponses(schedules[activeTab].form_id);
-        return;
-      }
-
-      const nameQuestion = formQuestions.find(q => q.system_key === 'name');
-      const userName = nameQuestion ? response.answers?.[nameQuestion.id] : userData.name || 'User';
-
-      // Call server API to send via Kakao
-      const kakaoResponse = await fetch('/api/send-kakao-qr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kakaoId: userData.kakao_uuid,
-          qrCode: response.qr_code,
-          formTitle: buildAutoRecurringFormTitles(activeTab, 'study').title_en,
-          name: userName,
-          responseId: response.id,
-          userId: userData.id,
-        }),
-      });
-
-      const result = await kakaoResponse.json();
-
-      if (result.success) {
-        alert(locale === 'en' ? 'Payment confirmed and QR sent!' : '입금 확인 완료 및 QR 전송됨!');
-      } else {
-        const detail =
-          typeof result.message === 'string' ? `\n\n${result.message}` : ''
-        const reconnect = kakaoSendNeedsParticipantKakaoReconnect(result.kakaoSendStatus)
-        const hint = reconnect
-          ? `\n\n${kakaoParticipantReconnectAdminHint(locale)}`
-          : ''
-        alert(
-          (locale === 'en'
-            ? 'Payment confirmed but Kakao send failed.'
-            : '입금은 확인되었으나 카카오 전송에 실패했습니다.') +
-            detail +
-            hint
-        )
-      }
-
-      // Refresh data
+      alert(locale === 'en' ? 'Payment confirmed.' : '입금 확인 완료.');
       fetchResponses(schedules[activeTab].form_id);
-
     } catch (error) {
       console.error('Error confirming payment:', error);
       alert(locale === 'en' ? 'Failed to confirm payment' : '입금 확인에 실패했습니다');
     } finally {
-      setSendingQR(null);
       setConfirmingId(null);
     }
   };
@@ -667,7 +600,7 @@ function StudyManagementContent() {
                                           {confirmingId === res.id ? (
                                             <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{locale === 'en' ? 'Processing...' : '처리중...'}</>
                                           ) : (
-                                            <><CheckCircle2 className="w-4 h-4 mr-2" />{locale === 'en' ? 'Confirm & Send QR' : '입금 확인 및 QR 전송'}</>
+                                            <><CheckCircle2 className="w-4 h-4 mr-2" />{locale === 'en' ? 'Confirm' : '확인'}</>
                                           )}
                                         </Button>
                                       )}

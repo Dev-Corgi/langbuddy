@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase"
 import { MainNav } from "@/app/_components/main-nav"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { CheckCircle2, Download, Loader2, QrCode, MessageCircle, Clock, CreditCard, Mail } from "lucide-react"
+import { CheckCircle2, Download, Loader2, QrCode, MessageCircle, Mail } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { useLocale } from "@/hooks/use-locale"
 import { i18n } from "@/lib/i18n"
@@ -145,10 +145,6 @@ export default function ApplicationCompletePage() {
   /** 입금 대기가 아닐 때 1회: 카카오 연동이면 나에게 보내기, 아니면 이메일(설정 시) */
   useEffect(() => {
     if (loading || !data?.id || !data?.qr_code || !user?.id) return
-
-    const isBank = data.answers?._payment_method === '계좌송금'
-    const paymentPending = isBank && data.payment_status === 'pending'
-    if (paymentPending) return
 
     const storageKey = `langbuddy_auto_qr_${data.id}`
     const lockKey = `${storageKey}_lock`
@@ -526,67 +522,29 @@ export default function ApplicationCompletePage() {
         <Card className="border-none shadow-2xl rounded-[40px] overflow-hidden bg-card animate-in fade-in slide-in-from-bottom-8 duration-700">
           <CardHeader className="p-8 pb-0 text-center">
             <CardTitle className="text-xl font-black flex items-center justify-center gap-2">
-              {isPaymentPending ? (
-                <Clock className="w-6 h-6 text-amber-500" />
-              ) : (
-                <QrCode className="w-6 h-6 text-primary" />
-              )}
-              {isPaymentPending 
-                ? (locale === 'en' ? 'Payment Verification Pending' : '입금 확인 대기중')
-                : (locale === 'en' ? 'Your Personal QR Code' : '나의 입장용 QR 코드')
-              }
+              <QrCode className="w-6 h-6 text-primary" />
+              {locale === 'en' ? 'Your Personal QR Code' : '나의 입장용 QR 코드'}
             </CardTitle>
             <CardDescription className="text-muted-foreground font-bold pt-2">
-              {isPaymentPending
-                ? (locale === 'en' 
-                    ? 'Your application is pending payment verification.' 
-                    : '신청이 접수되었으며 입금 확인 중입니다.')
-                : (locale === 'en' 
-                    ? 'Please show this QR code to the staff at the venue.' 
-                    : '행사 현장에서 운영진에게 이 QR 코드를 보여주세요.')
-              }
+              {locale === 'en'
+                ? 'Please show this QR code to the staff at the venue.'
+                : '행사 현장에서 운영진에게 이 QR 코드를 보여주세요.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-8 md:p-12 space-y-10">
-            {/* 계좌송금 + 입금 대기중인 경우 안내 메시지 표시 */}
             {isPaymentPending ? (
-              <div className="space-y-6">
-                <div className="p-8 rounded-3xl bg-amber-50 border-2 border-amber-200 text-center space-y-4">
-                  <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
-                    <CreditCard className="w-8 h-8 text-amber-600" />
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-lg font-black text-amber-900">
-                      {locale === 'en' 
-                        ? 'Payment receipt uploaded successfully!' 
-                        : '입금 영수증이 업로드되었습니다!'}
-                    </p>
-                    <p className="text-sm text-amber-700 leading-relaxed">
-                      {locale === 'en'
-                        ? 'We will verify your payment within 24 hours. Once confirmed, you can open your QR from this page or from the email / Kakao option you use at signup.'
-                        : '24시간 이내에 입금을 확인합니다. 확인 후 이 페이지에서 QR을 확인하거나, 가입 방식에 따라 이메일·카카오로 안내될 수 있습니다.'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="p-6 rounded-2xl bg-muted/50 border border-border space-y-3">
-                  <p className="text-sm font-bold text-foreground">
-                    {locale === 'en' ? 'What happens next?' : '다음 단계는?'}
-                  </p>
-                  <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-                    <li>{locale === 'en' ? 'Admin verifies your payment (within 24h)' : '관리자가 입금을 확인합니다 (24시간 이내)'}</li>
-                    <li>
-                      {locale === 'en'
-                        ? 'Open this page or use Email / Kakao after confirmation'
-                        : '확인 후 이 페이지에서 QR을 열거나 이메일·카카오로 받을 수 있습니다'}
-                    </li>
-                    <li>{locale === 'en' ? 'Show the QR code at the venue' : '행사 당일 QR 코드를 제시하세요'}</li>
-                  </ol>
-                </div>
+              <div className="p-6 rounded-3xl bg-amber-50 border-2 border-amber-200 text-center space-y-2">
+                <p className="text-sm font-bold text-amber-900">
+                  {locale === 'en' ? 'Bank transfer pending verification' : '계좌 이체 입금 확인 대기'}
+                </p>
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  {locale === 'en'
+                    ? 'Please complete the transfer below. Admin confirmation is for record-keeping only; your QR is available now and sent via Kakao or email if linked.'
+                    : '아래 계좌로 입금해 주세요. 관리자 확인은 입금 기록용이며, QR은 아래·카카오·이메일로 바로 이용하실 수 있습니다.'}
+                </p>
               </div>
-            ) : (
-              /* 현장결제 또는 입금 확인 완료된 경우 QR 표시 */
-              <>
+            ) : null}
+            <>
                 {(sendingToKakao || sendingEmail) && !kakaoSent && !emailSent ? (
                   <p className="text-center text-sm font-bold text-muted-foreground flex items-center justify-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -702,8 +660,7 @@ export default function ApplicationCompletePage() {
                     )}
                   </div>
                 </div>
-              </>
-            )}
+            </>
 
             <div className="p-6 rounded-3xl bg-muted/50 border border-border space-y-4">
               {/* 선택 요일 */}

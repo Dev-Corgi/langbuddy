@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "supabase:apply-otp-mail": "node scripts/apply-supabase-magic-link-otp-template.mjs"
+    "supabase:apply-otp-mail": "node scripts/apply-supabase-magic-link-otp-template.mjs",
+    "supabase:apply-le-coupon": "node scripts/apply-le-coupon-migration.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -1,33 +1,16 @@
 'use client'
 
 import {
-  Sheet,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import type { AdminCheckinModalPayload } from '@/lib/admin-checkin-display'
 
-type StudyPayload = {
-  variant: 'study'
-  name: string
-  language: string
-  drink: string
-}
-
-type LangPayload = {
-  variant: 'lang'
-  name: string
- /** 한국인 / 외국인 등 */
-  nationalityLabel: string
-  language: string
-  drink: string
-  tableUndecided: boolean
-  tableLabel: string | null
-}
-
-export type QrScanResultSheetPayload = StudyPayload | LangPayload
+export type QrScanResultSheetPayload = AdminCheckinModalPayload
 
 type Props = {
   open: boolean
@@ -38,72 +21,64 @@ type Props = {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4 py-2.5 border-b border-border/80 last:border-0">
-      <span className="text-sm font-bold text-muted-foreground shrink-0">{label}</span>
-      <span className="text-sm font-black text-right break-words">{value || '—'}</span>
+      <span className="text-sm font-bold text-muted-foreground shrink-0">
+        {label}
+      </span>
+      <span className="text-sm font-black text-right break-words">
+        {value || '—'}
+      </span>
     </div>
   )
 }
 
 export function QrScanResultSheet({ open, onOpenChange, payload }: Props) {
-  const handleContinue = () => {
-    onOpenChange(false)
-  }
+  const tableDisplay =
+    payload?.tableUndecided || !payload?.tableLabel
+      ? '미정'
+      : payload.tableLabel
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        className="rounded-t-3xl gap-0 p-0 max-h-[92dvh] flex flex-col"
-        showCloseButton
-      >
-        <SheetHeader className="px-5 pt-6 pb-2 text-left shrink-0">
-          <SheetTitle className="text-lg font-black">스캔 결과</SheetTitle>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="gap-0 p-0 sm:max-w-lg overflow-hidden">
+        <DialogHeader className="px-5 pt-6 pb-2 text-left shrink-0 border-b">
+          <DialogTitle className="text-xl font-black">체크인 완료</DialogTitle>
+        </DialogHeader>
 
-        <div className="px-5 flex-1 overflow-y-auto pb-4">
-          {payload?.variant === 'lang' && (
-            <div className="mb-6 rounded-2xl bg-muted/50 p-5 space-y-2 text-center border-2 border-primary/20">
-              <p className="text-xs font-black text-muted-foreground tracking-wide">테이블</p>
-              {payload.tableUndecided || !payload.tableLabel ? (
-                <p className="text-5xl sm:text-6xl font-black text-primary leading-tight py-2">
-                  미정
-                </p>
-              ) : (
-                <p className="text-5xl sm:text-6xl font-black text-primary leading-tight py-2">
-                  {payload.tableLabel}
-                </p>
-              )}
+        <div className="px-5 py-4 flex-1 overflow-y-auto max-h-[min(70vh,520px)]">
+          {payload?.showTable !== false && (
+            <div className="mb-5 rounded-2xl bg-primary/10 p-5 text-center border-2 border-primary/25">
+              <p className="text-xs font-black text-muted-foreground tracking-wide mb-1">
+                배치된 자리
+              </p>
+              <p className="text-5xl sm:text-6xl font-black text-primary leading-tight">
+                {tableDisplay}
+              </p>
             </div>
           )}
 
-          {payload?.variant === 'study' && (
-            <>
-              <InfoRow label="이름" value={payload.name} />
-              <InfoRow label="언어" value={payload.language} />
-              <InfoRow label="음료" value={payload.drink} />
-            </>
-          )}
-
-          {payload?.variant === 'lang' && (
-            <>
+          {payload && (
+            <div className="rounded-2xl bg-muted/40 px-4 py-1 border">
               <InfoRow label="이름" value={payload.name} />
               <InfoRow label="한국인/외국인" value={payload.nationalityLabel} />
-              <InfoRow label="선택 언어" value={payload.language} />
-              <InfoRow label="음료" value={payload.drink} />
-            </>
+              <InfoRow label="결제 수단" value={payload.paymentMethod} />
+              <InfoRow label="선택 음료" value={payload.drink} />
+              {payload.showTable === false && (
+                <InfoRow label="배치된 자리" value="—" />
+              )}
+            </div>
           )}
         </div>
 
-        <SheetFooter className="p-5 pt-2 border-t bg-background shrink-0">
+        <DialogFooter className="p-5 pt-2 border-t bg-background shrink-0 sm:justify-stretch">
           <Button
             type="button"
             className="w-full h-14 rounded-2xl font-black text-base"
-            onClick={handleContinue}
+            onClick={() => onOpenChange(false)}
           >
-            다음 스캔
+            확인 · 다음 스캔
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

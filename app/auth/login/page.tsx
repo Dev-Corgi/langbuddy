@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -165,6 +166,36 @@ function LoginPageContent() {
             </svg>
             {locale === 'en' ? 'Continue with Google' : '구글로 시작하기'}
           </Button> */}
+
+          <p className="text-center text-xs font-medium leading-relaxed text-muted-foreground px-1">
+            {locale === 'en' ? (
+              <>
+                By continuing, you acknowledge our{' '}
+                <Link
+                  href="/privacy"
+                  className="font-bold text-primary underline-offset-2 hover:underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Privacy Policy
+                </Link>
+                .
+              </>
+            ) : (
+              <>
+                로그인(소셜 로그인)을 진행하시면{' '}
+                <Link
+                  href="/privacy"
+                  className="font-bold text-primary underline-offset-2 hover:underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  개인정보 처리방침
+                </Link>
+                을 확인한 것으로 간주됩니다.
+              </>
+            )}
+          </p>
 
           <div className="pt-4 text-center">
             <button
