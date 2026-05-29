@@ -579,13 +579,14 @@ export default function AdminArrangePage() {
             checked_in_at?: string | null
           }
 
+          const rowId = row?.id
           if (
-            row?.id &&
+            rowId &&
             row.checked_in_at &&
-            !seenCheckedInIdsRef.current.has(row.id)
+            !seenCheckedInIdsRef.current.has(rowId)
           ) {
-            seenCheckedInIdsRef.current.add(row.id)
-            void showCheckinModalForResponse(row)
+            seenCheckedInIdsRef.current.add(rowId)
+            void showCheckinModalForResponse({ ...row, id: rowId })
           }
         }
       )
