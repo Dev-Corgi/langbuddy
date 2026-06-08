@@ -14,7 +14,6 @@ import { useLocale } from "@/hooks/use-locale"
 
 const PRIMARY_LINKS = (t: any) => [
   { href: "/", label: t.nav.home },
-  { href: "/posting/study", label: t.nav.study },
   { href: "/posting/language", label: t.nav.language },
   { href: "/posting", label: t.nav.social },
   { href: "/my", label: t.nav.myPage },

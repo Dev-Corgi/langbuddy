@@ -1,7 +1,7 @@
 'use client'
 
 import Link from "next/link"
-import { Home, BookOpen, Languages, Zap, User } from "lucide-react"
+import { Home, Languages, Zap, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePathname } from "next/navigation"
 
@@ -9,7 +9,6 @@ import { useLocale } from "@/hooks/use-locale"
 
 const NAV_ITEMS = (locale: string) => [
   { icon: Home, label: locale === 'en' ? 'Home' : '홈', href: "/" },
-  { icon: BookOpen, label: locale === 'en' ? 'Study' : '스터디', href: "/posting/study" },
   { icon: Languages, label: locale === 'en' ? 'Language' : '언어교환', href: "/posting/language" },
   { icon: Zap, label: locale === 'en' ? 'Lightning' : '번개', href: "/posting" },
   { icon: User, label: locale === 'en' ? 'My' : '마이', href: "/my" },

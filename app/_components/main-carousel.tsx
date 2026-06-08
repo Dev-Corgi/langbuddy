@@ -60,7 +60,7 @@ export function MainCarousel({ className, autoPlayMs = 5000 }: MainCarouselProps
       const now = new Date().toISOString()
       console.log('🔍 Carousel Query - Current time:', now)
       
-      const categories = ['언어교환', '스터디', '번개']
+      const categories = ['언어교환', '번개']
       
       const { data, error } = await supabase
         .from('postings')
@@ -85,12 +85,11 @@ export function MainCarousel({ className, autoPlayMs = 5000 }: MainCarouselProps
       })
       
       if (data && data.length > 0) {
-        // 카테고리 우선순위로 정렬: 언어교환 > 스터디 > 번개
+        // 카테고리 우선순위로 정렬: 언어교환 > 번개
         const sortedData = [...data].sort((a, b) => {
           const categoryPriority = (item: any) => {
             if (item.category === '언어교환') return 0
-            if (item.category === '스터디') return 1
-            return 2 // 번개
+            return 1 // 번개
           }
           
           const catA = categoryPriority(a)
