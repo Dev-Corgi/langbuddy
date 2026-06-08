@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button'
 import { MessageSquare } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { SupabaseEmailOtpAuth } from '@/components/supabase-email-otp-auth'
 
 type Props = {
   locale: string
@@ -14,7 +13,7 @@ type Props = {
   onAuthed: () => void
 }
 
-export function ApplyLoginModal({ locale, returnPath, onAuthed }: Props) {
+export function ApplyLoginModal({ locale, returnPath }: Props) {
   const isEn = locale === 'en'
   const router = useRouter()
   const supabase = createClient()
@@ -35,7 +34,7 @@ export function ApplyLoginModal({ locale, returnPath, onAuthed }: Props) {
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <Card className="w-full max-w-md border-none shadow-2xl rounded-[32px] overflow-hidden max-h-[90vh] overflow-y-auto">
+      <Card className="w-full max-w-md border-none shadow-2xl rounded-[32px] overflow-hidden">
         <CardHeader className="text-center space-y-2 p-8 pb-4">
           <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
             <MessageSquare className="w-8 h-8 text-primary" />
@@ -45,11 +44,11 @@ export function ApplyLoginModal({ locale, returnPath, onAuthed }: Props) {
           </CardTitle>
           <CardDescription className="font-medium">
             {isEn
-              ? 'Use Kakao or email (one-time code) to continue.'
-              : '카카오 로그인 또는 이메일 인증번호(OTP)로 신청을 계속합니다.'}
+              ? 'Sign in with Kakao to continue.'
+              : '카카오 로그인으로 신청을 계속합니다.'}
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-8 pt-0 space-y-6">
+        <CardContent className="p-8 pt-0 space-y-4">
           <Button
             type="button"
             onClick={handleKakao}
@@ -57,20 +56,6 @@ export function ApplyLoginModal({ locale, returnPath, onAuthed }: Props) {
           >
             {isEn ? 'Continue with Kakao' : '카카오로 계속하기'}
           </Button>
-
-          <div className="space-y-2">
-            <div className="relative py-2">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs font-bold uppercase">
-                <span className="bg-card px-3 text-muted-foreground">
-                  {isEn ? 'or email (guest)' : '또는 이메일 (게스트)'}
-                </span>
-              </div>
-            </div>
-            <SupabaseEmailOtpAuth locale={locale} onSuccess={onAuthed} />
-          </div>
 
           <Button
             type="button"

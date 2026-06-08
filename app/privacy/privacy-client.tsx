@@ -70,11 +70,18 @@ function KoreanSections() {
         <ul className="list-disc pl-5 space-y-2">
           <li>
             <strong>회원 가입 및 인증:</strong> 이메일, 이름(또는 닉네임), 비밀번호
-            또는 소셜 로그인 제공자가 전달하는 식별자 등
+            또는 소셜 로그인 제공자가 전달하는 식별자(카카오 식별자 포함) 등
+          </li>
+          <li>
+            <strong>프로필 정보:</strong> 성별, 국적, 모국어, 학습 언어 등
+            이용자가 직접 입력하는 프로필 항목
           </li>
           <li>
             <strong>모임 신청 및 커뮤니케이션:</strong> 신청 폼 입력 내용,
             선택적 프로필·연락처 등 서비스 이용 과정에서 이용자가 직접 제공하는 정보
+          </li>
+          <li>
+            <strong>서비스 이용 기록:</strong> 언어 교환·스터디 등 모임 참가 이력
           </li>
           <li>
             <strong>자동 수집:</strong> 접속 로그·기기 정보·서비스 이용 기록·쿠키 등
@@ -158,11 +165,19 @@ function EnglishSections() {
         <ul className="list-disc pl-5 space-y-2">
           <li>
             <strong>Account registration:</strong> email, name or display name,
-            password, or identifiers provided by authentication providers when you sign in.
+            password, or identifiers provided by authentication providers (including Kakao identifier) when you sign in.
+          </li>
+          <li>
+            <strong>Profile information:</strong> gender, nationality, native language,
+            and learning language that you provide when setting up your profile.
           </li>
           <li>
             <strong>Applications & community use:</strong> information you submit in
             forms, optional profile/contact details when using meetups or study features.
+          </li>
+          <li>
+            <strong>Participation history:</strong> records of language exchange and
+            study meetups you have attended.
           </li>
           <li>
             <strong>Automatic data:</strong> device and log data, service usage metrics,
