@@ -152,6 +152,11 @@ ALTER TABLE public.seating_assignments
 CREATE INDEX IF NOT EXISTS idx_seating_assignments_posting_session
   ON public.seating_assignments (posting_id, session_date);
 
+-- 온보딩 시 개인정보 처리방침 동의 기록
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS privacy_accepted_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS privacy_policy_version TEXT;
+
 -- 언어교환 폼 응답이 최초 체크인될 때만 스탬프 적립
 CREATE OR REPLACE FUNCTION public.trg_bump_le_stamp_on_checkin()
 RETURNS trigger

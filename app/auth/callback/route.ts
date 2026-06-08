@@ -26,7 +26,10 @@ export async function GET(request: Request) {
       error_code,
       error_description
     })
-    return NextResponse.redirect(new URL(`/auth/login?error=${error_code}&desc=${error_description}`, requestUrl.origin))
+    const loginPath = nextPath.startsWith('/admin')
+      ? `/admin/login?error=${error_code}&desc=${encodeURIComponent(error_description ?? '')}`
+      : `/auth/login?error=${error_code}&desc=${encodeURIComponent(error_description ?? '')}`
+    return NextResponse.redirect(new URL(loginPath, requestUrl.origin))
   }
 
   if (code) {
@@ -67,7 +70,10 @@ export async function GET(request: Request) {
         status: error.status,
         name: error.name
       })
-      return NextResponse.redirect(new URL('/auth/login?error=auth_failed', requestUrl.origin))
+      const loginPath = nextPath.startsWith('/admin')
+        ? '/admin/login?error=auth_failed'
+        : '/auth/login?error=auth_failed'
+      return NextResponse.redirect(new URL(loginPath, requestUrl.origin))
     }
 
     if (user) {
@@ -141,9 +147,9 @@ export async function GET(request: Request) {
       console.log('🔄 [Auth Callback] User data error:', userError)
       
       if (!userData || !userData.onboarding_completed) {
-        const isApply = nextPath.includes('/apply')
-        if (isApply) {
-          console.log('➡️ [Auth Callback] Onboarding skipped for apply flow, next:', nextPath)
+        const skipOnboarding = nextPath.includes('/apply') || nextPath.startsWith('/admin')
+        if (skipOnboarding) {
+          console.log('➡️ [Auth Callback] Onboarding skipped, next:', nextPath)
           return NextResponse.redirect(new URL(nextPath, requestUrl.origin))
         }
         console.log('➡️ [Auth Callback] Redirecting to onboarding')

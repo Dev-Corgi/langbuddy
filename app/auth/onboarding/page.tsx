@@ -76,29 +76,21 @@ export default function OnboardingPage() {
       return
     }
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      toast.error(locale === 'en' ? 'Authentication error' : '인증 오류가 발생했습니다')
-      setSubmitting(false)
-      return
-    }
-
-    const { error } = await supabase
-      .from('users')
-      .upsert({
-        id: user.id,
+    const res = await fetch('/api/complete-onboarding', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         name: name.trim(),
         gender,
         nationality,
-        kakao_id: kakaoId.trim(),
-        onboarding_completed: true,
-        privacy_accepted_at: new Date().toISOString(),
-        privacy_policy_version: PRIVACY_POLICY_VERSION,
-        updated_at: new Date().toISOString()
-      })
+        kakaoId: kakaoId.trim(),
+        privacyPolicyVersion: PRIVACY_POLICY_VERSION,
+      }),
+    })
 
-    if (error) {
-      console.error('Onboarding error:', error)
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      console.error('Onboarding error:', body)
       toast.error(locale === 'en' ? 'Failed to save information' : '정보 저장에 실패했습니다')
       setSubmitting(false)
       return
