@@ -1,10 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Info } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { FormBuilder, FormData as FormBuilderData } from '@/components/admin/form-builder'
-import { createClient } from '@/lib/supabase'
 import { buildAutoRecurringFormTitles } from '@/lib/session-event-date'
 
 /** 스터디 신청 폼에만 쓰는 제2외국어 프로그램 안내 문항 (필수 아님). DB에 없을 때 기본/병합으로 채움. */
@@ -126,7 +124,7 @@ H=초중급회화
   ]
 }
 
-function mergeStudyProgramQuestionsIfMissing(
+export function mergeStudyProgramQuestionsIfMissing(
   questions: FormBuilderData['questions']
 ): FormBuilderData['questions'] {
   if (questions.some((q) => q.question_text?.includes(STUDY_PROGRAM_QUESTIONS_MARKER))) {
@@ -135,156 +133,86 @@ function mergeStudyProgramQuestionsIfMissing(
   return [...questions, ...createDefaultStudyProgramQuestions()]
 }
 
+export function buildDefaultStudyFormData(dayKo: string): FormBuilderData {
+  const auto = buildAutoRecurringFormTitles(dayKo, 'study')
+  const baseQuestions: FormBuilderData['questions'] = [
+    {
+      id: crypto.randomUUID(),
+      question_text: '이름',
+      question_text_en: 'Name',
+      question_type: 'text',
+      is_required: true,
+      options: [''],
+      options_en: [''],
+      is_new: true,
+      system_key: 'name',
+    },
+    {
+      id: crypto.randomUUID(),
+      question_text: '성별',
+      question_text_en: 'Gender',
+      question_type: 'radio',
+      is_required: true,
+      options: ['남', '여'],
+      options_en: ['Male', 'Female'],
+      is_new: true,
+      system_key: 'gender',
+    },
+    {
+      id: crypto.randomUUID(),
+      question_text: '한국인 / 외국인 여부',
+      question_text_en: 'Nationality',
+      question_type: 'radio',
+      is_required: true,
+      options: ['한국인', '외국인'],
+      options_en: ['Korean', 'Foreigner'],
+      is_new: true,
+      system_key: 'nationality',
+    },
+    {
+      id: crypto.randomUUID(),
+      question_text: '카카오톡 ID',
+      question_text_en: 'KakaoTalk ID',
+      question_type: 'text',
+      is_required: true,
+      options: [''],
+      options_en: [''],
+      is_new: true,
+      system_key: 'kakao_id',
+    },
+  ]
+
+  return {
+    ...auto,
+    description: '',
+    description_en: '',
+    webhook_url: '',
+    questions: mergeStudyProgramQuestionsIfMissing(baseQuestions),
+  }
+}
+
 interface ApplyMethodCardProps {
   locale: string
   currentFormDetails?: FormBuilderData
   onFormDataChange: (data: FormBuilderData) => void
+  loadingForm?: boolean
   infoMessage?: string
   infoMessageEn?: string
-  formId?: string | null
   mode?: 'default' | 'language' | 'study'
-  /** 요일 탭 키 (월, 화, …). 폼 제목 자동 생성에 사용 */
   recurringDayKo?: string
   lockedSystemKeys?: string[]
 }
 
+/** DB 로드는 부모 페이지에서 1회만. 여기서는 편집 UI만 렌더. */
 export function ApplyMethodCard({
   locale,
   currentFormDetails,
   onFormDataChange,
-  infoMessage,
-  infoMessageEn,
-  formId,
+  loadingForm = false,
   mode = 'default',
   recurringDayKo,
-  lockedSystemKeys
+  lockedSystemKeys,
 }: ApplyMethodCardProps) {
-  const supabase = createClient()
-  const [loadedFormData, setLoadedFormData] = useState<FormBuilderData | undefined>(currentFormDetails)
-
-  const withAutoTitles = (data: FormBuilderData): FormBuilderData => {
-    if ((mode !== 'language' && mode !== 'study') || !recurringDayKo) return data
-    const auto = buildAutoRecurringFormTitles(
-      recurringDayKo,
-      mode === 'language' ? 'language' : 'study'
-    )
-    return { ...data, title: auto.title, title_en: auto.title_en }
-  }
-
-  const loadFormData = async (formIdToLoad: string) => {
-    if (!formIdToLoad) return
-    
-    const { data: fData } = await supabase.from('forms').select('*').eq('id', formIdToLoad).single()
-    const { data: qData } = await supabase.from('form_questions').select('*').eq('form_id', formIdToLoad).order('display_order', { ascending: true })
-
-    if (fData && qData) {
-      let questions: FormBuilderData['questions'] = qData.map((q) => ({
-        id: q.id,
-        question_text: q.question_text,
-        question_text_en: q.question_text_en || '',
-        question_type: q.question_type,
-        is_required: q.is_required,
-        options: q.options || [''],
-        options_en: q.options_en || [''],
-        system_key: q.system_key || undefined,
-      }))
-      if (mode === 'study') {
-        questions = mergeStudyProgramQuestionsIfMissing(questions)
-      }
-      const formData: FormBuilderData = withAutoTitles({
-        title: fData.title,
-        title_en: fData.title_en || '',
-        description: fData.description || '',
-        description_en: fData.description_en || '',
-        webhook_url: fData.webhook_url || '',
-        questions,
-      })
-      setLoadedFormData(formData)
-      onFormDataChange(formData)
-    }
-  }
-
-  useEffect(() => {
-    if (formId) {
-      loadFormData(formId)
-    } else if (!loadedFormData && (mode === 'language' || mode === 'study')) {
-      const baseQuestions: FormBuilderData['questions'] = [
-        {
-          id: crypto.randomUUID(),
-          question_text: '이름',
-          question_text_en: 'Name',
-          question_type: 'text',
-          is_required: true,
-          options: [''],
-          options_en: [''],
-          is_new: true,
-          system_key: 'name'
-        },
-        {
-          id: crypto.randomUUID(),
-          question_text: '성별',
-          question_text_en: 'Gender',
-          question_type: 'radio',
-          is_required: true,
-          options: ['남', '여'],
-          options_en: ['Male', 'Female'],
-          is_new: true,
-          system_key: 'gender'
-        },
-        {
-          id: crypto.randomUUID(),
-          question_text: '한국인 / 외국인 여부',
-          question_text_en: 'Nationality',
-          question_type: 'radio',
-          is_required: true,
-          options: ['한국인', '외국인'],
-          options_en: ['Korean', 'Foreigner'],
-          is_new: true,
-          system_key: 'nationality'
-        },
-        {
-          id: crypto.randomUUID(),
-          question_text: '카카오톡 ID',
-          question_text_en: 'KakaoTalk ID',
-          question_type: 'text',
-          is_required: true,
-          options: [''],
-          options_en: [''],
-          is_new: true,
-          system_key: 'kakao_id'
-        },
-        ...(mode === 'language'
-          ? [
-              {
-                id: crypto.randomUUID(),
-                question_text: '신청 음료',
-                question_text_en: 'Preferred Drink',
-                question_type: 'select' as const,
-                is_required: false,
-                options: ['아메리카노', '라떼', '차', '기타'],
-                options_en: ['Americano', 'Latte', 'Tea', 'Other'],
-                is_new: true,
-                system_key: 'drink'
-              }
-            ]
-          : [])
-      ]
-      const data: FormBuilderData = withAutoTitles({
-        title: '',
-        title_en: '',
-        description: '',
-        description_en: '',
-        webhook_url: '',
-        questions:
-          mode === 'study'
-            ? mergeStudyProgramQuestionsIfMissing(baseQuestions)
-            : baseQuestions,
-      })
-      setLoadedFormData(data)
-      onFormDataChange(data)
-    }
-  }, [formId, mode, loadedFormData, onFormDataChange, recurringDayKo])
-
   const autoTitlesForBuilder =
     (mode === 'language' || mode === 'study') && recurringDayKo
       ? buildAutoRecurringFormTitles(recurringDayKo, mode === 'language' ? 'language' : 'study')
@@ -303,14 +231,19 @@ export function ApplyMethodCard({
       <CardContent className="p-8">
         <div className="border-2 border-dashed border-primary/20 rounded-[40px] p-2 bg-primary/5 transition-all">
           <div className="p-4 md:p-8">
-            <FormBuilder 
-              key={formId || `new-form-${recurringDayKo || ''}`}
-              initialData={loadedFormData}
-              onChange={onFormDataChange}
-              lockedSystemKeys={lockedSystemKeys}
-              titleMode={titleMode}
-              autoTitles={autoTitlesForBuilder}
-            />
+            {loadingForm || !currentFormDetails ? (
+              <div className="py-16 flex justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <FormBuilder
+                value={currentFormDetails}
+                onChange={onFormDataChange}
+                lockedSystemKeys={lockedSystemKeys}
+                titleMode={titleMode}
+                autoTitles={autoTitlesForBuilder}
+              />
+            )}
           </div>
         </div>
       </CardContent>

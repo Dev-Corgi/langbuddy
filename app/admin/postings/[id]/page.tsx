@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,7 @@ import { BasicInfoFields } from '@/components/admin/basic-info-fields'
 import dynamic from 'next/dynamic'
 import { TiptapEditorCard } from '@/components/admin/tiptap-editor-card'
 import { useFormManager } from '@/hooks/use-form-manager'
-import { FormBuilder, FormData as FormBuilderData } from '@/components/admin/form-builder'
+import { FormBuilder, FormData as FormBuilderData, createEmptyFormData } from '@/components/admin/form-builder'
 
 const TiptapEditor = dynamic(() => import('@/components/admin/tiptap-editor').then(mod => mod.TiptapEditor), { 
   ssr: false,
@@ -44,7 +44,8 @@ export default function EditPostingPage() {
   const [issubmitting, setIsSubmitting] = useState(false)
   const [forms, setForms] = useState<any[]>([])
   const [showInlineBuilder, setShowInlineBuilder] = useState(false)
-  const [inlineFormData, setInlineFormData] = useState<FormBuilderData | null>(null)
+  const [inlineFormData, setInlineFormData] = useState<FormBuilderData>(() => createEmptyFormData())
+  const inlineFormHydratedRef = useRef<string | null>(null)
   const [isBankAccountEnabled, setIsBankAccountEnabled] = useState(false)
 
   const [formData, setFormData] = useState({
@@ -115,10 +116,11 @@ export default function EditPostingPage() {
   }, [supabase])
 
   useEffect(() => {
-    if (currentFormDetails) {
-      setInlineFormData(currentFormDetails)
-    }
-  }, [currentFormDetails])
+    if (!currentFormDetails || !formData.form_id) return
+    if (inlineFormHydratedRef.current === formData.form_id) return
+    inlineFormHydratedRef.current = formData.form_id
+    setInlineFormData(currentFormDetails)
+  }, [currentFormDetails, formData.form_id])
 
   useEffect(() => {
     async function fetchForms() {
@@ -418,9 +420,9 @@ export default function EditPostingPage() {
                   ) : (
                     <div className="mt-4 border-2 border-dashed border-primary/20 rounded-[40px] p-2 bg-surface/5 transition-all">
                       <div className="p-4 md:p-8">
-                        <FormBuilder 
-                          initialData={currentFormDetails || undefined} 
-                          onChange={(data) => setInlineFormData(data)} 
+                        <FormBuilder
+                          value={inlineFormData}
+                          onChange={(data) => setInlineFormData(data)}
                           lockedSystemKeys={['name', 'gender', 'nationality', 'language', 'kakao_id', 'drink']}
                         />
                       </div>

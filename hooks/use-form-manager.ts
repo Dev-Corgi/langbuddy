@@ -61,10 +61,10 @@ export function useFormManager(formId: string | null) {
         webhook_url: formDataToSave.webhook_url
       }).eq('id', targetFormId)
 
-      // Delete existing questions first to prevent duplicates
       await supabase.from('form_questions').delete().eq('form_id', targetFormId)
 
       const questionData = formDataToSave.questions.map((q, idx) => ({
+        id: q.id || crypto.randomUUID(),
         form_id: targetFormId,
         question_text: q.question_text,
         question_text_en: q.question_text_en,
@@ -73,10 +73,11 @@ export function useFormManager(formId: string | null) {
         options: q.options,
         options_en: q.options_en,
         display_order: idx,
-        system_key: q.system_key || null
+        system_key: q.system_key || null,
       }))
-      
-      await supabase.from('form_questions').insert(questionData)
+
+      const { error: insertErr } = await supabase.from('form_questions').insert(questionData)
+      if (insertErr) throw insertErr
       return targetFormId
     } else {
       // Create new form

@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, Loader2, Save } from 'lucide-react'
 import { useLocale } from '@/hooks/use-locale'
-import { FormBuilder, FormData as FormBuilderData } from '@/components/admin/form-builder'
+import { FormBuilder, FormData as FormBuilderData, createEmptyFormData } from '@/components/admin/form-builder'
 import { ResponseResetSettings } from '@/components/admin/response-reset-settings'
 import { useFormManager } from '@/hooks/use-form-manager'
 
@@ -21,12 +21,21 @@ export function FormPageContainer({ formId, pageTitle, pageTitleEn }: FormPageCo
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState<FormBuilderData | null>(null)
   const { formDetails, saveForm, loadingForm } = useFormManager(formId)
+  const hydratedFormIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (formDetails) {
+      const key = formId ?? '__new__'
+      if (hydratedFormIdRef.current === key) return
+      hydratedFormIdRef.current = key
       setFormData(formDetails)
+      return
     }
-  }, [formDetails])
+    if (!formId && hydratedFormIdRef.current !== '__new__') {
+      hydratedFormIdRef.current = '__new__'
+      setFormData(createEmptyFormData())
+    }
+  }, [formDetails, formId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -71,7 +80,9 @@ export function FormPageContainer({ formId, pageTitle, pageTitleEn }: FormPageCo
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <FormBuilder initialData={formDetails || undefined} onChange={setFormData} />
+          {formData ? (
+            <FormBuilder value={formData} onChange={setFormData} />
+          ) : null}
 
           {formId && <ResponseResetSettings formId={formId} />}
 

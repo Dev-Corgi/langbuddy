@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, useCallback, useRef } from 'react'
 import { PageHeader } from '@/components/admin/page-header'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
@@ -38,8 +38,9 @@ import { cn } from '@/lib/utils'
 import { BasicInfoFields } from '@/components/admin/basic-info-fields'
 import { HostInfoCard } from '@/components/admin/host-info-card'
 import { useFormManager } from '@/hooks/use-form-manager'
-import { FormBuilder, FormData as FormBuilderData } from '@/components/admin/form-builder'
+import { FormData as FormBuilderData } from '@/components/admin/form-builder'
 import { ApplyMethodCard } from '@/components/admin/apply-method-card'
+import { fetchFormBuilderData, buildDefaultLanguageFormData } from '@/lib/load-form-data'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from '@/components/ui/switch'
 
@@ -85,7 +86,18 @@ function LanguageManagementContent() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingResponseId, setDeletingResponseId] = useState<string | null>(null);
 
-  const { formDetails, setFormDetails, saveForm, loadingForm } = useFormManager(schedules[activeTab]?.form_id);
+  const [formDetailsByDay, setFormDetailsByDay] = useState<Record<string, FormBuilderData>>({});
+  const [formLoadingByDay, setFormLoadingByDay] = useState<Record<string, boolean>>({});
+  const formHydratedKeyRef = useRef<Record<string, string>>({});
+  const { saveForm } = useFormManager(null);
+
+  const handleFormDataChangeForDay = useCallback((day: string, data: FormBuilderData) => {
+    console.log('[USER_EDIT]', day, data.questions.map(q => `${q.system_key||q.id?.slice(0,8)}:${q.options?.length}`).join(', '))
+    setFormDetailsByDay((prev) => {
+      console.log('[USER_EDIT setFormDetailsByDay]', day)
+      return { ...prev, [day]: data }
+    });
+  }, []);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -134,7 +146,55 @@ function LanguageManagementContent() {
       setLoading(false);
     };
     fetchInitialData();
-  }, [supabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once
+  }, []);
+
+  useEffect(() => {
+    if (loading) return
+    let cancelled = false
+    console.log('[HYDRATION EFFECT] running, loading=', loading, 'schedules keys=', Object.keys(schedules))
+
+    async function hydrateFormsForSchedules() {
+      for (const day of WEEK_DAYS) {
+        const schedule = schedules[day]
+        if (!schedule) continue
+
+        const formId = schedule.form_id as string | null
+        const hydrateKey = formId ?? `__default__:${day}`
+
+        if (formHydratedKeyRef.current[day] === hydrateKey) {
+          console.log('[HYDRATION SKIP]', day, '(already hydrated)')
+          continue
+        }
+
+        setFormLoadingByDay((prev) => ({ ...prev, [day]: true }))
+        try {
+          let data: FormBuilderData
+          if (formId) {
+            const loaded = await fetchFormBuilderData(formId)
+            if (cancelled || !loaded) continue
+            const auto = buildAutoRecurringFormTitles(day, 'language')
+            data = { ...loaded, title: auto.title, title_en: auto.title_en }
+          } else {
+            data = buildDefaultLanguageFormData(day)
+          }
+          if (cancelled) continue
+          console.log('[HYDRATION setFormDetailsByDay]', day, formHydratedKeyRef.current[day], '->', hydrateKey)
+          formHydratedKeyRef.current[day] = hydrateKey
+          setFormDetailsByDay((prev) => ({ ...prev, [day]: data }))
+        } finally {
+          if (!cancelled) {
+            setFormLoadingByDay((prev) => ({ ...prev, [day]: false }))
+          }
+        }
+      }
+    }
+
+    void hydrateFormsForSchedules()
+    return () => {
+      cancelled = true
+    }
+  }, [schedules, loading])
 
   const handleMasterFieldChange = (field: string, value: any) => {
     setMasterPosting((prev: any) => ({ ...prev, [field]: value }));
@@ -293,36 +353,57 @@ function LanguageManagementContent() {
         setMasterPosting((prev: any) => ({ ...prev, id: savedMasterId }));
       }
 
-      const currentSchedule = schedules[activeTab];
-      let formId = currentSchedule.form_id;
-      
-      if (formDetails) {
-        const auto = buildAutoRecurringFormTitles(activeTab, 'language');
-        const mergedForm = { ...formDetails, title: auto.title, title_en: auto.title_en };
-        const newFormId = await saveForm(mergedForm, currentSchedule.form_id);
-        if (newFormId) {
+      const nextSchedules = { ...schedules };
+
+      for (const day of WEEK_DAYS) {
+        const currentSchedule = nextSchedules[day];
+        if (!currentSchedule) continue;
+
+        let formId = currentSchedule.form_id;
+        const dayFormDetails = formDetailsByDay[day];
+
+        if (dayFormDetails) {
+          const auto = buildAutoRecurringFormTitles(day, 'language');
+          const mergedForm = { ...dayFormDetails, title: auto.title, title_en: auto.title_en };
+          const newFormId = await saveForm(mergedForm, currentSchedule.form_id);
+          if (!newFormId) {
+            alert(`${day}요일 폼 저장에 실패했습니다.`);
+            setSaving(false);
+            return;
+          }
           formId = newFormId;
+        }
+
+        const { id: scheduleId, created_at: _ca, updated_at: _ua, ...scheduleData } = {
+          ...currentSchedule,
+          posting_id: savedMasterId,
+          form_id: formId
+        };
+
+        if (scheduleId) {
+          const { error } = await supabase
+            .from("language_exchange_schedules")
+            .update(scheduleData)
+            .eq("id", scheduleId);
+          if (error) throw error;
+          nextSchedules[day] = { ...currentSchedule, ...scheduleData, id: scheduleId, form_id: formId };
         } else {
-          alert("폼 저장에 실패했습니다.");
-          setSaving(false);
-          return;
+          const { data: newSchedule, error } = await supabase
+            .from("language_exchange_schedules")
+            .insert(scheduleData)
+            .select()
+            .single();
+          if (error) throw error;
+          nextSchedules[day] = { ...currentSchedule, ...newSchedule, form_id: formId };
         }
       }
 
-      const { id: scheduleId, ...scheduleData } = {
-        ...currentSchedule,
-        posting_id: savedMasterId,
-        form_id: formId
-      };
-
-      if (scheduleId) {
-        await supabase.from("language_exchange_schedules").update(scheduleData).eq("id", scheduleId);
-      } else {
-        const { data: newSchedule } = await supabase.from("language_exchange_schedules").insert(scheduleData).select().single();
-        handleScheduleFieldChange(activeTab, 'id', newSchedule?.id);
+      setSchedules(nextSchedules);
+      for (const day of WEEK_DAYS) {
+        const formId = nextSchedules[day]?.form_id as string | null
+        formHydratedKeyRef.current[day] = formId ?? `__default__:${day}`
       }
-
-      alert(`${activeTab}요일 설정이 저장되었습니다.`);
+      alert(locale === 'en' ? 'All weekday settings saved.' : '모든 요일 설정이 저장되었습니다.');
     } catch (error: any) {
       alert(error.message || "저장 중 오류가 발생했습니다.");
     }
@@ -441,15 +522,17 @@ function LanguageManagementContent() {
                     </TabsList>
 
                     <TabsContent value="questions" className="mt-6">
-                      <ApplyMethodCard 
-                        locale={locale}
-                        currentFormDetails={formDetails || undefined}
-                        onFormDataChange={setFormDetails}
-                        formId={currentData.form_id}
-                        mode="language"
-                        recurringDayKo={day}
-                        lockedSystemKeys={['name', 'gender', 'nationality', 'language', 'kakao_id', 'drink']}
-                      />
+                      {activeTab === day ? (
+                        <ApplyMethodCard 
+                          locale={locale}
+                          loadingForm={Boolean(formLoadingByDay[day])}
+                          currentFormDetails={formDetailsByDay[day]}
+                          onFormDataChange={(data) => handleFormDataChangeForDay(day, data)}
+                          mode="language"
+                          recurringDayKo={day}
+                          lockedSystemKeys={['name', 'gender', 'nationality', 'language', 'kakao_id', 'drink']}
+                        />
+                      ) : null}
                     </TabsContent>
 
                     <TabsContent value="responses" className="mt-6">
@@ -636,7 +719,7 @@ function LanguageManagementContent() {
 
       <div className="mt-12">
         <Button onClick={handleSave} disabled={saving} className="w-full h-16 rounded-2xl bg-primary hover:bg-primary/90 text-xl font-black shadow-xl transition-all active:scale-[0.98]">
-          {saving ? <Loader2 className="w-6 h-6 animate-spin mr-3" /> : <><Save className="w-4 h-4 mr-2" /> 설정 저장</>}
+          {saving ? <Loader2 className="w-6 h-6 animate-spin mr-3" /> : <><Save className="w-4 h-4 mr-2" /> {locale === 'en' ? 'Save all settings' : '전체 설정 저장'}</>}
         </Button>
       </div>
     </div>

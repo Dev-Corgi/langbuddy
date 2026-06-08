@@ -11,7 +11,7 @@ import { BasicInfoFields } from '@/components/admin/basic-info-fields'
 import dynamic from 'next/dynamic'
 import { TiptapEditorCard } from '@/components/admin/tiptap-editor-card'
 import { useFormManager } from '@/hooks/use-form-manager'
-import { FormBuilder, FormData as FormBuilderData } from '@/components/admin/form-builder'
+import { FormBuilder, FormData as FormBuilderData, createEmptyFormData } from '@/components/admin/form-builder'
 import { toast } from 'sonner'
 
 const TiptapEditor = dynamic(() => import('@/components/admin/tiptap-editor').then(mod => mod.TiptapEditor), { 
@@ -41,7 +41,7 @@ function NewPostingContent() {
   const [loading, setLoading] = useState(false)
   const [forms, setForms] = useState<any[]>([])
   const [showInlineBuilder, setShowInlineBuilder] = useState(false)
-  const [inlineFormData, setInlineFormData] = useState<FormBuilderData | null>(null)
+  const [inlineFormData, setInlineFormData] = useState<FormBuilderData>(() => createEmptyFormData())
   const [isBankAccountEnabled, setIsBankAccountEnabled] = useState(false)
 
   const { saveForm } = useFormManager(null)
@@ -207,8 +207,8 @@ function NewPostingContent() {
         toast.error('신청 폼을 선택하거나 새로 만들어주세요')
         return false
       }
-      if (showInlineBuilder && !inlineFormData) {
-        toast.error('신청 폼을 작성해주세요')
+      if (showInlineBuilder && !inlineFormData.title?.trim()) {
+        toast.error('신청 폼 제목을 입력해주세요')
         return false
       }
     }
@@ -460,8 +460,9 @@ function NewPostingContent() {
                   ) : (
                     <div className="mt-4 border-2 border-dashed border-primary/20 rounded-[40px] p-2 bg-surface/5 transition-all">
                       <div className="p-4 md:p-8">
-                        <FormBuilder 
-                          onChange={(data) => setInlineFormData(data)} 
+                        <FormBuilder
+                          value={inlineFormData}
+                          onChange={(data) => setInlineFormData(data)}
                           lockedSystemKeys={['name', 'gender', 'nationality', 'language', 'kakao_id', 'drink']}
                         />
                       </div>
