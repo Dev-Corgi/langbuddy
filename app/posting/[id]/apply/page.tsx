@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from "react"
+import { toast } from "sonner"
 import { useParams, useRouter, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase"
 import { MainNav } from "@/app/_components/main-nav"
@@ -954,8 +955,27 @@ export default function ApplicationFormPage() {
   }
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    alert(locale === 'en' ? 'Account number copied!' : '계좌 번호가 복사되었습니다!')
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        toast.success(locale === 'en' ? 'Account number copied!' : '계좌 번호가 복사되었습니다!')
+      }).catch(() => {
+        const el = document.createElement('textarea')
+        el.value = text
+        document.body.appendChild(el)
+        el.select()
+        document.execCommand('copy')
+        document.body.removeChild(el)
+        toast.success(locale === 'en' ? 'Account number copied!' : '계좌 번호가 복사되었습니다!')
+      })
+    } else {
+      const el = document.createElement('textarea')
+      el.value = text
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      document.body.removeChild(el)
+      toast.success(locale === 'en' ? 'Account number copied!' : '계좌 번호가 복사되었습니다!')
+    }
   }
 
   if (showApplyAuthGate && posting) {
@@ -1519,24 +1539,36 @@ export default function ApplicationFormPage() {
               {paymentMethod === "bank" && (
                 <div className="p-5 rounded-2xl bg-muted border border-border space-y-4 animate-in slide-in-from-top-2 duration-300">
                   {posting?.bank_account ? (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-muted-foreground uppercase tracking-wider">
-                          {locale === 'en' ? 'Account Info' : '입금 계좌'}
+                    <div className="space-y-2">
+                      <span className="text-xs font-black text-muted-foreground uppercase tracking-wider">
+                        {locale === 'en' ? 'Account Info' : '입금 계좌'}
+                      </span>
+                      {posting.bank_account_name && (
+                        <p className="text-sm font-bold text-foreground">
+                          {posting.bank_account_name}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(posting.bank_account)}
+                        className="w-full flex items-center justify-between gap-3 rounded-2xl border-2 border-primary/30 bg-primary/5 hover:bg-primary/10 active:scale-[0.98] transition-all px-5 py-4 group"
+                        title={locale === 'en' ? 'Tap to copy account number' : '눌러서 계좌 번호 복사'}
+                      >
+                        <span className="text-lg md:text-xl font-black text-foreground tracking-wider break-all text-left leading-snug">
+                          {posting.bank_account}
                         </span>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => copyToClipboard(posting.bank_account)}
-                          className="h-8 px-3 rounded-lg text-primary font-bold hover:bg-primary/10"
-                        >
+                        <span className="shrink-0 flex items-center gap-1 text-xs font-black text-primary bg-primary/10 group-hover:bg-primary/20 rounded-lg px-3 py-1.5 transition-colors">
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                          </svg>
                           {locale === 'en' ? 'Copy' : '복사'}
-                        </Button>
-                      </div>
-                      <div className="text-[17px] font-black text-foreground break-all leading-relaxed">
-                        {posting.bank_account}
-                      </div>
-                    </>
+                        </span>
+                      </button>
+                      <p className="text-[11px] text-muted-foreground font-medium text-center">
+                        {locale === 'en' ? 'Tap the number above to copy' : '계좌 번호를 누르면 바로 복사됩니다'}
+                      </p>
+                    </div>
                   ) : (
                     <p className="text-sm text-amber-800 dark:text-amber-200 font-bold leading-relaxed rounded-xl bg-amber-500/10 border border-amber-500/20 p-3">
                       {locale === 'en'

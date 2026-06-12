@@ -40,6 +40,7 @@ import { HostInfoCard } from '@/components/admin/host-info-card'
 import { useFormManager } from '@/hooks/use-form-manager'
 import { FormData as FormBuilderData } from '@/components/admin/form-builder'
 import { ApplyMethodCard } from '@/components/admin/apply-method-card'
+import { BankAccountCard } from '@/components/admin/bank-account-card'
 import { fetchFormBuilderData, buildDefaultLanguageFormData } from '@/lib/load-form-data'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from '@/components/ui/switch'
@@ -419,6 +420,13 @@ function LanguageManagementContent() {
   return <div className="min-h-screen bg-muted p-4 md:p-10 pb-32">
     <div className="max-w-5xl mx-auto space-y-8">
       <PageHeader title="언어교환 설정" titleEn="Language Exchange Settings" description="요일별로 반복되는 정기 언어교환 정보를 설정하세요." descriptionEn="Configure the recurring language exchange for each day of the week." />
+
+      <BankAccountCard
+        bankAccountName={masterPosting?.bank_account_name || ''}
+        bankAccount={masterPosting?.bank_account || ''}
+        onBankAccountNameChange={(val) => setMasterPosting((prev: any) => ({ ...prev, bank_account_name: val }))}
+        onBankAccountChange={(val) => setMasterPosting((prev: any) => ({ ...prev, bank_account: val }))}
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-7 h-14 p-2 rounded-[20px] bg-muted/80">
