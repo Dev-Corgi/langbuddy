@@ -24,6 +24,7 @@ import { createClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/hooks/use-locale'
 import { i18n } from '@/lib/i18n'
+import { isSuperAdminEmail } from '@/lib/super-admin'
 
 export default function AdminLayout({
   children,
@@ -41,7 +42,7 @@ export default function AdminLayout({
     const fetchProfile = async (userId: string, email?: string) => {
       try {
         // Fallback check for superadmin email
-        if (email === 'pomato5959@gmail.com') {
+        if (isSuperAdminEmail(email)) {
           console.log('AdminLayout: Explicit SuperAdmin identified by email')
           setIsSuperAdmin(true)
           return

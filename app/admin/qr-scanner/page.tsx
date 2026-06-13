@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import { isSuperAdminEmail } from '@/lib/super-admin'
 import { Html5Qrcode } from 'html5-qrcode'
 import { toast } from 'sonner'
 import { QrCode, Loader2, SwitchCamera } from 'lucide-react'
@@ -66,7 +67,7 @@ export default function AdminQrScannerPage() {
         .select('is_superadmin')
         .eq('id', user.id)
         .single()
-      if (!profile?.is_superadmin && user.email !== 'pomato5959@gmail.com') {
+      if (!profile?.is_superadmin && !isSuperAdminEmail(user.email)) {
         window.location.href = '/admin/dashboard'
         return
       }

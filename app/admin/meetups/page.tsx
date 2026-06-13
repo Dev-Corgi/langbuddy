@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
+import { isSuperAdminEmail } from '@/lib/super-admin'
 import { useLocale } from '@/hooks/use-locale'
 import { 
   PlusCircle, 
@@ -47,7 +48,7 @@ function MeetupsManagementContent() {
         
         let superAdminStatus = false
         // Fallback for superadmin email
-        if (user.email === 'pomato5959@gmail.com') {
+        if (isSuperAdminEmail(user.email)) {
           superAdminStatus = true
         } else {
           const { data: profile } = await supabase

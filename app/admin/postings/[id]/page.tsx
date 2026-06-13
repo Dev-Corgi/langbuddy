@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { isSuperAdminEmail } from '@/lib/super-admin'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -99,7 +100,7 @@ export default function EditPostingPage() {
         setCurrentUserId(user.id)
         
         // Fallback for superadmin email
-        if (user.email === 'pomato5959@gmail.com') {
+        if (isSuperAdminEmail(user.email)) {
           setIsSuperAdmin(true)
           return
         }

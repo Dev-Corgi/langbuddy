@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import { isSuperAdminEmail } from '@/lib/super-admin'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -621,7 +622,7 @@ export default function AdminArrangePage() {
         .eq('id', user.id)
         .single()
 
-      if (!profile?.is_superadmin && user.email !== 'pomato5959@gmail.com') {
+      if (!profile?.is_superadmin && !isSuperAdminEmail(user.email)) {
         window.location.href = '/admin/dashboard'
         return
       }
