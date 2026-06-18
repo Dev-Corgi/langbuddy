@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { isSuperAdminEmail } from '@/lib/super-admin'
-import { Html5Qrcode } from 'html5-qrcode'
+import QrScanner from 'qr-scanner'
 import { toast } from 'sonner'
 import { QrCode, Loader2, SwitchCamera } from 'lucide-react'
 import { PageHeader } from '@/components/admin/page-header'
@@ -16,8 +16,6 @@ import {
 } from '@/lib/session-event-date'
 import { loadTodayQrSessions, type TodayQrSessionInfo } from '@/lib/admin-qr-sessions'
 import { QrScannerModeSheet, type QrScannerMode } from '@/components/admin/qr-scanner-mode-sheet'
-
-const READER_ID = 'standalone-admin-qr-reader'
 
 function classifyResponseFormId(
   formId: string,
@@ -42,7 +40,8 @@ export default function AdminQrScannerPage() {
   const [cameraOn, setCameraOn] = useState(false)
   const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user')
 
-  const html5QrRef = useRef<Html5Qrcode | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const qrScannerRef = useRef<QrScanner | null>(null)
   const lastScanRef = useRef<{ at: number; text: string } | null>(null)
   const sessionsRef = useRef(sessions)
   sessionsRef.current = sessions
@@ -147,6 +146,7 @@ export default function AdminQrScannerPage() {
           }
         }
 
+        toast.success('✅ qr 스캔 완료되었습니다')
         if ('vibrate' in navigator) navigator.vibrate(200)
       } catch (e) {
         console.error(e)
@@ -159,62 +159,67 @@ export default function AdminQrScannerPage() {
   useEffect(() => {
     if (!cameraOn || !scanMode) return
 
-    const elementId = READER_ID
-    let cancelled = false
-    const qr = new Html5Qrcode(elementId, { verbose: false })
+    const video = videoRef.current
+    if (!video) return
 
-    const stopAndClear = async () => {
-      try {
-        if (qr.isScanning) await qr.stop()
-      } catch {
-        /* ignore */
-      }
-      try {
-        qr.clear()
-      } catch {
-        /* ignore */
-      }
-    }
+    let cancelled = false
+    QrScanner.WORKER_PATH = '/qr-scanner-worker.min.js'
 
     const runDecoded = async (text: string) => {
       if (!cancelled) await onDecoded(text)
     }
 
+    const stopScanner = (scanner: QrScanner) => {
+      try {
+        scanner.stop()
+      } catch {
+        /* ignore */
+      }
+      try {
+        scanner.destroy()
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const createScanner = (facing: 'user' | 'environment') =>
+      new QrScanner(
+        video,
+        (result) => void runDecoded(result.data),
+        {
+          returnDetailedScanResult: true,
+          preferredCamera: facing,
+          maxScansPerSecond: 8,
+          highlightScanRegion: true,
+          highlightCodeOutline: true,
+          onDecodeError: () => {},
+        }
+      )
+
     const startCamera = async () => {
-      const config = { fps: 10, qrbox: { width: 280, height: 280 } } as const
-      const onFrameError = () => {}
       const fallbackFacing: 'user' | 'environment' =
         cameraFacing === 'user' ? 'environment' : 'user'
 
-      const tryStart = async (facing: 'user' | 'environment') => {
-        await qr.start(
-          { facingMode: facing },
-          config,
-          (t) => void runDecoded(t),
-          onFrameError
-        )
-      }
+      let scanner: QrScanner | null = null
 
       try {
-        await tryStart(cameraFacing)
+        scanner = createScanner(cameraFacing)
+        await scanner.start()
         if (cancelled) {
-          await stopAndClear()
+          stopScanner(scanner)
           return
         }
-        html5QrRef.current = qr
+        qrScannerRef.current = scanner
       } catch {
+        if (scanner) stopScanner(scanner)
         try {
-          qr.clear()
-        } catch {
-          /* ignore */
-        }
-        try {
-          await tryStart(fallbackFacing)
+          scanner = createScanner(fallbackFacing)
+          await scanner.start()
           if (cancelled) {
-            await stopAndClear()
+            stopScanner(scanner)
             return
           }
-          html5QrRef.current = qr
+          qrScannerRef.current = scanner
           if (!cancelled) setCameraFacing(fallbackFacing)
         } catch {
           if (!cancelled) {
@@ -231,8 +236,10 @@ export default function AdminQrScannerPage() {
 
     return () => {
       cancelled = true
-      if (html5QrRef.current === qr) html5QrRef.current = null
-      void stopAndClear()
+      if (qrScannerRef.current) {
+        stopScanner(qrScannerRef.current)
+        qrScannerRef.current = null
+      }
     }
   }, [cameraOn, scanMode, cameraFacing, onDecoded])
 
@@ -302,10 +309,14 @@ export default function AdminQrScannerPage() {
 
           {cameraOn && (
             <div className="space-y-3">
-              <div
-                id={READER_ID}
-                className="min-h-[280px] overflow-hidden rounded-2xl border-4 border-muted bg-black/5"
-              />
+              <div className="relative min-h-[280px] overflow-hidden rounded-2xl border-4 border-muted bg-black [&_svg]:stroke-primary [&_.scan-region-highlight]:border-2 [&_.scan-region-highlight]:border-primary/60 [&_.scan-region-highlight]:rounded-xl">
+                <video
+                  ref={videoRef}
+                  className="w-full min-h-[280px] object-cover"
+                  muted
+                  playsInline
+                />
+              </div>
               <div className="flex gap-2">
                 <Button
                   type="button"

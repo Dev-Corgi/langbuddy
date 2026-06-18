@@ -11,7 +11,7 @@ import {
   Loader2,
   Users,
   LayoutGrid,
-  Save,
+  Bell,
   RotateCcw,
   UserPlus,
   AlertTriangle,
@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { cn, extractParticipantInfoFromAnswers, type CoreFormQuestion } from '@/lib/utils'
+import { cn, type CoreFormQuestion } from '@/lib/utils'
 import {
   formResponseMatchesTodaySession,
   koreanWeekdayLetterSeoul,
@@ -31,6 +31,17 @@ import {
 } from '@/lib/session-event-date'
 import { deriveArrangeStage, targetRoundForLateJoin } from '@/lib/arrange-stage'
 import { buildLangCheckinModalPayload } from '@/lib/admin-checkin-display'
+import { ADMIN_CHECKIN_SOURCE_DRAG } from '@/lib/admin-manual-checkin'
+import {
+  isWalkInAnswers,
+  mapFormResponseToParticipant,
+  type ArrangedParticipant,
+} from '@/lib/walk-in-participant'
+import {
+  loadSeatingLiveState,
+  persistSeatingLive,
+  type SeatingConfigPayload,
+} from '@/lib/seating-live-sync'
 import {
   QrScanResultSheet,
   type QrScanResultSheetPayload,
@@ -60,20 +71,13 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import _ from 'lodash'
 import { arrangeRound as runSeatingArrangeRound, calculateAutoTableCounts, getTableWarnings, pickBestTableForLateJoin, evaluateRoundQuality, formatDuplicateWarningMessage, reunionCountIfJoinedTable } from '@/lib/seating-algorithm'
-import type { Assignment, RoundData } from '@/lib/seating-algorithm'
+import type { RoundData } from '@/lib/seating-algorithm'
 import { formatDebugLog, generateDebugLog } from '@/lib/seating-debug-logger'
 import { RoundImageExporter } from '@/components/admin/round-image-exporter'
 
 // --- Types ---
 
-type Participant = {
-  id: string
-  name: string
-  gender: '남' | '여' | string
-  nationality: '한국인' | '외국인' | string
-  language: string
-  checked_in_at: string | null
-}
+type Participant = ArrangedParticipant
 
 type ArrangePostingSession = {
   id: string
@@ -81,23 +85,7 @@ type ArrangePostingSession = {
   date: string
   form_id?: string | null
   day_of_week?: string | null
-  seating_config?: { langTableCounts?: Record<string, number> } | null
-}
-
-type LoadedSeatingRow = {
-  round: number
-  participant_id: string
-  table_label: string
-}
-
-function inferTableLanguages(assignments: Assignment[], participantsList: Participant[]): Record<string, string> {
-  const map: Record<string, string> = {}
-  for (const a of assignments) {
-    if (map[a.table_label]) continue
-    const p = participantsList.find((x) => x.id === a.participant_id)
-    if (p) map[a.table_label] = p.language
-  }
-  return map
+  seating_config?: SeatingConfigPayload | null
 }
 
 // --- Components ---
@@ -131,6 +119,7 @@ function ParticipantCard({ participant, isOverlay = false, onEdit }: { participa
       className={cn(
         'flex items-center justify-between p-3 mb-2 rounded-xl border bg-card shadow-sm group cursor-grab active:cursor-grabbing overflow-hidden relative',
         isOverlay ? 'shadow-xl border-primary' : 'border-border',
+        !checkedIn && !isOverlay ? 'border-dashed border-amber-300/70 bg-amber-50/20' : '',
         isForeigner ? 'bg-blue-50/40' : 'bg-emerald-50/40'
       )}
     >
@@ -209,75 +198,6 @@ function ParticipantCard({ participant, isOverlay = false, onEdit }: { participa
             }}
           >
             <Settings className="w-4 h-4 text-muted-foreground" />
-          </Button>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
-/** QR 미스캔·드래그 불가 (자리배치 대상 아님) */
-function ParticipantRowStatic({
-  participant,
-  onEdit,
-}: {
-  participant: Participant
-  onEdit?: (participant: Participant) => void
-}) {
-  return (
-    <div
-      className={cn(
-        'flex items-center justify-between p-3 mb-2 rounded-xl border bg-muted/40 shadow-sm group border-dashed border-muted-foreground/25'
-      )}
-    >
-      <div className="flex items-center gap-3 overflow-hidden">
-        <div className="w-6 h-6 shrink-0 rounded-md bg-muted flex items-center justify-center" aria-hidden>
-          <UserPlus className="w-3.5 h-3.5 text-muted-foreground" />
-        </div>
-        <div className="min-w-0">
-          <p className="font-bold text-sm truncate">{participant.name}</p>
-          <div className="flex gap-1 mt-0.5">
-            <span
-              className={cn(
-                'text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter',
-                participant.nationality === '외국인' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'
-              )}
-            >
-              {participant.nationality === '외국인' ? 'INTL' : 'KOR'}
-            </span>
-            <span
-              className={cn(
-                'text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter',
-                participant.gender === '여' ? 'bg-pink-100 text-pink-600' : 'bg-slate-100 text-slate-600'
-              )}
-            >
-              {participant.gender}
-            </span>
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center gap-1 flex-wrap justify-end">
-        <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 border border-slate-300 shrink-0">
-          미체크인
-        </span>
-        <div className="text-[10px] font-black text-primary uppercase bg-primary/5 px-2 py-1 rounded">
-          {participant.language}
-        </div>
-        {onEdit ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 rounded-md opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-            onClick={(e) => {
-              e.stopPropagation()
-              e.preventDefault()
-              onEdit(participant)
-            }}
-            onPointerDown={(e) => {
-              e.stopPropagation()
-            }}
-          >
-            <Settings className="w-3.5 h-3.5 text-muted-foreground" />
           </Button>
         ) : null}
       </div>
@@ -400,13 +320,18 @@ function UncheckedInList({ participants, onEdit }: { participants: Participant[]
           미체크인 인원
         </CardTitle>
         <CardDescription className="text-xs font-medium leading-relaxed">
-          신청만 완료되었고 현장 QR 스캔 전입니다. QR로 체크인하면「미배정 인원」으로 이동한 뒤 자리를 배정할 수 있습니다.
+          신청만 완료되었고 현장 QR 스캔 전입니다. 테이블로 드래그하면 운영자 확인 체크인 후 배정됩니다.
         </CardDescription>
       </CardHeader>
       <CardContent className="max-h-[400px] overflow-y-auto p-3 min-h-[80px]">
-        {participants.map((p) => (
-          <ParticipantRowStatic key={p.id} participant={p} onEdit={onEdit} />
-        ))}
+        <SortableContext
+          items={participants.map((p) => p.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {participants.map((p) => (
+            <ParticipantCard key={p.id} participant={p} onEdit={onEdit} />
+          ))}
+        </SortableContext>
         {participants.length === 0 && (
           <p className="text-center py-4 text-xs font-bold text-muted-foreground">미체크인 신청자가 없습니다.</p>
         )}
@@ -422,6 +347,13 @@ export default function AdminArrangePage() {
   const sessionRef = useRef<ArrangePostingSession | null>(null)
   const formQuestionsRef = useRef<CoreFormQuestion[]>([])
   const participantsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const seatingPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const readyForPersistRef = useRef(false)
+  const applyingRemoteSeatingRef = useRef(false)
+  const suppressRemoteReloadRef = useRef(false)
+  const participantsRef = useRef<Participant[]>([])
+  const roundsRef = useRef<RoundData[]>([])
+  const langTableCountsRef = useRef<Record<string, number>>({})
   const lastCheckinModalRef = useRef<{ id: string; at: number } | null>(null)
   const seenCheckedInIdsRef = useRef<Set<string>>(new Set())
 
@@ -447,9 +379,14 @@ export default function AdminArrangePage() {
   const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null)
   const [debugLogs, setDebugLogs] = useState<string[]>([])
   const [showDebugLogs, setShowDebugLogs] = useState(false)
+  const [seatingSyncing, setSeatingSyncing] = useState(false)
+  const [notifyingRound, setNotifyingRound] = useState<number | null>(null)
 
   sessionRef.current = session
   formQuestionsRef.current = formQuestions
+  participantsRef.current = participants
+  roundsRef.current = rounds
+  langTableCountsRef.current = langTableCounts
 
   const showCheckinModalForResponse = useCallback(
     async (row: {
@@ -520,17 +457,9 @@ export default function AdminArrangePage() {
           if (!ev && sel === currentDay) return true
           return false
         })
-        const mapped: Participant[] = responses.map((r) => {
-          const info = extractParticipantInfoFromAnswers(r.answers || {}, questionsForExtract)
-          return {
-            id: r.id,
-            name: info.name || r.answers?.name || r.answers?.이름 || 'Anonymous',
-            gender: info.gender || r.answers?.gender || r.answers?.성별 || '?',
-            nationality: info.nationality || r.answers?.nationality || r.answers?.국적 || '?',
-            language: r.answers?._selected_language || info.language || '-',
-            checked_in_at: r.checked_in_at,
-          }
-        })
+        const mapped: Participant[] = responses.map((r) =>
+          mapFormResponseToParticipant(r, questionsForExtract)
+        )
         setParticipants(mapped)
         seenCheckedInIdsRef.current = new Set(
           mapped.filter((p) => p.checked_in_at).map((p) => p.id)
@@ -538,6 +467,103 @@ export default function AdminArrangePage() {
       })()
     }, 350)
   }, [supabase])
+
+  const reloadSeatingFromServer = useCallback(async () => {
+    const s = sessionRef.current
+    if (!s?.id) return
+
+    const todayStr = todayYYYYMMDDSeoul()
+    const currentParticipants = participantsRef.current
+    const checkedIds = new Set(
+      currentParticipants.filter((p) => p.checked_in_at).map((p) => p.id)
+    )
+
+    const { data: postingRow } = await supabase
+      .from('postings')
+      .select('seating_config')
+      .eq('id', s.id)
+      .maybeSingle()
+
+    const seatingConfig = (postingRow?.seating_config || s.seating_config || null) as SeatingConfigPayload | null
+    const { rounds: loadedRounds, langTableCounts: loadedCounts } = await loadSeatingLiveState(
+      supabase,
+      s.id,
+      todayStr,
+      currentParticipants,
+      seatingConfig,
+      checkedIds
+    )
+
+    applyingRemoteSeatingRef.current = true
+    setRounds(loadedRounds)
+    if (seatingConfig?.langTableCounts) {
+      setLangTableCounts(seatingConfig.langTableCounts)
+    } else if (Object.keys(loadedCounts).length > 0) {
+      setLangTableCounts(loadedCounts)
+    }
+    requestAnimationFrame(() => {
+      applyingRemoteSeatingRef.current = false
+    })
+  }, [supabase])
+
+  const runSeatingPersist = useCallback(async () => {
+    const s = sessionRef.current
+    if (!s?.id) return
+
+    const todayStr = todayYYYYMMDDSeoul()
+    const currentParticipants = participantsRef.current
+    const checkedIds = new Set(
+      currentParticipants.filter((p) => p.checked_in_at).map((p) => p.id)
+    )
+
+    setSeatingSyncing(true)
+    suppressRemoteReloadRef.current = true
+    try {
+      await persistSeatingLive(supabase, {
+        postingId: s.id,
+        sessionDate: todayStr,
+        rounds: roundsRef.current,
+        langTableCounts: langTableCountsRef.current,
+        checkedParticipantIds: checkedIds,
+      })
+    } catch (err) {
+      console.error('[arrange] seating persist:', err)
+      const msg =
+        err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string'
+          ? (err as { message: string }).message
+          : '동기화에 실패했습니다.'
+      toast.error(msg.length < 200 ? `동기화 실패: ${msg}` : `동기화 실패: ${msg.slice(0, 180)}…`)
+    } finally {
+      setSeatingSyncing(false)
+      setTimeout(() => {
+        suppressRemoteReloadRef.current = false
+      }, 1200)
+    }
+  }, [supabase])
+
+  const scheduleSeatingPersist = useCallback(() => {
+    if (!readyForPersistRef.current || applyingRemoteSeatingRef.current) return
+    if (seatingPersistTimerRef.current) {
+      clearTimeout(seatingPersistTimerRef.current)
+    }
+    seatingPersistTimerRef.current = setTimeout(() => {
+      seatingPersistTimerRef.current = null
+      void runSeatingPersist()
+    }, 800)
+  }, [runSeatingPersist])
+
+  useEffect(() => {
+    if (!readyForPersistRef.current || applyingRemoteSeatingRef.current || !session?.id) return
+    scheduleSeatingPersist()
+  }, [rounds, langTableCounts, session?.id, scheduleSeatingPersist])
+
+  useEffect(() => {
+    return () => {
+      if (seatingPersistTimerRef.current) {
+        clearTimeout(seatingPersistTimerRef.current)
+      }
+    }
+  }, [])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -581,13 +607,19 @@ export default function AdminArrangePage() {
           }
 
           const rowId = row?.id
+          const answers = (row.answers || {}) as Record<string, unknown>
           if (
             rowId &&
             row.checked_in_at &&
             !seenCheckedInIdsRef.current.has(rowId)
           ) {
             seenCheckedInIdsRef.current.add(rowId)
-            void showCheckinModalForResponse({ ...row, id: rowId })
+            if (
+              !isWalkInAnswers(answers) &&
+              answers._checkin_source !== ADMIN_CHECKIN_SOURCE_DRAG
+            ) {
+              void showCheckinModalForResponse({ ...row, id: rowId })
+            }
           }
         }
       )
@@ -607,7 +639,34 @@ export default function AdminArrangePage() {
     showCheckinModalForResponse,
   ])
 
+  useEffect(() => {
+    const postingId = session?.id
+    if (!postingId) return
+
+    const channel = supabase
+      .channel(`seating-live-${postingId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'seating_assignments',
+          filter: `posting_id=eq.${postingId}`,
+        },
+        () => {
+          if (suppressRemoteReloadRef.current) return
+          void reloadSeatingFromServer()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [supabase, session?.id, reloadSeatingFromServer])
+
   const fetchData = async () => {
+    readyForPersistRef.current = false
     setLoading(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -686,8 +745,9 @@ export default function AdminArrangePage() {
       }
 
       // Load saved table config if exists
-      if (foundSession.seating_config?.langTableCounts) {
-        setLangTableCounts(foundSession.seating_config.langTableCounts)
+      const seatingConfig = (foundSession.seating_config || null) as SeatingConfigPayload | null
+      if (seatingConfig?.langTableCounts) {
+        setLangTableCounts(seatingConfig.langTableCounts)
       }
 
       const { data: responsesRaw } = await supabase
@@ -704,17 +764,9 @@ export default function AdminArrangePage() {
         return false
       })
 
-      const mapped: Participant[] = responses.map((r) => {
-        const info = extractParticipantInfoFromAnswers(r.answers || {}, questionsForExtract)
-        return {
-          id: r.id,
-          name: info.name || r.answers?.name || r.answers?.이름 || 'Anonymous',
-          gender: info.gender || r.answers?.gender || r.answers?.성별 || '?',
-          nationality: info.nationality || r.answers?.nationality || r.answers?.국적 || '?',
-          language: r.answers?._selected_language || info.language || '-',
-          checked_in_at: r.checked_in_at,
-        }
-      })
+      const mapped: Participant[] = responses.map((r) =>
+        mapFormResponseToParticipant(r, questionsForExtract)
+      )
       setParticipants(mapped)
       seenCheckedInIdsRef.current = new Set(
         mapped.filter((p) => p.checked_in_at).map((p) => p.id)
@@ -735,40 +787,24 @@ export default function AdminArrangePage() {
         setLangTableCounts(initialCounts)
       }
 
-      // Fetch existing assignments if any (오늘 날짜 스냅샷; 없으면 레거시 null만)
-      let existingAssignments: LoadedSeatingRow[] | null = null
-      {
-        const { data: todayRows } = await supabase
-          .from('seating_assignments')
-          .select('*')
-          .eq('posting_id', foundSession.id)
-          .eq('session_date', todayStr)
-        if (todayRows && todayRows.length > 0) {
-          existingAssignments = todayRows as LoadedSeatingRow[]
-        } else {
-          const { data: legacy } = await supabase
-            .from('seating_assignments')
-            .select('*')
-            .eq('posting_id', foundSession.id)
-            .is('session_date', null)
-          existingAssignments = (legacy ?? []) as LoadedSeatingRow[]
-        }
-      }
-
-      if (existingAssignments && existingAssignments.length > 0) {
-        const checkedIds = new Set(mapped.filter((p) => p.checked_in_at).map((p) => p.id))
-        const filteredAssignments = existingAssignments.filter((a) => checkedIds.has(a.participant_id))
-        const newRounds = [1, 2, 3].map((r) => {
-          const assignments = filteredAssignments
-            .filter((a) => a.round === r)
-            .map((a) => ({ participant_id: a.participant_id, table_label: a.table_label }))
-          return {
-            round: r,
-            assignments,
-            tableLanguages: inferTableLanguages(assignments, mapped),
-          }
+      const checkedIds = new Set(mapped.filter((p) => p.checked_in_at).map((p) => p.id))
+      const { rounds: loadedRounds } = await loadSeatingLiveState(
+        supabase,
+        foundSession.id,
+        todayStr,
+        mapped,
+        seatingConfig,
+        checkedIds
+      )
+      if (loadedRounds.some((r) => r.assignments.length > 0)) {
+        applyingRemoteSeatingRef.current = true
+        setRounds(loadedRounds)
+        requestAnimationFrame(() => {
+          applyingRemoteSeatingRef.current = false
+          readyForPersistRef.current = true
         })
-        setRounds(newRounds)
+      } else {
+        readyForPersistRef.current = true
       }
 
       setLoading(false)
@@ -861,67 +897,6 @@ export default function AdminArrangePage() {
     setCurrentRound(configRound)
     setIsConfigOpen(false)
     setConfigRound(null)
-
-    const sessionForNotify = session
-    if (sessionForNotify?.id && newRoundData.assignments.length > 0) {
-      const attendees = participants.filter((p) => p.checked_in_at)
-      void fetch('/api/admin/notify-seating-round', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          postingId: sessionForNotify.id,
-          sessionDate: todayYYYYMMDDSeoul(),
-          round: configRound,
-          tableLanguages: newRoundData.tableLanguages || {},
-          assignments: newRoundData.assignments,
-          participants: attendees.map((p) => ({
-            id: p.id,
-            name: p.name,
-            nationality: String(p.nationality),
-            gender: String(p.gender),
-            language: p.language,
-          })),
-          eventTitle: sessionForNotify.title || 'LangBuddy',
-        }),
-      })
-        .then(async (res) => {
-          const j = (await res.json().catch(() => ({}))) as {
-            sent?: { kakao?: number; email?: number; skipped?: number }
-            errors?: string[]
-            message?: string
-            debug?: {
-              summary?: Record<string, unknown>
-              steps?: string[]
-              recipients?: unknown[]
-            }
-          }
-          if (!res.ok) {
-            console.error('[seating-notify] HTTP error', res.status, j.debug ?? j)
-            toast.error(
-              `테이블 알림 실패 (${res.status}): ${j.message || 'see console'}`
-            )
-            return
-          }
-          if (j.debug && typeof console !== 'undefined') {
-            console.groupCollapsed('[seating-notify] debug — Network에서도 동일 JSON 확인 가능')
-            console.log('summary', j.debug.summary)
-            console.log('steps', j.debug.steps)
-            if (j.debug.recipients?.length) console.table(j.debug.recipients)
-            if (j.errors?.length) console.warn('errors', j.errors)
-            console.groupEnd()
-          }
-          const s = j.sent
-          toast.success(
-            `알림 완료 — 카카오 ${s?.kakao ?? 0} · 이메일 ${s?.email ?? 0} · 건너뜀 ${s?.skipped ?? 0}`
-          )
-          if (j.errors?.length) {
-            toast.info(`알림 일부 오류: ${j.errors.slice(0, 4).join(' · ')}`, {
-              duration: 12000,
-            })
-          }
-        })
-        .catch(() => toast.error('테이블 알림 요청 중 오류'))
-    }
   }, [configRound, configCounts, participants, rounds, session])
 
   const handleExportRoundCsv = useCallback(
@@ -956,6 +931,10 @@ export default function AdminArrangePage() {
   // --- Seating Algorithm ---
 
   const handleAddParticipant = (newParticipant: Participant) => {
+    if (newParticipant.checked_in_at) {
+      seenCheckedInIdsRef.current.add(newParticipant.id)
+    }
+
     setParticipants((prev) => {
       const exists = prev.find((p) => p.id === newParticipant.id)
       if (exists) {
@@ -966,7 +945,7 @@ export default function AdminArrangePage() {
 
     if (!newParticipant.checked_in_at) {
       toast.info(
-        `${newParticipant.name}님은 현장 QR 체크인 전입니다. 체크인 후「미배정 인원」에서 배정할 수 있습니다.`,
+        `${newParticipant.name}님은 현장 QR 체크인 전입니다. 미체크인 목록에서 테이블로 드래그하면 체크인 후 배정할 수 있습니다.`,
         { duration: 5000 }
       )
       return
@@ -1037,9 +1016,37 @@ export default function AdminArrangePage() {
     )
   }
 
-  const handleUpdateParticipant = (updated: Participant) => {
+  const handleUpdateParticipant = async (updated: Participant) => {
     const oldParticipant = participants.find(p => p.id === updated.id)
     if (!oldParticipant) return
+
+    if (updated.isWalkIn) {
+      try {
+        const res = await fetch(`/api/admin/walk-in-participant/${updated.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: updated.name,
+            gender: updated.gender,
+            nationality: updated.nationality,
+            language: updated.language,
+          }),
+        })
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string
+          participant?: Participant
+        }
+        if (!res.ok || !data.participant) {
+          toast.error(data.error || '참가자 정보 저장에 실패했습니다.')
+          return
+        }
+        updated = data.participant
+      } catch (err) {
+        console.error(err)
+        toast.error('참가자 정보 저장에 실패했습니다.')
+        return
+      }
+    }
 
     // 참가자 정보 업데이트
     setParticipants(prev =>
@@ -1166,75 +1173,85 @@ export default function AdminArrangePage() {
     }
   }
 
-  const handleSave = async () => {
-    if (!session) return
+  const handleNotifyParticipants = useCallback(
+    async (roundNum: number) => {
+      const sessionForNotify = session
+      if (!sessionForNotify?.id) return
 
-    setLoading(true)
-    const todayStr = todayYYYYMMDDSeoul()
-    const checkedIds = new Set(participants.filter((p) => p.checked_in_at).map((p) => p.id))
-    try {
-      // 1. Save table config to session
-      const { error: postingErr } = await supabase
-        .from('postings')
-        .update({ seating_config: { langTableCounts } })
-        .eq('id', session.id)
-      if (postingErr) throw postingErr
-
-      // 2. 기존 스냅샷 제거: 오늘 날짜 행 + session_date NULL(레거시) — 레거시만 남으면 동일 (posting, round, participant) UNIQUE와 충돌할 수 있음
-      const { error: delTodayErr } = await supabase
-        .from('seating_assignments')
-        .delete()
-        .eq('posting_id', session.id)
-        .eq('session_date', todayStr)
-      if (delTodayErr) throw delTodayErr
-
-      const { error: delLegacyErr } = await supabase
-        .from('seating_assignments')
-        .delete()
-        .eq('posting_id', session.id)
-        .is('session_date', null)
-      if (delLegacyErr) throw delLegacyErr
-
-      const rawRows = rounds.flatMap((r) =>
-        r.assignments
-          .filter(
-            (a) =>
-              a.table_label &&
-              String(a.table_label).trim() &&
-              checkedIds.has(a.participant_id)
-          )
-          .map((a) => ({
-            posting_id: session.id,
-            session_date: todayStr,
-            round: r.round,
-            table_label: String(a.table_label).trim(),
-            participant_id: a.participant_id,
-          }))
-      )
-
-      const dedupedMap = new Map<string, (typeof rawRows)[0]>()
-      for (const row of rawRows) {
-        dedupedMap.set(`${row.round}:${row.participant_id}`, row)
-      }
-      const allAssignments = [...dedupedMap.values()]
-
-      if (allAssignments.length > 0) {
-        const { error: insErr } = await supabase.from('seating_assignments').insert(allAssignments)
-        if (insErr) throw insErr
+      const roundData = roundsRef.current.find((r) => r.round === roundNum)
+      if (!roundData || roundData.assignments.length === 0) {
+        toast.error(`${roundNum}라운드에 배정된 참가자가 없습니다.`)
+        return
       }
 
-      toast.success('배치 결과 및 설정이 저장되었습니다.')
-    } catch (err: unknown) {
-      console.error(err)
-      const msg =
-        err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string'
-          ? (err as { message: string }).message
-          : '저장에 실패했습니다.'
-      toast.error(msg.length < 200 ? `저장 실패: ${msg}` : `저장 실패: ${msg.slice(0, 180)}…`)
-    } finally {
-      setLoading(false)
-    }
-  }
+      if (seatingPersistTimerRef.current) {
+        clearTimeout(seatingPersistTimerRef.current)
+        seatingPersistTimerRef.current = null
+        await runSeatingPersist()
+      }
+
+      const attendees = participantsRef.current.filter((p) => p.checked_in_at)
+      setNotifyingRound(roundNum)
+      try {
+        const res = await fetch('/api/admin/notify-seating-round', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            postingId: sessionForNotify.id,
+            sessionDate: todayYYYYMMDDSeoul(),
+            round: roundNum,
+            tableLanguages: roundData.tableLanguages || {},
+            assignments: roundData.assignments,
+            participants: attendees.map((p) => ({
+              id: p.id,
+              name: p.name,
+              nationality: String(p.nationality),
+              gender: String(p.gender),
+              language: p.language,
+            })),
+            eventTitle: sessionForNotify.title || 'LangBuddy',
+          }),
+        })
+        const j = (await res.json().catch(() => ({}))) as {
+          sent?: { kakao?: number; email?: number; skipped?: number }
+          errors?: string[]
+          message?: string
+          debug?: {
+            summary?: Record<string, unknown>
+            steps?: string[]
+            recipients?: unknown[]
+          }
+        }
+        if (!res.ok) {
+          console.error('[seating-notify] HTTP error', res.status, j.debug ?? j)
+          toast.error(`참가자 알림 실패 (${res.status}): ${j.message || 'see console'}`)
+          return
+        }
+        if (j.debug && typeof console !== 'undefined') {
+          console.groupCollapsed('[seating-notify] debug')
+          console.log('summary', j.debug.summary)
+          console.log('steps', j.debug.steps)
+          if (j.debug.recipients?.length) console.table(j.debug.recipients)
+          if (j.errors?.length) console.warn('errors', j.errors)
+          console.groupEnd()
+        }
+        const s = j.sent
+        toast.success(
+          `${roundNum}라운드 알림 완료 — 카카오 ${s?.kakao ?? 0} · 이메일 ${s?.email ?? 0} · 건너뜀 ${s?.skipped ?? 0}`
+        )
+        if (j.errors?.length) {
+          toast.info(`알림 일부 오류: ${j.errors.slice(0, 4).join(' · ')}`, {
+            duration: 12000,
+          })
+        }
+      } catch {
+        toast.error('참가자 알림 요청 중 오류')
+      } finally {
+        setNotifyingRound(null)
+      }
+    },
+    [runSeatingPersist, session]
+  )
 
   // --- DnD Handlers ---
 
@@ -1242,7 +1259,46 @@ export default function AdminArrangePage() {
     setActiveId(event.active.id as string)
   }
 
-  const onDragEnd = (event: DragEndEvent) => {
+  const performAdminDragCheckin = useCallback(async (participantId: string, name: string) => {
+    const ok = window.confirm(
+      `${name}님을 QR 체크인 없이 배정합니다.\n\n운영자 확인으로 체크인 처리한 뒤 테이블에 배치합니다. 계속할까요?`
+    )
+    if (!ok) return null
+
+    seenCheckedInIdsRef.current.add(participantId)
+    try {
+      const res = await fetch('/api/admin/manual-checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          responseId: participantId,
+          source: ADMIN_CHECKIN_SOURCE_DRAG,
+        }),
+      })
+      if (!res.ok) {
+        seenCheckedInIdsRef.current.delete(participantId)
+        toast.error('체크인 처리에 실패했습니다.')
+        return null
+      }
+      const data = (await res.json()) as { checked_in_at?: string }
+      const checkedInAt = data.checked_in_at || new Date().toISOString()
+      setParticipants((prev) => {
+        const next = prev.map((p) =>
+          p.id === participantId ? { ...p, checked_in_at: checkedInAt } : p
+        )
+        participantsRef.current = next
+        return next
+      })
+      toast.success(`${name}님 체크인 처리되었습니다.`)
+      return checkedInAt
+    } catch {
+      seenCheckedInIdsRef.current.delete(participantId)
+      toast.error('체크인 처리에 실패했습니다.')
+      return null
+    }
+  }, [])
+
+  const onDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     setActiveId(null)
 
@@ -1251,13 +1307,37 @@ export default function AdminArrangePage() {
     const activeId = active.id as string
     const overId = over.id as string
     const activeParticipant = participants.find((p) => p.id === activeId)
-
-    if (activeParticipant && !activeParticipant.checked_in_at) {
-      toast.error('QR 체크인이 완료된 참가자만 자리를 배정할 수 있습니다.', { id: 'need-checkin' })
-      return
-    }
+    if (!activeParticipant) return
 
     const isOverTable = over.data?.current?.type === 'container'
+    let assignTableLabel: string | null = null
+
+    if (isOverTable && over.data.current) {
+      const newTableLabel = over.data.current.tableLabel as string
+      if (newTableLabel !== 'unassigned') {
+        assignTableLabel = newTableLabel
+      }
+    } else {
+      const currentRoundData = rounds.find((r) => r.round === currentRound)
+      const currentRoundAssignments = currentRoundData?.assignments || []
+      const activeAssignment = currentRoundAssignments.find((a) => a.participant_id === activeId)
+      const overAssignment = currentRoundAssignments.find((a) => a.participant_id === overId)
+
+      if (overAssignment && overAssignment.table_label !== activeAssignment?.table_label) {
+        assignTableLabel = overAssignment.table_label
+      }
+    }
+
+    if (!activeParticipant.checked_in_at) {
+      if (!assignTableLabel) {
+        toast.info('미체크인 참가자는 테이블에 드롭하면 체크인 후 배정됩니다.', {
+          id: 'need-table-drop',
+        })
+        return
+      }
+      const checkedIn = await performAdminDragCheckin(activeId, activeParticipant.name)
+      if (!checkedIn) return
+    }
 
     if (isOverTable && over.data.current) {
       const newTableLabel = over.data.current.tableLabel as string
@@ -1500,10 +1580,28 @@ export default function AdminArrangePage() {
               <Download className="w-4 h-4" />
               CSV 내보내기
             </Button>
-            <Button type="button" onClick={handleSave} variant="outline" className="rounded-xl font-black gap-2">
-              <Save className="w-4 h-4" />
-              저장하기
+            <Button
+              type="button"
+              variant="default"
+              className="rounded-xl font-black gap-2"
+              disabled={
+                notifyingRound !== null ||
+                (rounds.find((r) => r.round === currentRound)?.assignments.length ?? 0) === 0
+              }
+              onClick={() => void handleNotifyParticipants(currentRound)}
+            >
+              {notifyingRound === currentRound ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Bell className="w-4 h-4" />
+              )}
+              참가자 알림
             </Button>
+            {seatingSyncing ? (
+              <span className="text-xs font-bold text-muted-foreground self-center px-1">
+                동기화 중…
+              </span>
+            ) : null}
             {debugLogs.length > 0 ? (
               <Button
                 type="button"
@@ -1668,6 +1766,8 @@ export default function AdminArrangePage() {
             <ParticipantAdder 
               onAddParticipant={handleAddParticipant}
               formId={session?.form_id || ''}
+              sessionDate={todayYYYYMMDDSeoul()}
+              selectedDay={koreanWeekdayLetterSeoul()}
               formQuestions={formQuestions}
               existingParticipantIds={participants.map(p => p.id)}
             />

@@ -2,6 +2,7 @@ import {
   extractParticipantInfoFromAnswers,
   type CoreFormQuestion,
 } from '@/lib/utils'
+import { normalizeNationality } from '@/lib/form-answer-canonical'
 import {
   fetchSeatingRowsForToday,
   tableLabelForParticipantFromDb,
@@ -22,9 +23,7 @@ export type AdminCheckinModalPayload = {
 export function normalizeNationalityLabel(raw: string): string {
   const t = raw.trim()
   if (!t || t === '—' || t === '-' || t === '?') return '—'
-  if (t.includes('외국') || /foreign/i.test(t)) return '외국인'
-  if (t.includes('한국') || /korean/i.test(t)) return '한국인'
-  return t
+  return normalizeNationality(t)
 }
 
 export function formatPaymentMethodLabel(

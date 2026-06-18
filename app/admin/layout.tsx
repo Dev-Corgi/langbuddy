@@ -18,6 +18,7 @@ import {
   MessageSquare,
   Share2,
   QrCode,
+  Users,
   LayoutGrid
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
@@ -111,6 +112,7 @@ export default function AdminLayout({
   const menuItems = [
     { href: '/admin/dashboard', label: locale === 'en' ? 'Dashboard' : '대시보드', icon: LayoutDashboard },
     ...(isSuperAdmin ? [
+      { href: '/admin/users', label: locale === 'en' ? 'Users' : '유저 관리', icon: Users },
       { href: '/admin/arrange', label: locale === 'en' ? 'Seating' : '자리 배치', icon: LayoutGrid },
       { href: '/admin/qr-scanner', label: locale === 'en' ? 'QR check-in' : 'QR 체크인', icon: QrCode },
       { href: '/admin/study', label: locale === 'en' ? 'Study' : '스터디 관리', icon: BookOpen },

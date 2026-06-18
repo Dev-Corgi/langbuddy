@@ -1,4 +1,5 @@
 import _ from 'lodash'
+import { normalizeLanguage, normalizeParticipantFields } from '@/lib/form-answer-canonical'
 
 export type SeatingAlgorithmParticipant = {
   id: string
@@ -33,6 +34,20 @@ export type RoundQualityReport = {
 
 const GREEDY_ATTEMPTS = 24
 const SWAP_ITERATIONS = 1800
+
+function normalizeSeatingParticipant(p: SeatingAlgorithmParticipant): SeatingAlgorithmParticipant {
+  const n = normalizeParticipantFields({
+    gender: p.gender,
+    nationality: p.nationality,
+    language: p.language,
+  })
+  return {
+    ...p,
+    gender: n.gender ?? p.gender,
+    nationality: n.nationality ?? p.nationality,
+    language: n.language ?? p.language,
+  }
+}
 
 function pairKey(a: string, b: string): string {
   return [a, b].sort().join('-')
@@ -309,7 +324,11 @@ export function arrangeRound(
   langTableCounts: Record<string, number>,
   previousRounds: RoundData[] = []
 ): RoundData {
-  const languageGroups = _.groupBy(participants, 'language')
+  const normalizedParticipants = participants.map(normalizeSeatingParticipant)
+  const normalizedCounts = Object.fromEntries(
+    Object.entries(langTableCounts).map(([lang, count]) => [normalizeLanguage(lang), count])
+  )
+  const languageGroups = _.groupBy(normalizedParticipants, 'language')
   const languages = Object.keys(languageGroups).sort()
 
   const newRoundAssignments: Assignment[] = []
@@ -324,7 +343,7 @@ export function arrangeRound(
       return
     }
 
-    const capacities = buildCapacitiesForLanguage(members.length, langTableCounts[lang])
+    const capacities = buildCapacitiesForLanguage(members.length, normalizedCounts[lang])
     const langTableCount = capacities.length
     const langTableLabels = Array.from({ length: langTableCount }, (_, i) =>
       String.fromCharCode(65 + totalTableIdx + i)
@@ -357,7 +376,10 @@ export function runAutoArrange(
 export function calculateAutoTableCounts(
   participants: SeatingAlgorithmParticipant[]
 ): Record<string, number> {
-  const languageGroups = _.groupBy(participants, 'language')
+  const languageGroups = _.groupBy(
+    participants.map(normalizeSeatingParticipant),
+    'language'
+  )
   const counts: Record<string, number> = {}
 
   Object.entries(languageGroups).forEach(([lang, members]) => {
@@ -375,8 +397,9 @@ export function pickBestTableForLateJoin(
   allParticipants: SeatingAlgorithmParticipant[],
   previousRounds: RoundData[]
 ): string | null {
+  const n = normalizeSeatingParticipant(newcomer)
   const matchingTables = Object.keys(tableLanguages).filter(
-    (label) => tableLanguages[label] === newcomer.language
+    (label) => normalizeLanguage(tableLanguages[label]) === n.language
   )
   if (matchingTables.length === 0) return null
 
@@ -391,7 +414,7 @@ export function pickBestTableForLateJoin(
       .filter((a) => a.table_label === label)
       .map((a) => a.participant_id)
 
-    let score = marginalAddCost(newcomer.id, tableMemberIds, memberById, seenPairs)
+    let score = marginalAddCost(n.id, tableMemberIds, memberById, seenPairs)
     score += tableMemberIds.length * 0.01
 
     if (score < bestScore) {

@@ -22,6 +22,12 @@ import { ChevronLeft, Loader2, CheckCircle2, X, MapPin, Wallet, Upload, Info } f
 import { useLocale } from "@/hooks/use-locale"
 import { i18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import {
+  canonicalizeFormAnswers,
+  canonicalizeLegacySelectedLanguage,
+  remapAnswersForLocale,
+  type FormDisplayLocale,
+} from '@/lib/form-answer-canonical'
 import { PaymentReceiptUploader } from '@/components/PaymentReceiptUploader'
 import { ApplyLoginModal } from '@/components/apply-login-modal'
 import {
@@ -544,13 +550,12 @@ export default function ApplicationFormPage() {
     fetchScheduleForDay()
   }, [selectedDay, supabase])
 
-  // Re-apply auto-fill when locale changes to sync with new language labels
+  // UI locale 전환 시 표시 라벨만 교체 (사용자가 고른 값은 유지)
   useEffect(() => {
-    if (questions.length > 0 && userData) {
-      const updatedAnswers = applyAutoFill(questions, userData)
-      setAnswers(updatedAnswers)
-    }
-  }, [locale])
+    if (questions.length === 0) return
+    const displayLocale: FormDisplayLocale = locale === 'en' ? 'en' : 'ko'
+    setAnswers((prev) => remapAnswersForLocale(questions, prev, displayLocale))
+  }, [locale, questions])
 
   const handleInputChange = (questionId: string, value: any) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }))
@@ -739,13 +744,20 @@ export default function ApplicationFormPage() {
       }
     }
 
+    const canonicalAnswers = canonicalizeFormAnswers(questions, {
+      ...answers,
+      ...(selectedLang
+        ? { _selected_language: canonicalizeLegacySelectedLanguage(selectedLang) }
+        : {}),
+    })
+
     const insertPayload: Record<string, unknown> = {
       form_id: form.id,
       qr_code: qrCode,
       payment_receipt_url: paymentReceiptUrl,
       payment_status: feeWaived || paymentMethod === 'coupon' ? null : paymentMethod === 'bank' ? 'pending' : null,
       answers: {
-        ...answers,
+        ...canonicalAnswers,
         _selected_day: selectedDay,
         _event_date: finalEventDate,
         _study_bundle_free: bundleWaived,

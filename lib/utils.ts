@@ -1,5 +1,11 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import {
+  normalizeDrink,
+  normalizeGender,
+  normalizeLanguage,
+  normalizeNationality,
+} from "@/lib/form-answer-canonical"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -72,7 +78,15 @@ export function extractParticipantInfoFromAnswers(
   const day = pick("day", ["_selected_day", "day", "요일"], [])
   const language = pick("language", ["_selected_language", "language", "언어", "선택 언어", "희망 언어"], ["언어", "Language"])
 
-  return { name, gender, nationality, kakaoId, drink, day, language }
+  return {
+    name,
+    gender: gender ? normalizeGender(gender) : gender,
+    nationality: nationality ? normalizeNationality(nationality) : nationality,
+    kakaoId,
+    drink: drink ? normalizeDrink(drink) : drink,
+    day,
+    language: language ? normalizeLanguage(language) : language,
+  }
 }
 
 /** 브라우저 `crypto.randomUUID()` 우선, 없으면 v4 형식 난수 문자열 */
