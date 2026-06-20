@@ -647,15 +647,8 @@ export default function ApplicationFormPage() {
     const bundleWaived = posting?.category === '스터디' && studyBundleFree
     const leCouponWaived =
       posting?.category === '언어교환' &&
-      useLeFreeCoupon &&
-      Number(userData?.le_reward_coupons ?? 0) > 0
+      (useLeFreeCoupon || paymentMethod === 'coupon')
     const feeWaived = bundleWaived || leCouponWaived
-
-    if (useLeFreeCoupon && posting?.category === '언어교환' && Number(userData?.le_reward_coupons ?? 0) <= 0) {
-      alert(locale === 'en' ? 'No free coupon available.' : '사용 가능한 무료 쿠폰이 없습니다.')
-      setSubmitting(false)
-      return
-    }
 
     let finalEventDate = sessionEventDate
     if (
@@ -783,13 +776,7 @@ export default function ApplicationFormPage() {
 
     if (error) {
       const errMsg = error.message || ''
-      if (errMsg.includes('no_coupon_available')) {
-        alert(
-          locale === 'en'
-            ? 'No free coupon available.'
-            : '사용 가능한 무료 쿠폰이 없습니다.'
-        )
-      } else if (errMsg.includes('coupon_not_applicable')) {
+      if (errMsg.includes('coupon_not_applicable')) {
         alert(
           locale === 'en'
             ? 'Coupons can only be used for language exchange sessions.'
@@ -840,21 +827,6 @@ export default function ApplicationFormPage() {
             .eq('id', responseData.id)
         } catch (err) {
           console.error('Error moving receipt:', err)
-        }
-      }
-
-      if ((leCouponWaived || paymentMethod === 'coupon') && user?.id) {
-        const { data: refreshedUser } = await supabase
-          .from('users')
-          .select('le_reward_coupons')
-          .eq('id', user.id)
-          .single()
-        if (refreshedUser) {
-          setUserData((prev: { le_reward_coupons?: number } | null) =>
-            prev
-              ? { ...prev, le_reward_coupons: refreshedUser.le_reward_coupons }
-              : prev
-          )
         }
       }
 
@@ -1087,8 +1059,7 @@ export default function ApplicationFormPage() {
   const studyReceiptWaived = posting?.category === '스터디' && studyBundleFree
   const leCouponWaived =
     posting?.category === '언어교환' &&
-    useLeFreeCoupon &&
-    Number(userData?.le_reward_coupons ?? 0) > 0
+    (useLeFreeCoupon || paymentMethod === 'coupon')
   const sessionWaived = studyReceiptWaived || leCouponWaived
 
   return (
@@ -1475,28 +1446,21 @@ export default function ApplicationFormPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (Number(userData?.le_reward_coupons ?? 0) > 0) {
-                          setPaymentMethod('coupon')
-                          setUseLeFreeCoupon(true)
-                        } else {
-                          alert(locale === 'en' ? 'No available coupons.' : '사용 가능한 쿠폰이 없습니다.')
-                        }
+                        setPaymentMethod('coupon')
+                        setUseLeFreeCoupon(true)
                       }}
-                      disabled={Number(userData?.le_reward_coupons ?? 0) === 0}
                       className={cn(
                         "flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 transition-all group",
                         paymentMethod === "coupon"
                           ? "bg-emerald-500 border-emerald-500 text-white shadow-lg scale-[1.02]"
-                          : Number(userData?.le_reward_coupons ?? 0) === 0
-                            ? "bg-muted border-border text-muted-foreground cursor-not-allowed"
-                            : "bg-emerald-50/50 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                          : "bg-emerald-50/50 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                       )}
                     >
                       <span className="text-lg font-black">{locale === 'en' ? 'Use Coupon' : '쿠폰 사용'}</span>
-                      <span className={cn("text-xs font-medium", paymentMethod === "coupon" ? "text-white/80" : Number(userData?.le_reward_coupons ?? 0) === 0 ? "text-muted-foreground" : "text-emerald-600")}>
+                      <span className={cn("text-xs font-medium", paymentMethod === "coupon" ? "text-white/80" : "text-emerald-600")}>
                         {locale === 'en'
-                          ? `Available coupons: ${userData?.le_reward_coupons ?? 0}`
-                          : `사용가능 쿠폰: ${userData?.le_reward_coupons ?? 0}장`}
+                          ? 'Bring your physical coupon to the venue'
+                          : '당일 실물 쿠폰 지참 (현장 확인)'}
                       </span>
                     </button>
                   )}
@@ -1542,8 +1506,8 @@ export default function ApplicationFormPage() {
                 <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 animate-in slide-in-from-top-2 duration-300">
                   <p className="text-sm text-emerald-700 font-bold leading-relaxed">
                     {locale === 'en'
-                      ? 'Your free coupon will be applied. No payment or receipt upload needed.'
-                      : '무료 쿠폰이 적용됩니다. 결제나 영수증 업로드가 필요하지 않습니다.'}
+                      ? 'Your physical coupon will be verified at the venue. No payment or receipt needed.'
+                      : '실물 쿠폰은 현장에서 확인합니다. 결제·영수증은 필요 없습니다.'}
                   </p>
                 </div>
               )}

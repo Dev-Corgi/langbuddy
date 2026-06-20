@@ -37,7 +37,6 @@ export default function AdminUserDetailPage() {
   const [nationality, setNationality] = useState<'한국인' | '외국인'>('한국인')
   const [kakaoId, setKakaoId] = useState('')
   const [stampProgress, setStampProgress] = useState(0)
-  const [rewardCoupons, setRewardCoupons] = useState(0)
   const [onboardingCompleted, setOnboardingCompleted] = useState(false)
 
   useEffect(() => {
@@ -67,7 +66,6 @@ export default function AdminUserDetailPage() {
     setNationality((u.nationality === '외국인' ? '외국인' : '한국인') as '한국인' | '외국인')
     setKakaoId(u.kakao_id ?? '')
     setStampProgress(Number(u.le_stamp_progress ?? 0))
-    setRewardCoupons(Number(u.le_reward_coupons ?? 0))
     setOnboardingCompleted(!!u.onboarding_completed)
   }, [])
 
@@ -110,7 +108,6 @@ export default function AdminUserDetailPage() {
           nationality,
           kakao_id: kakaoId.trim(),
           le_stamp_progress: stampProgress,
-          le_reward_coupons: rewardCoupons,
           onboarding_completed: onboardingCompleted,
         }),
       })
@@ -270,69 +267,48 @@ export default function AdminUserDetailPage() {
       <Card className="rounded-[24px] border-none shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="text-lg font-black">
-            {isEn ? 'Coupons & Stamps' : '쿠폰 · 스탬프 현황'}
+            {isEn ? 'Language exchange stamps' : '언어교환 스탬프'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
           {editing ? (
-            <>
-              <div className="space-y-2">
-                <Label className="font-bold">
-                  {isEn ? 'Language exchange stamps (0–9)' : '언어교환 스탬프 (0–9)'}
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  max={9}
-                  value={stampProgress}
-                  onChange={(e) => setStampProgress(Math.min(9, Math.max(0, Number(e.target.value) || 0)))}
-                  className="h-12 rounded-xl"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="font-bold">
-                  {isEn ? 'Free coupons' : '무료 쿠폰 보유'}
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={rewardCoupons}
-                  onChange={(e) => setRewardCoupons(Math.max(0, Number(e.target.value) || 0))}
-                  className="h-12 rounded-xl"
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <p className="text-sm font-bold text-muted-foreground mb-3">
-                  {isEn ? 'Stamp progress (10 = 1 coupon)' : '스탬프 진행 (10개 = 쿠폰 1장)'}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {Array.from({ length: stampSlots }).map((_, i) => (
-                    <div
-                      key={i}
-                      className={cn(
-                        'size-8 rounded-full border-2 flex items-center justify-center text-xs font-black',
-                        i < stampFill
-                          ? 'bg-primary border-primary text-primary-foreground'
-                          : 'border-border text-muted-foreground'
-                      )}
-                    >
-                      {i + 1}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-sm font-bold mt-3 text-foreground">
-                  {stampFill}/9 {isEn ? 'toward next coupon' : '다음 쿠폰까지'}
-                </p>
-              </div>
-              <InfoRow
-                label={isEn ? 'Available coupons' : '보유 무료 쿠폰'}
-                value={`${user.le_reward_coupons ?? 0}${isEn ? '' : '장'}`}
-                highlight
+            <div className="space-y-2">
+              <Label className="font-bold">
+                {isEn ? 'Stamp count (0–9, 10→0 at venue)' : '스탬프 (0–9)'}
+              </Label>
+              <Input
+                type="number"
+                min={0}
+                max={9}
+                value={stampProgress}
+                onChange={(e) => setStampProgress(Math.min(9, Math.max(0, Number(e.target.value) || 0)))}
+                className="h-12 rounded-xl"
               />
-            </>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm font-bold text-muted-foreground mb-3">
+                {isEn ? 'Progress toward physical coupon (10 stamps)' : '실물 쿠폰까지 (10개)'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: stampSlots }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      'size-8 rounded-full border-2 flex items-center justify-center text-xs font-black',
+                      i < stampFill
+                        ? 'bg-primary border-primary text-primary-foreground'
+                        : 'border-border text-muted-foreground'
+                    )}
+                  >
+                    {i + 1}
+                  </div>
+                ))}
+              </div>
+              <p className="text-sm font-bold mt-3 text-foreground">
+                {stampFill}/10 {isEn ? 'stamps' : '개'}
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -49,7 +49,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const admin = createSupabaseAdmin()
     const { data: existing, error: loadErr } = await admin
       .from('form_responses')
-      .select('id, answers, checked_in_at')
+      .select('id, answers, checked_in_at, created_at')
       .eq('id', id)
       .single()
 
@@ -88,7 +88,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         }),
       })
       .eq('id', id)
-      .select('id, answers, checked_in_at')
+      .select('id, answers, checked_in_at, created_at')
       .single()
 
     if (error || !row) {

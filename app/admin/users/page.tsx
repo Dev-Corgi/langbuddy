@@ -80,8 +80,8 @@ function UsersListContent() {
       <PageHeader
         title="유저 관리"
         titleEn="User Management"
-        description="가입 유저 목록과 프로필·쿠폰 정보를 관리합니다."
-        descriptionEn="Manage member profiles and coupon status."
+        description="가입 유저 목록과 프로필·스탬프 정보를 관리합니다."
+        descriptionEn="Manage member profiles and stamp progress."
         backPath="/admin/dashboard"
       />
 
@@ -134,9 +134,7 @@ function UsersListContent() {
                       {u.kakao_id ? `Kakao: ${u.kakao_id}` : (isEn ? 'No Kakao ID' : '카카오 ID 없음')}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {isEn ? 'Coupons' : '쿠폰'}: {u.le_reward_coupons ?? 0}
-                      {' · '}
-                      {isEn ? 'Stamps' : '스탬프'}: {u.le_stamp_progress ?? 0}/9
+                      {isEn ? 'Stamps' : '스탬프'}: {u.le_stamp_progress ?? 0}/10
                     </p>
                   </div>
                   <ChevronRight className="size-5 text-muted-foreground shrink-0" />

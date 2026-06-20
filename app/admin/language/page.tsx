@@ -7,27 +7,10 @@ import { createClient } from '@/lib/supabase'
 import { useLocale } from '@/hooks/use-locale'
 import { buildAutoRecurringFormTitles } from '@/lib/session-event-date'
 import { 
-  ChevronLeft,
   Loader2,
   Save,
-  Info,
-  Clock,
-  MapPin,
-  User as UserIcon,
-  Upload,
   ClipboardList,
-  Plus,
-  Minus,
   Users,
-  CreditCard,
-  CheckCircle2,
-  ImageIcon,
-  Clock as ClockIcon,
-  MessageCircle,
-  Download,
-  CheckCircle,
-  X,
-  Trash2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -40,6 +23,7 @@ import { HostInfoCard } from '@/components/admin/host-info-card'
 import { useFormManager } from '@/hooks/use-form-manager'
 import { FormData as FormBuilderData } from '@/components/admin/form-builder'
 import { ApplyMethodCard } from '@/components/admin/apply-method-card'
+import { LanguageResponsesPanel } from '@/components/admin/language-responses-panel'
 import { BankAccountCard } from '@/components/admin/bank-account-card'
 import { fetchFormBuilderData, buildDefaultLanguageFormData } from '@/lib/load-form-data'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -569,152 +553,16 @@ function LanguageManagementContent() {
                           </p>
                         </div>
                       ) : (
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-bold text-muted-foreground">
-                              {locale === 'en' ? `Total ${responses.length} responses` : `총 ${responses.length}건의 응답`}
-                            </p>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => fetchResponses(currentData.form_id)}
-                              className="rounded-lg"
-                            >
-                              <Loader2 className="w-4 h-4 mr-2" />
-                              {locale === 'en' ? 'Refresh' : '새로고침'}
-                            </Button>
-                          </div>
-
-                          <div className="grid gap-4">
-                            {responses.map((res, idx) => (
-                              <Card key={res.id} className="border border-border rounded-2xl overflow-hidden">
-                                <CardHeader className="bg-muted/30 px-6 py-4">
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                      <UserIcon className="w-5 h-5 text-primary shrink-0" />
-                                      <span className="font-black text-foreground">
-                                        {locale === 'en' ? `Response #${responses.length - idx}` : `응답 #${responses.length - idx}`}
-                                      </span>
-                                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                        {new Date(res.created_at).toLocaleString()}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-2 shrink-0">
-                                      {res.answers?._payment_method === '계좌송금' && (
-                                        <div className={cn(
-                                          "px-2 py-1 rounded-full text-xs font-black flex items-center gap-1",
-                                          res.payment_status === 'confirmed'
-                                            ? "bg-emerald-100 text-emerald-700"
-                                            : "bg-amber-100 text-amber-700"
-                                        )}>
-                                          {res.payment_status === 'confirmed' ? (
-                                            <><CheckCircle2 className="w-3 h-3" />{locale === 'en' ? 'Confirmed' : '확인됨'}</>
-                                          ) : (
-                                            <><ClockIcon className="w-3 h-3" />{locale === 'en' ? 'Pending' : '대기중'}</>
-                                          )}
-                                        </div>
-                                      )}
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-9 w-9 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                        disabled={deletingResponseId === res.id}
-                                        title={locale === 'en' ? 'Delete application' : '신청 삭제'}
-                                        onClick={() => handleCancelResponse(res)}
-                                      >
-                                        {deletingResponseId === res.id ? (
-                                          <Loader2 className="w-4 h-4 animate-spin" />
-                                        ) : (
-                                          <Trash2 className="w-4 h-4" />
-                                        )}
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </CardHeader>
-                                <CardContent className="p-6 space-y-4">
-                                  {/* Payment Info */}
-                                  {res.answers?._payment_method && (
-                                    <div className="p-4 rounded-xl bg-muted/50 space-y-3">
-                                      <div className="flex items-center gap-2 text-sm font-bold">
-                                        <CreditCard className="w-4 h-4 text-primary" />
-                                        {locale === 'en' ? 'Payment' : '결제 정보'}
-                                      </div>
-                                      <div className="grid grid-cols-2 gap-4 text-sm">
-                                        <div>
-                                          <span className="text-muted-foreground">{locale === 'en' ? 'Method: ' : '방식: '}</span>
-                                          <span className="font-bold">{res.answers._payment_method}</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-muted-foreground">{locale === 'en' ? 'Status: ' : '상태: '}</span>
-                                          <span className={cn(
-                                            "font-bold",
-                                            res.payment_status === 'confirmed' ? "text-emerald-600" : "text-amber-600"
-                                          )}>
-                                            {res.payment_status === 'confirmed'
-                                              ? (locale === 'en' ? 'Confirmed' : '확인 완료')
-                                              : (locale === 'en' ? 'Pending' : '확인 대기')
-                                            }
-                                          </span>
-                                        </div>
-                                      </div>
-                                      {/* Payment Receipt */}
-                                      {res.payment_receipt_url && (
-                                        <div className="pt-2">
-                                          <p className="text-xs text-muted-foreground mb-2">{locale === 'en' ? 'Receipt' : '입금 영수증'}</p>
-                                          <a
-                                            href={res.payment_receipt_url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="block relative aspect-video max-w-[200px] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
-                                          >
-                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                            <img
-                                              src={res.payment_receipt_url}
-                                              alt="Payment receipt"
-                                              className="w-full h-full object-cover"
-                                            />
-                                          </a>
-                                        </div>
-                                      )}
-                                      {/* Confirm Payment Button */}
-                                      {res.answers._payment_method === '계좌송금' && res.payment_status !== 'confirmed' && (
-                                        <Button
-                                          onClick={() => handleConfirmPayment(res)}
-                                          disabled={confirmingId === res.id}
-                                          size="sm"
-                                          className="mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-                                        >
-                                          {confirmingId === res.id ? (
-                                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{locale === 'en' ? 'Processing...' : '처리중...'}</>
-                                          ) : (
-                                            <><CheckCircle2 className="w-4 h-4 mr-2" />{locale === 'en' ? 'Confirm' : '확인'}</>
-                                          )}
-                                        </Button>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* Answers */}
-                                  <div className="grid gap-3">
-                                    {formQuestions.map((q) => {
-                                      const answer = res.answers?.[q.id];
-                                      if (!answer) return null;
-                                      return (
-                                        <div key={q.id} className="flex flex-col gap-1">
-                                          <span className="text-xs font-bold text-muted-foreground">{q.question_text}</span>
-                                          <span className="text-sm font-bold text-foreground">
-                                            {Array.isArray(answer) ? answer.join(', ') : answer}
-                                          </span>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            ))}
-                          </div>
-                        </div>
+                        <LanguageResponsesPanel
+                          locale={locale === 'en' ? 'en' : 'ko'}
+                          responses={responses}
+                          formQuestions={formQuestions}
+                          confirmingId={confirmingId}
+                          deletingResponseId={deletingResponseId}
+                          onRefresh={() => fetchResponses(currentData.form_id)}
+                          onConfirmPayment={handleConfirmPayment}
+                          onCancelResponse={handleCancelResponse}
+                        />
                       )}
                     </TabsContent>
                   </Tabs>

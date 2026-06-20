@@ -37,6 +37,25 @@ import {
   mapFormResponseToParticipant,
   type ArrangedParticipant,
 } from '@/lib/walk-in-participant'
+
+function participantRecencyMs(p: ArrangedParticipant): { checkedIn: number; created: number } {
+  const checkedIn = p.checked_in_at ? Date.parse(p.checked_in_at) : 0
+  const created = p.created_at ? Date.parse(p.created_at) : checkedIn
+  return {
+    checkedIn: Number.isFinite(checkedIn) ? checkedIn : 0,
+    created: Number.isFinite(created) ? created : 0,
+  }
+}
+
+/** 미배정 목록: 최근 체크인/추가 순 (현장 walk-in·운영자 드래그 체크인 포함) */
+function sortParticipantsByRecencyDesc(list: ArrangedParticipant[]): ArrangedParticipant[] {
+  return [...list].sort((a, b) => {
+    const aa = participantRecencyMs(a)
+    const bb = participantRecencyMs(b)
+    if (bb.checkedIn !== aa.checkedIn) return bb.checkedIn - aa.checkedIn
+    return bb.created - aa.created
+  })
+}
 import {
   loadSeatingLiveState,
   persistSeatingLive,
@@ -391,6 +410,7 @@ export default function AdminArrangePage() {
   const showCheckinModalForResponse = useCallback(
     async (row: {
       id: string
+      user_id?: string | null
       answers?: Record<string, unknown> | null
       payment_status?: string | null
       checked_in_at?: string | null
@@ -601,6 +621,7 @@ export default function AdminArrangePage() {
 
           const row = payload.new as {
             id?: string
+            user_id?: string | null
             answers?: Record<string, unknown> | null
             payment_status?: string | null
             checked_in_at?: string | null
@@ -826,11 +847,12 @@ export default function AdminArrangePage() {
 
   const unassignedForCurrentRound = useMemo(() => {
     const assignments = rounds.find((r) => r.round === currentRound)?.assignments || []
-    return participants.filter(
+    const unassigned = participants.filter(
       (p) =>
         Boolean(p.checked_in_at) &&
         !assignments.some((a) => a.participant_id === p.id)
     )
+    return sortParticipantsByRecencyDesc(unassigned)
   }, [participants, rounds, currentRound])
 
   const openConfigForRound = useCallback(

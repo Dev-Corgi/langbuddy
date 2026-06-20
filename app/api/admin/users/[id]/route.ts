@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAdminUser } from '@/lib/admin-api-auth'
 import type { AdminUserUpdatePayload } from '@/lib/admin-user-types'
+import { sliderStampToStored } from '@/lib/le-stamp'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -88,10 +89,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     if (body.le_stamp_progress !== undefined) {
-      const progress = Number(body.le_stamp_progress)
-      if (!Number.isInteger(progress) || progress < 0 || progress > 9) {
-        return NextResponse.json({ error: 'invalid_stamp_progress' }, { status: 400 })
-      }
+      const progress = sliderStampToStored(Number(body.le_stamp_progress))
       patch.le_stamp_progress = progress
     }
 

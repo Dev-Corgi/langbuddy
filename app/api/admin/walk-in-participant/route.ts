@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         user_id: null,
         qr_code: null,
       })
-      .select('id, answers, checked_in_at')
+      .select('id, answers, checked_in_at, created_at')
       .single()
 
     if (error || !row) {

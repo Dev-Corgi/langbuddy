@@ -12,21 +12,15 @@ import { cn } from '@/lib/utils'
 type Props = {
   title: string
   hint: string
-  couponsLabel: string
-  couponCountLabel: string
   stampSlots: number
   filled: number
-  coupons: number
 }
 
 export function StampRewardsCard({
   title,
   hint,
-  couponsLabel,
-  couponCountLabel,
   stampSlots,
   filled,
-  coupons,
 }: Props) {
   const progressPct = Math.min(100, Math.round((filled / stampSlots) * 100))
 
@@ -64,9 +58,6 @@ export function StampRewardsCard({
             </div>
           ))}
         </div>
-        <p className="text-sm font-semibold text-foreground">
-          {couponsLabel}: <span className="text-primary">{coupons}</span> {couponCountLabel}
-        </p>
       </CardContent>
     </Card>
   )

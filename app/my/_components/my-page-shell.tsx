@@ -25,7 +25,6 @@ export function MyPageShell() {
   const greetingName = userRow?.name || user?.email?.split('@')[0] || ''
   const stampSlots = 10
   const stampFill = Math.min(stampSlots, Number(userRow?.le_stamp_progress ?? 0))
-  const coupons = Number(userRow?.le_reward_coupons ?? 0)
 
   const weekLabels = isEn
     ? (['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const)
@@ -54,11 +53,8 @@ export function MyPageShell() {
           <StampRewardsCard
             title={t.stampTitle}
             hint={t.stampHint}
-            couponsLabel={t.coupons}
-            couponCountLabel={t.couponCount}
             stampSlots={stampSlots}
             filled={stampFill}
-            coupons={coupons}
           />
           <ScheduleCalendarCard
             title={t.calendarTitle}

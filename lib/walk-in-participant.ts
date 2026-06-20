@@ -44,6 +44,8 @@ export type ArrangedParticipant = {
   nationality: '한국인' | '외국인' | string
   language: string
   checked_in_at: string | null
+  /** form_responses.created_at — 미배정 목록 정렬 보조 */
+  created_at?: string | null
   isWalkIn?: boolean
 }
 
@@ -54,6 +56,7 @@ export function mapFormResponseToParticipant(
     id: string
     answers?: Record<string, unknown> | null
     checked_in_at?: string | null
+    created_at?: string | null
   },
   questions: CoreFormQuestion[] = []
 ): ArrangedParticipant {
@@ -72,6 +75,7 @@ export function mapFormResponseToParticipant(
     nationality: normalized.nationality || '?',
     language: normalized.language || '-',
     checked_in_at: row.checked_in_at ?? null,
+    created_at: row.created_at ?? null,
     isWalkIn: isWalkInAnswers(answers) || undefined,
   }
 }
