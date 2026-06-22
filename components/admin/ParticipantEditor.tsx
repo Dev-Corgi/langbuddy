@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
+import { StampProgressEditor } from '@/components/admin/stamp-progress-editor'
 
 type Participant = {
   id: string
@@ -14,6 +15,7 @@ type Participant = {
   nationality: '한국인' | '외국인' | string
   language: string
   checked_in_at: string | null
+  userId?: string | null
 }
 
 interface ParticipantEditorProps {
@@ -178,6 +180,17 @@ export function ParticipantEditor({
                 ))}
               </div>
             </div>
+
+            {participant.userId ? (
+              <StampProgressEditor
+                userId={participant.userId}
+                resetKey={participant.id}
+              />
+            ) : (
+              <p className="text-xs font-medium text-muted-foreground text-center py-1">
+                비회원(현장 추가) — 스탬프 없음
+              </p>
+            )}
 
             {onDelete ? (
               <Button

@@ -46,6 +46,8 @@ export type ArrangedParticipant = {
   checked_in_at: string | null
   /** form_responses.created_at — 미배정 목록 정렬 보조 */
   created_at?: string | null
+  /** 회원 신청 시 profiles 연결 */
+  userId?: string | null
   isWalkIn?: boolean
 }
 
@@ -54,6 +56,7 @@ export type WalkInParticipant = ArrangedParticipant & { isWalkIn: true }
 export function mapFormResponseToParticipant(
   row: {
     id: string
+    user_id?: string | null
     answers?: Record<string, unknown> | null
     checked_in_at?: string | null
     created_at?: string | null
@@ -76,6 +79,7 @@ export function mapFormResponseToParticipant(
     language: normalized.language || '-',
     checked_in_at: row.checked_in_at ?? null,
     created_at: row.created_at ?? null,
+    userId: row.user_id ?? null,
     isWalkIn: isWalkInAnswers(answers) || undefined,
   }
 }

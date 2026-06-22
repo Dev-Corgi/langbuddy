@@ -82,6 +82,8 @@ import {
   DragEndEvent,
   DragStartEvent,
   useDroppable,
+  pointerWithin,
+  type CollisionDetection,
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -297,9 +299,16 @@ function TableContainer({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                className="h-8 w-8 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 relative z-50"
                 title="테이블 삭제"
-                onClick={onDelete}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  e.preventDefault()
+                  onDelete()
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                }}
               >
                 <Trash2 className="w-4 h-4" />
               </Button>
@@ -499,6 +508,7 @@ export default function AdminArrangePage() {
   const readyForPersistRef = useRef(false)
   const applyingRemoteSeatingRef = useRef(false)
   const suppressRemoteReloadRef = useRef(false)
+  const pendingPersistAfterRemoteRef = useRef(false)
   const participantsRef = useRef<Participant[]>([])
   const roundsRef = useRef<RoundData[]>([])
   const langTableCountsRef = useRef<Record<string, number>>({})
@@ -617,6 +627,20 @@ export default function AdminArrangePage() {
     }, 350)
   }, [supabase])
 
+  const finishApplyingRemoteSeating = useCallback(() => {
+    applyingRemoteSeatingRef.current = false
+    if (pendingPersistAfterRemoteRef.current) {
+      pendingPersistAfterRemoteRef.current = false
+      scheduleSeatingPersistRef.current?.()
+    }
+  }, [])
+
+  const markLocalSeatingEdit = useCallback(() => {
+    suppressRemoteReloadRef.current = true
+  }, [])
+
+  const scheduleSeatingPersistRef = useRef<(() => void) | null>(null)
+
   const reloadSeatingFromServer = useCallback(async () => {
     const s = sessionRef.current
     if (!s?.id) return
@@ -651,9 +675,9 @@ export default function AdminArrangePage() {
       setLangTableCounts(loadedCounts)
     }
     requestAnimationFrame(() => {
-      applyingRemoteSeatingRef.current = false
+      finishApplyingRemoteSeating()
     })
-  }, [supabase])
+  }, [supabase, finishApplyingRemoteSeating])
 
   const runSeatingPersist = useCallback(async () => {
     const s = sessionRef.current
@@ -686,12 +710,17 @@ export default function AdminArrangePage() {
       setSeatingSyncing(false)
       setTimeout(() => {
         suppressRemoteReloadRef.current = false
-      }, 1200)
+      }, 2000)
     }
   }, [supabase])
 
   const scheduleSeatingPersist = useCallback(() => {
-    if (!readyForPersistRef.current || applyingRemoteSeatingRef.current) return
+    if (!readyForPersistRef.current) return
+    if (applyingRemoteSeatingRef.current) {
+      pendingPersistAfterRemoteRef.current = true
+      return
+    }
+    markLocalSeatingEdit()
     if (seatingPersistTimerRef.current) {
       clearTimeout(seatingPersistTimerRef.current)
     }
@@ -699,10 +728,16 @@ export default function AdminArrangePage() {
       seatingPersistTimerRef.current = null
       void runSeatingPersist()
     }, 800)
-  }, [runSeatingPersist])
+  }, [runSeatingPersist, markLocalSeatingEdit])
+
+  scheduleSeatingPersistRef.current = scheduleSeatingPersist
 
   useEffect(() => {
-    if (!readyForPersistRef.current || applyingRemoteSeatingRef.current || !session?.id) return
+    if (!readyForPersistRef.current || !session?.id) return
+    if (applyingRemoteSeatingRef.current) {
+      pendingPersistAfterRemoteRef.current = true
+      return
+    }
     scheduleSeatingPersist()
   }, [rounds, langTableCounts, session?.id, scheduleSeatingPersist])
 
@@ -725,6 +760,16 @@ export default function AdminArrangePage() {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   )
+
+  const seatingCollisionDetection = useCallback<CollisionDetection>((args) => {
+    const pointerHits = pointerWithin(args)
+    if (pointerHits.length > 0) {
+      const containerHit = pointerHits.find((c) => c.data?.current?.type === 'container')
+      if (containerHit) return [containerHit]
+      return pointerHits
+    }
+    return closestCenter(args)
+  }, [])
 
   useEffect(() => {
     void fetchData()
@@ -950,7 +995,7 @@ export default function AdminArrangePage() {
         applyingRemoteSeatingRef.current = true
         setRounds(loadedRounds)
         requestAnimationFrame(() => {
-          applyingRemoteSeatingRef.current = false
+          finishApplyingRemoteSeating()
           readyForPersistRef.current = true
         })
       } else {
@@ -1060,7 +1105,7 @@ export default function AdminArrangePage() {
 
   const handleAddTable = useCallback(
     (roundNum: number, language: string) => {
-      const roundData = rounds.find((r) => r.round === roundNum)
+      const roundData = roundsRef.current.find((r) => r.round === roundNum)
       if (!roundData) return
 
       const result = addTableToRound(roundData, language)
@@ -1069,19 +1114,20 @@ export default function AdminArrangePage() {
         return
       }
 
-      const updatedRounds = rounds.map((r) => (r.round === roundNum ? result.roundData : r))
-      setRounds(updatedRounds)
-      setLangTableCounts((prev) =>
-        mergeLangTableCounts(prev, result.roundData.tableLanguages ?? {})
+      markLocalSeatingEdit()
+      const updated = roundsRef.current.map((r) => (r.round === roundNum ? result.roundData : r))
+      setLangTableCounts(
+        mergeLangTableCounts(langTableCountsRef.current, result.roundData.tableLanguages ?? {})
       )
+      setRounds(updated)
       toast.success(`${result.label} 테이블이 추가되었습니다. (${language})`)
     },
-    [rounds]
+    [markLocalSeatingEdit]
   )
 
   const handleDeleteTable = useCallback(
     (roundNum: number, label: string) => {
-      const roundData = rounds.find((r) => r.round === roundNum)
+      const roundData = roundsRef.current.find((r) => r.round === roundNum)
       if (!roundData) return
 
       const atTable = roundData.assignments.filter((a) => a.table_label === label).length
@@ -1096,9 +1142,10 @@ export default function AdminArrangePage() {
         roundData,
         label
       )
-      const updatedRounds = rounds.map((r) => (r.round === roundNum ? nextRound : r))
-      setRounds(updatedRounds)
-      setLangTableCounts(langTableCountsFromRounds(updatedRounds))
+      markLocalSeatingEdit()
+      const updated = roundsRef.current.map((r) => (r.round === roundNum ? nextRound : r))
+      setLangTableCounts(langTableCountsFromRounds(updated))
+      setRounds(updated)
 
       if (removedAssignmentCount > 0) {
         toast.success(`${label} 테이블 삭제 · ${removedAssignmentCount}명 미배정`)
@@ -1106,7 +1153,7 @@ export default function AdminArrangePage() {
         toast.success(`${label} 테이블이 삭제되었습니다.`)
       }
     },
-    [rounds]
+    [markLocalSeatingEdit]
   )
 
   const handleExportRoundCsv = useCallback(
@@ -1508,6 +1555,24 @@ export default function AdminArrangePage() {
     }
   }, [])
 
+  const applyRoundAssignmentUpdate = useCallback(
+    (targetRound: number, updater: (assignments: RoundData['assignments']) => RoundData['assignments']) => {
+      markLocalSeatingEdit()
+      setRounds((prev) => {
+        const newRounds = [...prev]
+        const roundIdx = newRounds.findIndex((r) => r.round === targetRound)
+        if (roundIdx === -1) return prev
+        const currentAssignments = [...(newRounds[roundIdx].assignments || [])]
+        newRounds[roundIdx] = {
+          ...newRounds[roundIdx],
+          assignments: updater(currentAssignments),
+        }
+        return newRounds
+      })
+    },
+    [markLocalSeatingEdit]
+  )
+
   const onDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     setActiveId(null)
@@ -1516,8 +1581,14 @@ export default function AdminArrangePage() {
 
     const activeId = active.id as string
     const overId = over.id as string
-    const activeParticipant = participants.find((p) => p.id === activeId)
+    const activeParticipant = participantsRef.current.find((p) => p.id === activeId)
     if (!activeParticipant) return
+
+    const overContainerRound =
+      over.data?.current?.type === 'container' && over.data.current.round != null
+        ? Number(over.data.current.round)
+        : currentRound
+    const targetRound = Number.isFinite(overContainerRound) ? overContainerRound : currentRound
 
     const isOverTable = over.data?.current?.type === 'container'
     let assignTableLabel: string | null = null
@@ -1528,7 +1599,7 @@ export default function AdminArrangePage() {
         assignTableLabel = newTableLabel
       }
     } else {
-      const currentRoundData = rounds.find((r) => r.round === currentRound)
+      const currentRoundData = roundsRef.current.find((r) => r.round === targetRound)
       const currentRoundAssignments = currentRoundData?.assignments || []
       const activeAssignment = currentRoundAssignments.find((a) => a.participant_id === activeId)
       const overAssignment = currentRoundAssignments.find((a) => a.participant_id === overId)
@@ -1553,30 +1624,28 @@ export default function AdminArrangePage() {
       const newTableLabel = over.data.current.tableLabel as string
 
       if (newTableLabel === 'unassigned') {
-        setRounds((prev) => {
-          const newRounds = [...prev]
-          const roundIdx = newRounds.findIndex((r) => r.round === currentRound)
-          const currentAssignments = [...(newRounds[roundIdx].assignments || [])]
+        applyRoundAssignmentUpdate(targetRound, (currentAssignments) => {
           const activeIdx = currentAssignments.findIndex((a) => a.participant_id === activeId)
           if (activeIdx !== -1) {
             currentAssignments.splice(activeIdx, 1)
           }
-          newRounds[roundIdx] = { ...newRounds[roundIdx], assignments: currentAssignments }
-          return newRounds
+          return currentAssignments
         })
       } else {
-        const currentRoundData = rounds.find((r) => r.round === currentRound)
+        const currentRoundData = roundsRef.current.find((r) => r.round === targetRound)
         const tableLang = currentRoundData?.tableLanguages?.[newTableLabel]
+        const participant =
+          participantsRef.current.find((p) => p.id === activeId) ?? activeParticipant
 
-        if (tableLang && activeParticipant && tableLang !== activeParticipant.language) {
-          toast.error(`언어가 다릅니다: ${activeParticipant.language} 참가자는 ${tableLang} 테이블에 앉을 수 없습니다.`, {
+        if (tableLang && tableLang !== participant.language) {
+          toast.error(`언어가 다릅니다: ${participant.language} 참가자는 ${tableLang} 테이블에 앉을 수 없습니다.`, {
             id: 'lang-mismatch',
           })
           return
         }
 
-        const previousRoundsForDrag = rounds.filter(
-          (r) => r.round < currentRound && r.assignments.length > 0
+        const previousRoundsForDrag = roundsRef.current.filter(
+          (r) => r.round < targetRound && r.assignments.length > 0
         )
         const { maxReunions } = reunionCountIfJoinedTable(
           activeId,
@@ -1591,23 +1660,21 @@ export default function AdminArrangePage() {
           )
         }
 
-        setRounds((prev) => {
-          const newRounds = [...prev]
-          const roundIdx = newRounds.findIndex((r) => r.round === currentRound)
-          const currentAssignments = [...(newRounds[roundIdx].assignments || [])]
+        applyRoundAssignmentUpdate(targetRound, (currentAssignments) => {
           const activeIdx = currentAssignments.findIndex((a) => a.participant_id === activeId)
-
           if (activeIdx !== -1) {
-            currentAssignments[activeIdx] = { ...currentAssignments[activeIdx], table_label: newTableLabel }
+            currentAssignments[activeIdx] = {
+              ...currentAssignments[activeIdx],
+              table_label: newTableLabel,
+            }
           } else {
             currentAssignments.push({ participant_id: activeId, table_label: newTableLabel })
           }
-          newRounds[roundIdx] = { ...newRounds[roundIdx], assignments: currentAssignments }
-          return newRounds
+          return currentAssignments
         })
       }
     } else {
-      const currentRoundData = rounds.find((r) => r.round === currentRound)
+      const currentRoundData = roundsRef.current.find((r) => r.round === targetRound)
       const currentRoundAssignments = currentRoundData?.assignments || []
       const activeAssignment = currentRoundAssignments.find((a) => a.participant_id === activeId)
       const overAssignment = currentRoundAssignments.find((a) => a.participant_id === overId)
@@ -1615,16 +1682,18 @@ export default function AdminArrangePage() {
       if (overAssignment && overAssignment.table_label !== activeAssignment?.table_label) {
         const newTableLabel = overAssignment.table_label
         const tableLang = currentRoundData?.tableLanguages?.[newTableLabel]
+        const participant =
+          participantsRef.current.find((p) => p.id === activeId) ?? activeParticipant
 
-        if (tableLang && activeParticipant && tableLang !== activeParticipant.language) {
-          toast.error(`언어가 다릅니다: ${activeParticipant.language} 참가자는 ${tableLang} 테이블에 앉을 수 없습니다.`, {
+        if (tableLang && tableLang !== participant.language) {
+          toast.error(`언어가 다릅니다: ${participant.language} 참가자는 ${tableLang} 테이블에 앉을 수 없습니다.`, {
             id: 'lang-mismatch',
           })
           return
         }
 
-        const previousRoundsForDrag = rounds.filter(
-          (r) => r.round < currentRound && r.assignments.length > 0
+        const previousRoundsForDrag = roundsRef.current.filter(
+          (r) => r.round < targetRound && r.assignments.length > 0
         )
         const { maxReunions } = reunionCountIfJoinedTable(
           activeId,
@@ -1639,31 +1708,25 @@ export default function AdminArrangePage() {
           )
         }
 
-        setRounds((prev) => {
-          const newRounds = [...prev]
-          const roundIdx = newRounds.findIndex((r) => r.round === currentRound)
-          const currentAssignments = [...(newRounds[roundIdx].assignments || [])]
+        applyRoundAssignmentUpdate(targetRound, (currentAssignments) => {
           const activeIdx = currentAssignments.findIndex((a) => a.participant_id === activeId)
-
           if (activeIdx !== -1) {
-            currentAssignments[activeIdx] = { ...currentAssignments[activeIdx], table_label: newTableLabel }
+            currentAssignments[activeIdx] = {
+              ...currentAssignments[activeIdx],
+              table_label: newTableLabel,
+            }
           } else {
             currentAssignments.push({ participant_id: activeId, table_label: newTableLabel })
           }
-          newRounds[roundIdx] = { ...newRounds[roundIdx], assignments: currentAssignments }
-          return newRounds
+          return currentAssignments
         })
       } else if (!overAssignment && activeAssignment) {
-        setRounds((prev) => {
-          const newRounds = [...prev]
-          const roundIdx = newRounds.findIndex((r) => r.round === currentRound)
-          const currentAssignments = [...(newRounds[roundIdx].assignments || [])]
+        applyRoundAssignmentUpdate(targetRound, (currentAssignments) => {
           const activeIdx = currentAssignments.findIndex((a) => a.participant_id === activeId)
           if (activeIdx !== -1) {
             currentAssignments.splice(activeIdx, 1)
           }
-          newRounds[roundIdx] = { ...newRounds[roundIdx], assignments: currentAssignments }
-          return newRounds
+          return currentAssignments
         })
       }
     }
@@ -1966,7 +2029,7 @@ export default function AdminArrangePage() {
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={seatingCollisionDetection}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
       >
