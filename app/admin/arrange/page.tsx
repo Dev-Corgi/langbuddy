@@ -20,6 +20,8 @@ import {
   Copy,
   Settings,
   Download,
+  Trash2,
+  Plus,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
@@ -93,6 +95,15 @@ import { arrangeRound as runSeatingArrangeRound, calculateAutoTableCounts, getTa
 import type { RoundData } from '@/lib/seating-algorithm'
 import { formatDebugLog, generateDebugLog } from '@/lib/seating-debug-logger'
 import { RoundImageExporter } from '@/components/admin/round-image-exporter'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  addTableToRound,
+  getNextTableLabel,
+  mergeLangTableCounts,
+  removeTableFromRound,
+  sortTableLabels,
+  langTableCountsFromRounds,
+} from '@/lib/seating-table-ops'
 
 // --- Types ---
 
@@ -224,7 +235,21 @@ function ParticipantCard({ participant, isOverlay = false, onEdit }: { participa
   )
 }
 
-function TableContainer({ label, participants, round, tableLanguage, onEdit }: { label: string, participants: Participant[], round: number, tableLanguage?: string, onEdit?: (participant: Participant) => void }) {
+function TableContainer({
+  label,
+  participants,
+  round,
+  tableLanguage,
+  onEdit,
+  onDelete,
+}: {
+  label: string
+  participants: Participant[]
+  round: number
+  tableLanguage?: string
+  onEdit?: (participant: Participant) => void
+  onDelete?: () => void
+}) {
   const { setNodeRef } = useDroppable({
     id: `table-${label}-${round}`,
     data: {
@@ -265,7 +290,21 @@ function TableContainer({ label, participants, round, tableLanguage, onEdit }: {
               </span>
             ) : null}
           </div>
-          <span className="text-xs font-bold text-muted-foreground">{participants.length} 명</span>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-xs font-bold text-muted-foreground">{participants.length} 명</span>
+            {onDelete ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                title="테이블 삭제"
+                onClick={onDelete}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         {warnings.length > 0 ? (
@@ -290,6 +329,96 @@ function TableContainer({ label, participants, round, tableLanguage, onEdit }: {
       </CardContent>
     </Card>
   )
+}
+
+function AddTableCard({
+  languages,
+  disabled,
+  onAdd,
+}: {
+  languages: string[]
+  disabled?: boolean
+  onAdd: (language: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  const handleOpen = () => {
+    if (disabled) {
+      toast.error('테이블은 최대 26개(A~Z)까지 추가할 수 있습니다.')
+      return
+    }
+    if (languages.length === 0) {
+      toast.error('체크인한 참가자가 없습니다. QR 체크인 후 테이블을 추가할 수 있습니다.')
+      return
+    }
+    if (languages.length === 1) {
+      onAdd(languages[0]!)
+      return
+    }
+    setOpen(true)
+  }
+
+  const dashedButton = (
+    <button
+      type="button"
+      className={cn(
+        'w-full min-h-[160px] h-full flex flex-col items-center justify-center gap-2 rounded-[24px]',
+        'border-2 border-dashed border-border/80 bg-card/30 transition-colors',
+        disabled
+          ? 'opacity-50 cursor-not-allowed'
+          : 'hover:border-primary/50 hover:bg-muted/20 cursor-pointer'
+      )}
+      onClick={languages.length <= 1 ? handleOpen : undefined}
+    >
+      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+        <Plus className="w-5 h-5 text-primary" />
+      </div>
+      <span className="text-sm font-black text-muted-foreground">테이블 추가</span>
+    </button>
+  )
+
+  if (languages.length > 1 && !disabled) {
+    return (
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              'w-full min-h-[160px] h-full flex flex-col items-center justify-center gap-2 rounded-[24px]',
+              'border-2 border-dashed border-border/80 bg-card/30 transition-colors',
+              'hover:border-primary/50 hover:bg-muted/20 cursor-pointer'
+            )}
+          >
+            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+              <Plus className="w-5 h-5 text-primary" />
+            </div>
+            <span className="text-sm font-black text-muted-foreground">테이블 추가</span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-56 rounded-2xl p-3" align="start">
+          <p className="text-xs font-bold text-muted-foreground mb-2 px-1">테이블 언어 선택</p>
+          <div className="flex flex-col gap-1">
+            {languages.map((lang) => (
+              <Button
+                key={lang}
+                type="button"
+                variant="ghost"
+                className="justify-start rounded-xl font-bold"
+                onClick={() => {
+                  onAdd(lang)
+                  setOpen(false)
+                }}
+              >
+                {lang}
+              </Button>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+    )
+  }
+
+  return dashedButton
 }
 
 function UnassignedList({ participants, round, onEdit }: { participants: Participant[], round: number, onEdit?: (participant: Participant) => void }) {
@@ -920,6 +1049,65 @@ export default function AdminArrangePage() {
     setIsConfigOpen(false)
     setConfigRound(null)
   }, [configRound, configCounts, participants, rounds, session])
+
+  const checkedInLanguages = useMemo(() => {
+    const langs = new Set<string>()
+    for (const p of participants) {
+      if (p.checked_in_at && p.language) langs.add(p.language)
+    }
+    return [...langs].sort((a, b) => a.localeCompare(b, 'ko'))
+  }, [participants])
+
+  const handleAddTable = useCallback(
+    (roundNum: number, language: string) => {
+      const roundData = rounds.find((r) => r.round === roundNum)
+      if (!roundData) return
+
+      const result = addTableToRound(roundData, language)
+      if (!result) {
+        toast.error('테이블은 최대 26개(A~Z)까지 추가할 수 있습니다.')
+        return
+      }
+
+      const updatedRounds = rounds.map((r) => (r.round === roundNum ? result.roundData : r))
+      setRounds(updatedRounds)
+      setLangTableCounts((prev) =>
+        mergeLangTableCounts(prev, result.roundData.tableLanguages ?? {})
+      )
+      toast.success(`${result.label} 테이블이 추가되었습니다. (${language})`)
+    },
+    [rounds]
+  )
+
+  const handleDeleteTable = useCallback(
+    (roundNum: number, label: string) => {
+      const roundData = rounds.find((r) => r.round === roundNum)
+      if (!roundData) return
+
+      const atTable = roundData.assignments.filter((a) => a.table_label === label).length
+      if (atTable > 0) {
+        const ok = window.confirm(
+          `이 테이블을 삭제할까요? ${atTable}명이 미배정으로 이동합니다.`
+        )
+        if (!ok) return
+      }
+
+      const { roundData: nextRound, removedAssignmentCount } = removeTableFromRound(
+        roundData,
+        label
+      )
+      const updatedRounds = rounds.map((r) => (r.round === roundNum ? nextRound : r))
+      setRounds(updatedRounds)
+      setLangTableCounts(langTableCountsFromRounds(updatedRounds))
+
+      if (removedAssignmentCount > 0) {
+        toast.success(`${label} 테이블 삭제 · ${removedAssignmentCount}명 미배정`)
+      } else {
+        toast.success(`${label} 테이블이 삭제되었습니다.`)
+      }
+    },
+    [rounds]
+  )
 
   const handleExportRoundCsv = useCallback(
     (roundNum: number) => {
@@ -1890,7 +2078,11 @@ export default function AdminArrangePage() {
               {[1, 2, 3].map((r) => {
                 const roundData = rounds.find((rd) => rd.round === r)
                 const assignments = roundData?.assignments || []
-                const tableLabelsForRound = Object.keys(roundData?.tableLanguages || {}).sort()
+                const tableLabelsForRound = sortTableLabels(
+                  Object.keys(roundData?.tableLanguages || {})
+                )
+                const canAddTable =
+                  getNextTableLabel(tableLabelsForRound) !== null
                 return (
                   <TabsContent key={r} value={r.toString()} className="mt-0 focus-visible:outline-none">
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -1908,19 +2100,21 @@ export default function AdminArrangePage() {
                             round={r}
                             tableLanguage={roundData?.tableLanguages?.[label]}
                             onEdit={setEditingParticipant}
+                            onDelete={() => handleDeleteTable(r, label)}
                           />
                         )
                       })}
-                      {tableLabelsForRound.length === 0 ? (
-                        <div className="col-span-full py-32 text-center border-2 border-dashed border-border rounded-[40px] bg-card/50">
-                          <AlertTriangle className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-                          <p className="text-xl font-black text-muted-foreground">이 라운드 테이블이 아직 없습니다.</p>
-                          <p className="text-muted-foreground font-medium mt-2">
-                            위에서 해당 라운드「배치」를 실행해 주세요.
-                          </p>
-                        </div>
-                      ) : null}
+                      <AddTableCard
+                        languages={checkedInLanguages}
+                        disabled={!canAddTable}
+                        onAdd={(lang) => handleAddTable(r, lang)}
+                      />
                     </div>
+                    {tableLabelsForRound.length === 0 ? (
+                      <p className="text-center text-sm font-bold text-muted-foreground mt-4">
+                        테이블이 없습니다. 「테이블 추가」로 빈 테이블을 만든 뒤 드래그하거나, 위에서「배치」를 실행하세요.
+                      </p>
+                    ) : null}
                   </TabsContent>
                 )
               })}

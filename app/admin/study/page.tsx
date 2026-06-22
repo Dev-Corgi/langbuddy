@@ -46,6 +46,7 @@ import { ApplyMethodCard, buildDefaultStudyFormData, mergeStudyProgramQuestionsI
 import { fetchFormBuilderData } from '@/lib/load-form-data'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from '@/components/ui/switch'
+import { useAdminAuth } from '@/hooks/use-admin-auth'
 
 const WEEK_DAYS = ["월", "화", "수", "목", "금", "토", "일"];
 
@@ -75,6 +76,7 @@ const getDefaultDayData = (day: string, user: any) => ({
 
 function StudyManagementContent() {
   const locale = useLocale();
+  const { ready: authReady } = useAdminAuth({ requireSuper: true });
   const supabase = createClient();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -409,7 +411,7 @@ function StudyManagementContent() {
     setSaving(false);
   };
 
-  if (loading) {
+  if (!authReady || loading) {
     return <div className="min-h-screen flex items-center justify-center bg-muted">
       <Loader2 className="w-10 h-10 animate-spin text-primary" />
     </div>;

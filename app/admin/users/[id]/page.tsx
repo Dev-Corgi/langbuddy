@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
-import { isSuperAdminEmail } from '@/lib/super-admin'
+import { useAdminAuth } from '@/hooks/use-admin-auth'
 import type { AdminUserRow } from '@/lib/admin-user-types'
 import { PageHeader } from '@/components/admin/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,9 +23,8 @@ export default function AdminUserDetailPage() {
   const locale = useLocale()
   const isEn = locale === 'en'
   const router = useRouter()
-  const supabase = createClient()
+  const { ready: authChecked } = useAdminAuth({ requireSuper: true })
 
-  const [authChecked, setAuthChecked] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -38,27 +36,7 @@ export default function AdminUserDetailPage() {
   const [kakaoId, setKakaoId] = useState('')
   const [stampProgress, setStampProgress] = useState(0)
   const [onboardingCompleted, setOnboardingCompleted] = useState(false)
-
-  useEffect(() => {
-    const run = async () => {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      if (!authUser) {
-        router.push('/admin/login')
-        return
-      }
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_superadmin')
-        .eq('id', authUser.id)
-        .single()
-      if (!profile?.is_superadmin && !isSuperAdminEmail(authUser.email)) {
-        router.push('/admin/dashboard')
-        return
-      }
-      setAuthChecked(true)
-    }
-    void run()
-  }, [router, supabase])
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const hydrateForm = useCallback((u: UserDetail) => {
     setName(u.name ?? '')
@@ -67,6 +45,7 @@ export default function AdminUserDetailPage() {
     setKakaoId(u.kakao_id ?? '')
     setStampProgress(Number(u.le_stamp_progress ?? 0))
     setOnboardingCompleted(!!u.onboarding_completed)
+    setIsAdmin(!!u.is_admin)
   }, [])
 
   const fetchUser = useCallback(async () => {
@@ -109,6 +88,7 @@ export default function AdminUserDetailPage() {
           kakao_id: kakaoId.trim(),
           le_stamp_progress: stampProgress,
           onboarding_completed: onboardingCompleted,
+          is_admin: isAdmin,
         }),
       })
       if (!res.ok) {
@@ -141,6 +121,19 @@ export default function AdminUserDetailPage() {
   }
 
   if (!user) return null
+
+  const targetIsSuper = !!user.is_superadmin
+  const roleLabel = targetIsSuper
+    ? isEn
+      ? 'Super admin'
+      : '슈퍼 관리자'
+    : user.is_admin
+      ? isEn
+        ? 'Admin'
+        : '관리자'
+      : isEn
+        ? 'Member'
+        : '일반 회원'
 
   const stampSlots = 10
   const stampFill = Math.min(stampSlots, Number(user.le_stamp_progress ?? 0))
@@ -261,6 +254,36 @@ export default function AdminUserDetailPage() {
               )}
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-[24px] border-none shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg font-black">
+            {isEn ? 'Admin access' : '관리자 권한'}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <InfoRow label={isEn ? 'Role' : '역할'} value={roleLabel} highlight={targetIsSuper || !!user.is_admin} />
+          {editing && !targetIsSuper ? (
+            <div className="flex items-center justify-between rounded-2xl border border-border p-4">
+              <div className="space-y-1 pr-4">
+                <Label className="font-bold">{isEn ? 'Admin panel access' : '관리자 패널 접근'}</Label>
+                <p className="text-xs text-muted-foreground font-medium">
+                  {isEn
+                    ? 'Can use dashboard, meetup management, and settings.'
+                    : '대시보드, 번개 관리, 설정 메뉴를 사용할 수 있습니다.'}
+                </p>
+              </div>
+              <Switch checked={isAdmin} onCheckedChange={setIsAdmin} />
+            </div>
+          ) : targetIsSuper ? (
+            <p className="text-xs text-muted-foreground font-medium">
+              {isEn
+                ? 'Super admins cannot be changed here.'
+                : '슈퍼 관리자 권한은 여기서 변경할 수 없습니다.'}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 

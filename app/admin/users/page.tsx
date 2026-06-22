@@ -2,9 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
-import { isSuperAdminEmail } from '@/lib/super-admin'
+import { useAdminAuth } from '@/hooks/use-admin-auth'
 import type { AdminUserRow } from '@/lib/admin-user-types'
 import { PageHeader } from '@/components/admin/page-header'
 import { Card, CardContent } from '@/components/ui/card'
@@ -17,35 +15,12 @@ import { cn } from '@/lib/utils'
 function UsersListContent() {
   const locale = useLocale()
   const isEn = locale === 'en'
-  const router = useRouter()
-  const supabase = createClient()
+  const { ready: authChecked } = useAdminAuth({ requireSuper: true })
 
-  const [authChecked, setAuthChecked] = useState(false)
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<AdminUserRow[]>([])
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
-
-  useEffect(() => {
-    const run = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/admin/login')
-        return
-      }
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_superadmin')
-        .eq('id', user.id)
-        .single()
-      if (!profile?.is_superadmin && !isSuperAdminEmail(user.email)) {
-        router.push('/admin/dashboard')
-        return
-      }
-      setAuthChecked(true)
-    }
-    void run()
-  }, [router, supabase])
 
   const fetchUsers = useCallback(async (q: string) => {
     setLoading(true)
@@ -122,6 +97,15 @@ function UsersListContent() {
                       <p className="font-black text-foreground truncate">
                         {u.name || (isEn ? 'Unnamed' : '이름 없음')}
                       </p>
+                      {u.is_superadmin ? (
+                        <Badge className="rounded-lg font-bold bg-primary/15 text-primary border-0">
+                          {isEn ? 'Super admin' : '슈퍼 관리자'}
+                        </Badge>
+                      ) : u.is_admin ? (
+                        <Badge variant="secondary" className="rounded-lg font-bold">
+                          {isEn ? 'Admin' : '관리자'}
+                        </Badge>
+                      ) : null}
                       {u.onboarding_completed ? (
                         <Badge className="rounded-lg font-bold">{isEn ? 'Onboarded' : '온보딩 완료'}</Badge>
                       ) : (

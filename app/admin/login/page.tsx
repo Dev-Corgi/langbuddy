@@ -38,6 +38,14 @@ function AdminLoginContent() {
   useEffect(() => {
     const errorCode = searchParams.get('error')
     const errorDesc = searchParams.get('desc')
+    if (errorCode === 'no_access') {
+      setError(
+        locale === 'en'
+          ? 'You do not have admin panel access. Contact a super admin.'
+          : '관리자 패널 접근 권한이 없습니다. 슈퍼 관리자에게 문의하세요.'
+      )
+      return
+    }
     if (errorCode) {
       setError(
         errorDesc ||

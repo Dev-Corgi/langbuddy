@@ -1,7 +1,7 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js'
-import { isSuperAdminEmail } from '@/lib/super-admin'
+import { hasAdminPanelAccess, isSuperAdminUser } from '@/lib/admin-access'
 
-/** 서버 라우트용: 로그인 + 프로필 슈퍼관리자 또는 고정 이메일 */
+/** 서버 라우트용: 슈퍼 관리자만 (운영 API) */
 export async function getAdminUser(
   supabase: SupabaseClient
 ): Promise<User | null> {
@@ -9,12 +9,32 @@ export async function getAdminUser(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return null
-  if (isSuperAdminEmail(user.email)) return user
+
   const { data: profile } = await supabase
     .from('profiles')
-    .select('is_superadmin')
+    .select('is_superadmin, is_admin')
     .eq('id', user.id)
-    .single()
-  if (profile?.is_superadmin) return user
+    .maybeSingle()
+
+  if (isSuperAdminUser(user.email, profile)) return user
+  return null
+}
+
+/** 서버 라우트용: 관리자 패널 접근 가능한 로그인 유저 */
+export async function getPanelUser(
+  supabase: SupabaseClient
+): Promise<User | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_superadmin, is_admin')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (hasAdminPanelAccess(user.email, profile)) return user
   return null
 }

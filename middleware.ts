@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { hasAdminPanelAccess } from '@/lib/admin-access'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -58,17 +59,37 @@ export async function middleware(request: NextRequest) {
 
   // /admin 경로 보호
   if (request.nextUrl.pathname.startsWith('/admin')) {
-    // 로그인 페이지는 제외
-    if (request.nextUrl.pathname === '/admin/login') {
-      if (session) {
-        return NextResponse.redirect(new URL('/admin', request.url))
+    const isLoginPage = request.nextUrl.pathname === '/admin/login'
+
+    if (isLoginPage) {
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_superadmin, is_admin')
+          .eq('id', session.user.id)
+          .maybeSingle()
+
+        if (hasAdminPanelAccess(session.user.email, profile)) {
+          return NextResponse.redirect(new URL('/admin', request.url))
+        }
       }
       return response
     }
 
-    // 세션이 없으면 로그인 페이지로 리다이렉트
-    if (!session) {
+    if (!session?.user) {
       return NextResponse.redirect(new URL('/admin/login', request.url))
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_superadmin, is_admin')
+      .eq('id', session.user.id)
+      .maybeSingle()
+
+    if (!hasAdminPanelAccess(session.user.email, profile)) {
+      return NextResponse.redirect(
+        new URL('/admin/login?error=no_access', request.url)
+      )
     }
   }
 

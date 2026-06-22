@@ -12,6 +12,8 @@ export type AdminUserRow = {
   created_at: string
   updated_at: string
   email?: string | null
+  is_admin?: boolean
+  is_superadmin?: boolean
 }
 
 export type AdminUserUpdatePayload = {
@@ -22,4 +24,5 @@ export type AdminUserUpdatePayload = {
   le_stamp_progress?: number
   le_reward_coupons?: number
   onboarding_completed?: boolean
+  is_admin?: boolean
 }

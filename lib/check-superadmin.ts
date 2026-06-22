@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase'
-import { isSuperAdminEmail } from '@/lib/super-admin'
+import { isSuperAdminUser } from '@/lib/admin-access'
 
 export async function checkIsSuperAdmin(): Promise<boolean> {
   const supabase = createClient()
@@ -7,13 +7,11 @@ export async function checkIsSuperAdmin(): Promise<boolean> {
   
   if (!user) return false
   
-  if (isSuperAdminEmail(user.email)) return true
-  
   const { data: profile } = await supabase
     .from('profiles')
-    .select('is_superadmin')
+    .select('is_superadmin, is_admin')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
   
-  return !!profile?.is_superadmin
+  return isSuperAdminUser(user.email, profile)
 }

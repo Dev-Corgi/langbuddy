@@ -25,7 +25,7 @@ import { createClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/hooks/use-locale'
 import { i18n } from '@/lib/i18n'
-import { isSuperAdminEmail } from '@/lib/super-admin'
+import { isSuperAdminUser } from '@/lib/admin-access'
 
 export default function AdminLayout({
   children,
@@ -42,27 +42,18 @@ export default function AdminLayout({
   useEffect(() => {
     const fetchProfile = async (userId: string, email?: string) => {
       try {
-        // Fallback check for superadmin email
-        if (isSuperAdminEmail(email)) {
-          console.log('AdminLayout: Explicit SuperAdmin identified by email')
-          setIsSuperAdmin(true)
-          return
-        }
-
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select('is_superadmin')
+          .select('is_superadmin, is_admin')
           .eq('id', userId)
-          .single()
-        
+          .maybeSingle()
+
         if (error) {
           console.error('AdminLayout: Error fetching profile:', error)
           return
         }
-        
-        if (profile) {
-          setIsSuperAdmin(!!profile.is_superadmin)
-        }
+
+        setIsSuperAdmin(isSuperAdminUser(email, profile))
       } catch (err) {
         console.error('AdminLayout: Unexpected error:', err)
       }

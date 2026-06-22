@@ -4,6 +4,11 @@ import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAdminUser } from '@/lib/admin-api-auth'
 import type { AdminUserUpdatePayload } from '@/lib/admin-user-types'
 import { sliderStampToStored } from '@/lib/le-stamp'
+import {
+  fetchProfileRoleFlags,
+  isTargetSuperAdmin,
+} from '@/lib/admin-user-roles'
+import { isSuperAdminUser } from '@/lib/admin-access'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -33,11 +38,15 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     }
 
     const { data: authData } = await admin.auth.admin.getUserById(id)
+    const roleFlags = await fetchProfileRoleFlags(admin, id)
+    const email = authData?.user?.email ?? null
 
     return NextResponse.json({
       user: {
         ...userRow,
-        email: authData?.user?.email ?? null,
+        email,
+        is_admin: roleFlags.is_admin,
+        is_superadmin: isSuperAdminUser(email, roleFlags),
       },
     })
   } catch (err) {
@@ -56,6 +65,32 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const { id } = await context.params
     const body = (await request.json()) as AdminUserUpdatePayload
+    const admin = createSupabaseAdmin()
+
+    if (body.is_admin !== undefined) {
+      const targetIsSuper = await isTargetSuperAdmin(admin, id)
+      if (targetIsSuper) {
+        return NextResponse.json(
+          { error: 'cannot_change_super_admin_role' },
+          { status: 400 }
+        )
+      }
+
+      const { error: profileError } = await admin.from('profiles').upsert(
+        {
+          id,
+          is_admin: Boolean(body.is_admin),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      )
+
+      if (profileError) {
+        console.error('[admin/users/[id]] profile upsert error:', profileError)
+        return NextResponse.json({ error: profileError.message }, { status: 500 })
+      }
+    }
+
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
 
     if (body.name !== undefined) {
@@ -105,29 +140,60 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       patch.onboarding_completed = Boolean(body.onboarding_completed)
     }
 
-    if (Object.keys(patch).length === 1) {
+    const userFieldsTouched =
+      body.name !== undefined ||
+      body.gender !== undefined ||
+      body.nationality !== undefined ||
+      body.kakao_id !== undefined ||
+      body.le_stamp_progress !== undefined ||
+      body.le_reward_coupons !== undefined ||
+      body.onboarding_completed !== undefined
+
+    if (!userFieldsTouched && body.is_admin === undefined) {
       return NextResponse.json({ error: 'no_fields' }, { status: 400 })
     }
 
-    const admin = createSupabaseAdmin()
-    const { data, error } = await admin
-      .from('users')
-      .update(patch)
-      .eq('id', id)
-      .select('*')
-      .single()
+    let data = null
+    if (userFieldsTouched) {
+      const { data: updated, error } = await admin
+        .from('users')
+        .update(patch)
+        .eq('id', id)
+        .select('*')
+        .single()
 
-    if (error) {
-      console.error('[admin/users/[id]] patch error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      if (error) {
+        console.error('[admin/users/[id]] patch error:', error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+      data = updated
+    } else {
+      const { data: existing, error } = await admin
+        .from('users')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle()
+
+      if (error) {
+        console.error('[admin/users/[id]] fetch error:', error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+      if (!existing) {
+        return NextResponse.json({ error: 'not_found' }, { status: 404 })
+      }
+      data = existing
     }
 
     const { data: authData } = await admin.auth.admin.getUserById(id)
+    const roleFlags = await fetchProfileRoleFlags(admin, id)
+    const email = authData?.user?.email ?? null
 
     return NextResponse.json({
       user: {
         ...data,
-        email: authData?.user?.email ?? null,
+        email,
+        is_admin: roleFlags.is_admin,
+        is_superadmin: isSuperAdminUser(email, roleFlags),
       },
     })
   } catch (err) {

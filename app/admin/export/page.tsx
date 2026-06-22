@@ -10,6 +10,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { toPng } from 'html-to-image'
 import download from 'downloadjs'
+import { useAdminAuth } from '@/hooks/use-admin-auth'
 
 interface Event {
   id: string
@@ -27,6 +28,7 @@ interface Event {
 
 export default function ExportPosterPage() {
   const locale = useLocale()
+  const { ready: authReady } = useAdminAuth({ requireSuper: true })
   const supabase = createClient()
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
@@ -80,7 +82,7 @@ export default function ExportPosterPage() {
     }
   }
 
-  if (loading) {
+  if (!authReady || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="w-10 h-10 animate-spin text-primary" />

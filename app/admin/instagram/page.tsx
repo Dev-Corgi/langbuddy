@@ -32,9 +32,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { useAdminAuth } from '@/hooks/use-admin-auth'
 
 export default function AdminInstagramPage() {
   const locale = useLocale()
+  const { ready: authReady } = useAdminAuth({ requireSuper: true })
   const [posts, setPosts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -198,6 +200,14 @@ export default function AdminInstagramPage() {
     const { error } = await supabase.from('instagram_posts').delete().eq('id', id)
     if (error) alert(error.message)
     else fetchPosts()
+  }
+
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      </div>
+    )
   }
 
   return (
