@@ -7,6 +7,7 @@ import { sliderStampToStored } from '@/lib/le-stamp'
 import {
   fetchProfileRoleFlags,
   isTargetSuperAdmin,
+  setProfileIsAdmin,
 } from '@/lib/admin-user-roles'
 import { isSuperAdminUser } from '@/lib/admin-access'
 
@@ -76,18 +77,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         )
       }
 
-      const { error: profileError } = await admin.from('profiles').upsert(
-        {
-          id,
-          is_admin: Boolean(body.is_admin),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'id' }
+      const { error: profileError } = await setProfileIsAdmin(
+        admin,
+        id,
+        Boolean(body.is_admin)
       )
 
       if (profileError) {
-        console.error('[admin/users/[id]] profile upsert error:', profileError)
-        return NextResponse.json({ error: profileError.message }, { status: 500 })
+        console.error('[admin/users/[id]] profile is_admin update error:', profileError)
+        return NextResponse.json({ error: profileError }, { status: 500 })
       }
     }
 

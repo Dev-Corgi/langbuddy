@@ -54,3 +54,44 @@ export async function isTargetSuperAdmin(
   const flags = await fetchProfileRoleFlags(admin, userId)
   return isSuperAdminUser(authData?.user?.email ?? null, flags)
 }
+
+/** profiles.name NOT NULL — upsert(id만)는 INSERT 단계에서 실패하므로 update 우선 */
+export async function setProfileIsAdmin(
+  admin: SupabaseClient,
+  userId: string,
+  isAdmin: boolean
+): Promise<{ error: string | null }> {
+  const now = new Date().toISOString()
+  const { data: updated, error: updateError } = await admin
+    .from('profiles')
+    .update({ is_admin: isAdmin, updated_at: now })
+    .eq('id', userId)
+    .select('id')
+    .maybeSingle()
+
+  if (updateError) {
+    return { error: updateError.message }
+  }
+  if (updated) {
+    return { error: null }
+  }
+
+  const { data: userRow } = await admin
+    .from('users')
+    .select('name')
+    .eq('id', userId)
+    .maybeSingle()
+
+  const name = userRow?.name?.trim() || 'User'
+  const { error: insertError } = await admin.from('profiles').insert({
+    id: userId,
+    name,
+    is_admin: isAdmin,
+    updated_at: now,
+  })
+
+  if (insertError) {
+    return { error: insertError.message }
+  }
+  return { error: null }
+}

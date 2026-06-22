@@ -93,15 +93,24 @@ export default function AdminUserDetailPage() {
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body.error || 'save_failed')
+        const code = (body as { error?: string }).error
+        if (code === 'cannot_change_super_admin_role') {
+          throw new Error(isEn ? 'Cannot change super admin role.' : '슈퍼 관리자 권한은 변경할 수 없습니다.')
+        }
+        throw new Error(code || 'save_failed')
       }
       const body = await res.json()
       setUser(body.user)
       hydrateForm(body.user)
       setEditing(false)
       toast.success(isEn ? 'User updated.' : '유저 정보가 저장되었습니다.')
-    } catch {
-      toast.error(isEn ? 'Failed to save.' : '저장에 실패했습니다.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'save_failed'
+      if (msg !== 'save_failed') {
+        toast.error(msg)
+      } else {
+        toast.error(isEn ? 'Failed to save.' : '저장에 실패했습니다.')
+      }
     } finally {
       setSaving(false)
     }
