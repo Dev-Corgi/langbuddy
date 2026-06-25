@@ -185,7 +185,10 @@ export default function PostingDetailPage() {
   const displayLocation = locale === 'en' && data?.location_en ? data.location_en : data?.location;
   const displayCost = locale === 'en' && data?.cost_en ? data.cost_en : data?.cost;
   const displayHost = locale === 'en' && data?.host_en ? data.host_en : data?.host;
-  const displayContent = locale === 'en' && data?.description_en ? data.description_en : (data?.description_ko || data?.rich_content_en || data?.rich_content || data?.description);
+  const displayContent =
+    locale === 'en'
+      ? (data?.rich_content_en || data?.description_en || data?.rich_content || data?.description || '')
+      : (data?.rich_content || data?.description_ko || data?.description || '');
 
   const isLanguageExchange = data?.category === '언어교환';
   const isStudy = data?.category === '스터디';
