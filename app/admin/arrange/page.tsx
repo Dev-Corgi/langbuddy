@@ -446,30 +446,32 @@ function UnassignedList({ participants, round, onEdit }: { participants: Partici
   })
 
   return (
-    <Card className="border-none shadow-lg rounded-[32px] overflow-hidden bg-card">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-lg font-black flex items-center gap-2">
-          <UserPlus className="w-5 h-5 text-amber-500" />
-          미배정 인원
-        </CardTitle>
-        <CardDescription className="text-xs font-medium">
-          현장 QR 체크인이 완료되었고, 이번 라운드에 테이블이 아직 없는 참가자입니다. 드래그로 테이블에 배정할 수 있습니다.
-        </CardDescription>
-      </CardHeader>
-      <CardContent ref={setNodeRef} className="max-h-[400px] overflow-y-auto p-3 min-h-[100px]">
-        <SortableContext
-          items={participants.map(p => p.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          {participants.map(p => (
-            <ParticipantCard key={p.id} participant={p} onEdit={onEdit} />
-          ))}
-        </SortableContext>
-        {participants.length === 0 && (
-          <p className="text-center py-4 text-xs font-bold text-muted-foreground">모두 배정되었습니다.</p>
-        )}
-      </CardContent>
-    </Card>
+    <div ref={setNodeRef} className="rounded-[32px]">
+      <Card className="border-none shadow-lg rounded-[32px] overflow-hidden bg-card h-full">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg font-black flex items-center gap-2">
+            <UserPlus className="w-5 h-5 text-amber-500" />
+            미배정 인원
+          </CardTitle>
+          <CardDescription className="text-xs font-medium">
+            현장 QR 체크인이 완료되었고, 이번 라운드에 테이블이 아직 없는 참가자입니다. 드래그로 테이블에 배정할 수 있습니다.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="max-h-[400px] overflow-y-auto p-3 min-h-[100px]">
+          <SortableContext
+            items={participants.map(p => p.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {participants.map(p => (
+              <ParticipantCard key={p.id} participant={p} onEdit={onEdit} />
+            ))}
+          </SortableContext>
+          {participants.length === 0 && (
+            <p className="text-center py-4 text-xs font-bold text-muted-foreground">모두 배정되었습니다.</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
@@ -1558,12 +1560,12 @@ export default function AdminArrangePage() {
 
   const performAdminDragCheckin = useCallback(
     async (participantId: string, name: string, target: 'table' | 'unassigned' = 'table') => {
-      const ok = window.confirm(
-        target === 'unassigned'
-          ? `${name}님을 QR 체크인 없이 체크인 처리합니다.\n\n미배정 목록으로 이동합니다. 계속할까요?`
-          : `${name}님을 QR 체크인 없이 배정합니다.\n\n운영자 확인으로 체크인 처리한 뒤 테이블에 배치합니다. 계속할까요?`
-      )
-      if (!ok) return null
+      if (target === 'table') {
+        const ok = window.confirm(
+          `${name}님을 QR 체크인 없이 배정합니다.\n\n운영자 확인으로 체크인 처리한 뒤 테이블에 배치합니다. 계속할까요?`
+        )
+        if (!ok) return null
+      }
 
       seenCheckedInIdsRef.current.add(participantId)
       try {
@@ -1589,11 +1591,9 @@ export default function AdminArrangePage() {
           participantsRef.current = next
           return next
         })
-        toast.success(
-          target === 'unassigned'
-            ? `${name}님 체크인 처리되었습니다. 미배정 목록에서 테이블을 배정하세요.`
-            : `${name}님 체크인 처리되었습니다.`
-        )
+        if (target === 'table') {
+          toast.success(`${name}님 체크인 처리되었습니다.`)
+        }
         return checkedInAt
       } catch {
         seenCheckedInIdsRef.current.delete(participantId)
@@ -1638,10 +1638,21 @@ export default function AdminArrangePage() {
         ? Number(over.data.current.round)
         : currentRound
     const targetRound = Number.isFinite(overContainerRound) ? overContainerRound : currentRound
+    const roundData = roundsRef.current.find((r) => r.round === targetRound)
+    const roundAssignments = roundData?.assignments || []
 
     const isOverTable = over.data?.current?.type === 'container'
-    const isOverUnassigned =
+    const isOverUnassignedContainer =
       isOverTable && over.data.current?.tableLabel === 'unassigned'
+    const isOverUnassignedId = String(overId).startsWith('unassigned-')
+    const isOverUnassignedParticipant = (() => {
+      const hit = participantsRef.current.find((p) => p.id === overId)
+      if (!hit?.checked_in_at) return false
+      return !roundAssignments.some((a) => a.participant_id === overId)
+    })()
+    const isOverUnassigned =
+      isOverUnassignedContainer || isOverUnassignedId || isOverUnassignedParticipant
+
     let assignTableLabel: string | null = null
 
     if (isOverTable && over.data.current) {
@@ -1650,10 +1661,8 @@ export default function AdminArrangePage() {
         assignTableLabel = newTableLabel
       }
     } else {
-      const currentRoundData = roundsRef.current.find((r) => r.round === targetRound)
-      const currentRoundAssignments = currentRoundData?.assignments || []
-      const activeAssignment = currentRoundAssignments.find((a) => a.participant_id === activeId)
-      const overAssignment = currentRoundAssignments.find((a) => a.participant_id === overId)
+      const activeAssignment = roundAssignments.find((a) => a.participant_id === activeId)
+      const overAssignment = roundAssignments.find((a) => a.participant_id === overId)
 
       if (overAssignment && overAssignment.table_label !== activeAssignment?.table_label) {
         assignTableLabel = overAssignment.table_label
@@ -1662,9 +1671,6 @@ export default function AdminArrangePage() {
 
     if (!activeParticipant.checked_in_at) {
       if (!assignTableLabel && !isOverUnassigned) {
-        toast.info('미체크인 참가자는 미배정 또는 테이블에 드롭하면 체크인 후 이동·배정됩니다.', {
-          id: 'need-table-drop',
-        })
         return
       }
       const checkedIn = await performAdminDragCheckin(
@@ -1673,6 +1679,17 @@ export default function AdminArrangePage() {
         isOverUnassigned ? 'unassigned' : 'table'
       )
       if (!checkedIn) return
+    }
+
+    if (isOverUnassigned && !assignTableLabel) {
+      applyRoundAssignmentUpdate(targetRound, (currentAssignments) => {
+        const activeIdx = currentAssignments.findIndex((a) => a.participant_id === activeId)
+        if (activeIdx !== -1) {
+          currentAssignments.splice(activeIdx, 1)
+        }
+        return currentAssignments
+      })
+      return
     }
 
     if (isOverTable && over.data.current) {
