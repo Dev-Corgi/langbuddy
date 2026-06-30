@@ -3,6 +3,7 @@ import {
   normalizeLanguage,
   normalizeNationality,
 } from '@/lib/form-answer-canonical'
+import { isSupportedLanguage } from '@/lib/supported-languages'
 
 export type WalkInCsvRow = {
   lineNum: number
@@ -84,8 +85,10 @@ export function parseWalkInCsvText(text: string): WalkInCsvParseResult {
     }
 
     const language = normalizeLanguage(languageRaw)
-    if (!language || language === '-') {
-      errors.push(`${lineNum}번째 줄 (${name}): 언어가 없습니다.`)
+    if (!language || language === '-' || !isSupportedLanguage(language)) {
+      errors.push(
+        `${lineNum}번째 줄 (${name}): 언어는 "영어" 또는 "일본어"만 가능합니다.`
+      )
       continue
     }
 

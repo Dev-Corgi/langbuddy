@@ -12,6 +12,7 @@ import {
   isWalkInAnswers,
   mapFormResponseToWalkInParticipant,
 } from '@/lib/walk-in-participant'
+import { isSupportedLanguage } from '@/lib/supported-languages'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -44,6 +45,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
     if (!language) {
       return NextResponse.json({ error: 'language_required' }, { status: 400 })
+    }
+    if (!isSupportedLanguage(language)) {
+      return NextResponse.json({ error: 'invalid_language' }, { status: 400 })
     }
 
     const admin = createSupabaseAdmin()

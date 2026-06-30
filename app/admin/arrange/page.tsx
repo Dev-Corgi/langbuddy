@@ -40,6 +40,7 @@ import {
   mapFormResponseToParticipant,
   type ArrangedParticipant,
 } from '@/lib/walk-in-participant'
+import { SUPPORTED_LANGUAGES, isSupportedLanguage } from '@/lib/supported-languages'
 
 function participantRecencyMs(p: ArrangedParticipant): { checkedIn: number; created: number } {
   const checkedIn = p.checked_in_at ? Date.parse(p.checked_in_at) : 0
@@ -364,10 +365,6 @@ function AddTableCard({
       toast.error('테이블은 최대 26개(A~Z)까지 추가할 수 있습니다.')
       return
     }
-    if (languages.length === 0) {
-      toast.error('체크인한 참가자가 없습니다. QR 체크인 후 테이블을 추가할 수 있습니다.')
-      return
-    }
     if (languages.length === 1) {
       onAdd(languages[0]!)
       return
@@ -477,16 +474,13 @@ function UnassignedList({ participants, round, onEdit }: { participants: Partici
 }
 
 function UncheckedInList({ participants, onEdit }: { participants: Participant[]; onEdit?: (p: Participant) => void }) {
-  const [panelTab, setPanelTab] = useState<'list' | 'search'>('list')
   const [searchQuery, setSearchQuery] = useState('')
 
-  const filteredParticipants = useMemo(() => {
+  const visibleParticipants = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     if (!q) return participants
     return participants.filter((p) => p.name.toLowerCase().includes(q))
   }, [participants, searchQuery])
-
-  const visibleParticipants = panelTab === 'search' ? filteredParticipants : participants
 
   return (
     <Card className="border-none shadow-lg rounded-[32px] overflow-hidden bg-card border border-dashed border-muted-foreground/20">
@@ -495,41 +489,24 @@ function UncheckedInList({ participants, onEdit }: { participants: Participant[]
           <AlertTriangle className="w-5 h-5 text-slate-500" />
           미체크인 인원
           <span className="text-sm font-bold text-muted-foreground ml-auto tabular-nums">
-            {participants.length}명
+            {searchQuery.trim()
+              ? `${visibleParticipants.length} / ${participants.length}명`
+              : `${participants.length}명`}
           </span>
         </CardTitle>
         <CardDescription className="text-xs font-medium leading-relaxed">
-          신청만 완료되었고 현장 QR 스캔 전입니다. 테이블로 드래그하면 운영자 확인 체크인 후 배정됩니다.
+          신청만 완료되었고 현장 QR 스캔 전입니다. 미배정 또는 테이블로 드래그하면 운영자 확인 체크인 후 이동·배정됩니다.
         </CardDescription>
-        <Tabs
-          value={panelTab}
-          onValueChange={(v) => setPanelTab(v as 'list' | 'search')}
-          className="mt-3"
-        >
-          <TabsList className="grid w-full grid-cols-2 h-9 rounded-xl bg-muted/80 p-0.5">
-            <TabsTrigger value="list" className="rounded-lg text-xs font-black data-[state=active]:shadow-sm">
-              전체
-            </TabsTrigger>
-            <TabsTrigger value="search" className="rounded-lg text-xs font-black data-[state=active]:shadow-sm gap-1.5">
-              <Search className="w-3.5 h-3.5" />
-              검색
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="search" className="mt-3 space-y-1">
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="이름으로 검색"
-              className="h-9 rounded-xl text-sm font-medium"
-              autoComplete="off"
-            />
-            {searchQuery.trim() ? (
-              <p className="text-[10px] font-bold text-muted-foreground px-1">
-                {filteredParticipants.length}명 / {participants.length}명
-              </p>
-            ) : null}
-          </TabsContent>
-        </Tabs>
+        <div className="relative mt-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="이름으로 검색"
+            className="h-9 rounded-xl text-sm font-medium pl-9"
+            autoComplete="off"
+          />
+        </div>
       </CardHeader>
       <CardContent className="max-h-[400px] overflow-y-auto p-3 min-h-[80px]">
         <SortableContext
@@ -542,7 +519,7 @@ function UncheckedInList({ participants, onEdit }: { participants: Participant[]
         </SortableContext>
         {participants.length === 0 ? (
           <p className="text-center py-4 text-xs font-bold text-muted-foreground">미체크인 신청자가 없습니다.</p>
-        ) : panelTab === 'search' && searchQuery.trim() && visibleParticipants.length === 0 ? (
+        ) : searchQuery.trim() && visibleParticipants.length === 0 ? (
           <p className="text-center py-4 text-xs font-bold text-muted-foreground">
             「{searchQuery.trim()}」과(와) 일치하는 이름이 없습니다.
           </p>
@@ -1150,13 +1127,21 @@ export default function AdminArrangePage() {
     setConfigRound(null)
   }, [configRound, configCounts, participants, rounds, session])
 
-  const checkedInLanguages = useMemo(() => {
+  const tableLanguageOptions = useMemo(() => {
     const langs = new Set<string>()
     for (const p of participants) {
-      if (p.checked_in_at && p.language) langs.add(p.language)
+      if (p.language && p.language !== '-' && isSupportedLanguage(p.language)) {
+        langs.add(p.language)
+      }
+    }
+    for (const lang of Object.keys(langTableCounts)) {
+      if (isSupportedLanguage(lang)) langs.add(lang)
+    }
+    if (langs.size === 0) {
+      for (const lang of SUPPORTED_LANGUAGES) langs.add(lang)
     }
     return [...langs].sort((a, b) => a.localeCompare(b, 'ko'))
-  }, [participants])
+  }, [participants, langTableCounts])
 
   const handleAddTable = useCallback(
     (roundNum: number, language: string) => {
@@ -1257,7 +1242,7 @@ export default function AdminArrangePage() {
 
     if (!newParticipant.checked_in_at) {
       toast.info(
-        `${newParticipant.name}님은 현장 QR 체크인 전입니다. 미체크인 목록에서 테이블로 드래그하면 체크인 후 배정할 수 있습니다.`,
+        `${newParticipant.name}님은 현장 QR 체크인 전입니다. 미체크인 목록에서 미배정 또는 테이블로 드래그하면 체크인 후 이동·배정할 수 있습니다.`,
         { duration: 5000 }
       )
       return
@@ -1571,44 +1556,53 @@ export default function AdminArrangePage() {
     setActiveId(event.active.id as string)
   }
 
-  const performAdminDragCheckin = useCallback(async (participantId: string, name: string) => {
-    const ok = window.confirm(
-      `${name}님을 QR 체크인 없이 배정합니다.\n\n운영자 확인으로 체크인 처리한 뒤 테이블에 배치합니다. 계속할까요?`
-    )
-    if (!ok) return null
+  const performAdminDragCheckin = useCallback(
+    async (participantId: string, name: string, target: 'table' | 'unassigned' = 'table') => {
+      const ok = window.confirm(
+        target === 'unassigned'
+          ? `${name}님을 QR 체크인 없이 체크인 처리합니다.\n\n미배정 목록으로 이동합니다. 계속할까요?`
+          : `${name}님을 QR 체크인 없이 배정합니다.\n\n운영자 확인으로 체크인 처리한 뒤 테이블에 배치합니다. 계속할까요?`
+      )
+      if (!ok) return null
 
-    seenCheckedInIdsRef.current.add(participantId)
-    try {
-      const res = await fetch('/api/admin/manual-checkin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          responseId: participantId,
-          source: ADMIN_CHECKIN_SOURCE_DRAG,
-        }),
-      })
-      if (!res.ok) {
+      seenCheckedInIdsRef.current.add(participantId)
+      try {
+        const res = await fetch('/api/admin/manual-checkin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            responseId: participantId,
+            source: ADMIN_CHECKIN_SOURCE_DRAG,
+          }),
+        })
+        if (!res.ok) {
+          seenCheckedInIdsRef.current.delete(participantId)
+          toast.error('체크인 처리에 실패했습니다.')
+          return null
+        }
+        const data = (await res.json()) as { checked_in_at?: string }
+        const checkedInAt = data.checked_in_at || new Date().toISOString()
+        setParticipants((prev) => {
+          const next = prev.map((p) =>
+            p.id === participantId ? { ...p, checked_in_at: checkedInAt } : p
+          )
+          participantsRef.current = next
+          return next
+        })
+        toast.success(
+          target === 'unassigned'
+            ? `${name}님 체크인 처리되었습니다. 미배정 목록에서 테이블을 배정하세요.`
+            : `${name}님 체크인 처리되었습니다.`
+        )
+        return checkedInAt
+      } catch {
         seenCheckedInIdsRef.current.delete(participantId)
         toast.error('체크인 처리에 실패했습니다.')
         return null
       }
-      const data = (await res.json()) as { checked_in_at?: string }
-      const checkedInAt = data.checked_in_at || new Date().toISOString()
-      setParticipants((prev) => {
-        const next = prev.map((p) =>
-          p.id === participantId ? { ...p, checked_in_at: checkedInAt } : p
-        )
-        participantsRef.current = next
-        return next
-      })
-      toast.success(`${name}님 체크인 처리되었습니다.`)
-      return checkedInAt
-    } catch {
-      seenCheckedInIdsRef.current.delete(participantId)
-      toast.error('체크인 처리에 실패했습니다.')
-      return null
-    }
-  }, [])
+    },
+    []
+  )
 
   const applyRoundAssignmentUpdate = useCallback(
     (targetRound: number, updater: (assignments: RoundData['assignments']) => RoundData['assignments']) => {
@@ -1646,6 +1640,8 @@ export default function AdminArrangePage() {
     const targetRound = Number.isFinite(overContainerRound) ? overContainerRound : currentRound
 
     const isOverTable = over.data?.current?.type === 'container'
+    const isOverUnassigned =
+      isOverTable && over.data.current?.tableLabel === 'unassigned'
     let assignTableLabel: string | null = null
 
     if (isOverTable && over.data.current) {
@@ -1665,13 +1661,17 @@ export default function AdminArrangePage() {
     }
 
     if (!activeParticipant.checked_in_at) {
-      if (!assignTableLabel) {
-        toast.info('미체크인 참가자는 테이블에 드롭하면 체크인 후 배정됩니다.', {
+      if (!assignTableLabel && !isOverUnassigned) {
+        toast.info('미체크인 참가자는 미배정 또는 테이블에 드롭하면 체크인 후 이동·배정됩니다.', {
           id: 'need-table-drop',
         })
         return
       }
-      const checkedIn = await performAdminDragCheckin(activeId, activeParticipant.name)
+      const checkedIn = await performAdminDragCheckin(
+        activeId,
+        activeParticipant.name,
+        isOverUnassigned ? 'unassigned' : 'table'
+      )
       if (!checkedIn) return
     }
 
@@ -2223,7 +2223,7 @@ export default function AdminArrangePage() {
                         )
                       })}
                       <AddTableCard
-                        languages={checkedInLanguages}
+                        languages={tableLanguageOptions}
                         disabled={!canAddTable}
                         onAdd={(lang) => handleAddTable(r, lang)}
                       />

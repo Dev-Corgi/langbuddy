@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { parseWalkInCsvText, type WalkInCsvRow } from '@/lib/walk-in-csv-parser'
 import type { CoreFormQuestion } from '@/lib/utils'
 import type { WalkInParticipant } from '@/lib/walk-in-participant'
+import { SUPPORTED_LANGUAGES } from '@/lib/supported-languages'
 
 interface ParticipantAdderProps {
   onAddParticipant: (participant: WalkInParticipant) => void
@@ -376,13 +377,20 @@ export function ParticipantAdder({
 
             <div className="space-y-2">
               <label className="text-xs font-bold text-muted-foreground">언어</label>
-              <Input
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                placeholder="영어, 일본어 등"
-                className="rounded-xl"
-                disabled={submitting}
-              />
+              <div className="flex gap-2">
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <Button
+                    key={lang}
+                    type="button"
+                    variant={language === lang ? 'default' : 'outline'}
+                    className="flex-1 rounded-xl text-xs font-bold"
+                    onClick={() => setLanguage(lang)}
+                    disabled={submitting}
+                  >
+                    {lang}
+                  </Button>
+                ))}
+              </div>
             </div>
 
             <Button

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { StampProgressEditor } from '@/components/admin/stamp-progress-editor'
+import { SUPPORTED_LANGUAGES } from '@/lib/supported-languages'
 
 type Participant = {
   id: string
@@ -167,7 +168,7 @@ export function ParticipantEditor({
             <div className="space-y-2">
               <label className="text-xs font-bold text-muted-foreground">언어</label>
               <div className="flex gap-2 flex-wrap">
-                {['영어', '일본어', '중국어', '스페인어', '프랑스어'].map((lang) => (
+                {SUPPORTED_LANGUAGES.map((lang) => (
                   <Button
                     key={lang}
                     type="button"

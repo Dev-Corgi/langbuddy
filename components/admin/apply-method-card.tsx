@@ -57,8 +57,8 @@ H=초중급회화
       question_text_en: '',
       question_type: 'radio',
       is_required: false,
-      options: ['영어', '스페인어', '프랑스어'],
-      options_en: ['English', 'Spanish', 'French'],
+      options: ['영어', '일본어'],
+      options_en: ['English', 'Japanese'],
       is_new: true,
     },
     {

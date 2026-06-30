@@ -37,6 +37,7 @@ import {
   isoDateForKoreanWeekdayInSunWeekSeoul,
   buildAutoRecurringFormTitles,
 } from '@/lib/session-event-date'
+import { filterSupportedLanguages, SUPPORTED_LANGUAGES } from '@/lib/supported-languages'
 
 // Basic Radio Group Implementation
 function RadioGroup({ value, onValueChange, children, className }: any) {
@@ -540,7 +541,8 @@ export default function ApplicationFormPage() {
         }
       } else if (selectedDay && posting?.recurring_settings?.[selectedDay]) {
         const langs = posting.recurring_settings[selectedDay].languages || []
-        setAvailableLangs(langs)
+        const filtered = filterSupportedLanguages(langs)
+        setAvailableLangs(filtered.length > 0 ? filtered : [...SUPPORTED_LANGUAGES])
       } else {
         setAvailableLangs([])
       }

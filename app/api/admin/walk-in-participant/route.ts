@@ -15,6 +15,7 @@ import {
   koreanWeekdayLetterSeoul,
   todayYYYYMMDDSeoul,
 } from '@/lib/session-event-date'
+import { isSupportedLanguage } from '@/lib/supported-languages'
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,6 +57,9 @@ export async function POST(request: NextRequest) {
     }
     if (!language) {
       return NextResponse.json({ error: 'language_required' }, { status: 400 })
+    }
+    if (!isSupportedLanguage(language)) {
+      return NextResponse.json({ error: 'invalid_language' }, { status: 400 })
     }
 
     const admin = createSupabaseAdmin()
