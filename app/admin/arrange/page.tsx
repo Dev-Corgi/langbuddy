@@ -539,6 +539,8 @@ export default function AdminArrangePage() {
   const formQuestionsRef = useRef<CoreFormQuestion[]>([])
   const participantsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seatingPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const suppressParticipantRefreshRef = useRef(false)
+  const suppressParticipantRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const readyForPersistRef = useRef(false)
   const applyingRemoteSeatingRef = useRef(false)
   const suppressRemoteReloadRef = useRef(false)
@@ -627,11 +629,13 @@ export default function AdminArrangePage() {
   )
 
   const scheduleParticipantsRefresh = useCallback(() => {
+    if (suppressParticipantRefreshRef.current) return
     if (participantsRefreshTimerRef.current) {
       clearTimeout(participantsRefreshTimerRef.current)
     }
     participantsRefreshTimerRef.current = setTimeout(() => {
       participantsRefreshTimerRef.current = null
+      if (suppressParticipantRefreshRef.current) return
       void (async () => {
         const s = sessionRef.current
         const questionsForExtract = formQuestionsRef.current
@@ -671,6 +675,14 @@ export default function AdminArrangePage() {
 
   const markLocalSeatingEdit = useCallback(() => {
     suppressRemoteReloadRef.current = true
+    suppressParticipantRefreshRef.current = true
+    if (suppressParticipantRefreshTimerRef.current) {
+      clearTimeout(suppressParticipantRefreshTimerRef.current)
+    }
+    suppressParticipantRefreshTimerRef.current = setTimeout(() => {
+      suppressParticipantRefreshRef.current = false
+      suppressParticipantRefreshTimerRef.current = null
+    }, 1200)
   }, [])
 
   const scheduleSeatingPersistRef = useRef<(() => void) | null>(null)
@@ -744,7 +756,7 @@ export default function AdminArrangePage() {
       setSeatingSyncing(false)
       setTimeout(() => {
         suppressRemoteReloadRef.current = false
-      }, 2000)
+      }, 800)
     }
   }, [supabase])
 
@@ -761,7 +773,7 @@ export default function AdminArrangePage() {
     seatingPersistTimerRef.current = setTimeout(() => {
       seatingPersistTimerRef.current = null
       void runSeatingPersist()
-    }, 800)
+    }, 300)
   }, [runSeatingPersist, markLocalSeatingEdit])
 
   scheduleSeatingPersistRef.current = scheduleSeatingPersist
@@ -779,6 +791,9 @@ export default function AdminArrangePage() {
     return () => {
       if (seatingPersistTimerRef.current) {
         clearTimeout(seatingPersistTimerRef.current)
+      }
+      if (suppressParticipantRefreshTimerRef.current) {
+        clearTimeout(suppressParticipantRefreshTimerRef.current)
       }
     }
   }, [])
@@ -825,18 +840,45 @@ export default function AdminArrangePage() {
           filter: `form_id=eq.${formId}`,
         },
         (payload) => {
-          scheduleParticipantsRefresh()
-
           const row = payload.new as {
             id?: string
             user_id?: string | null
             answers?: Record<string, unknown> | null
             payment_status?: string | null
             checked_in_at?: string | null
+            created_at?: string | null
           }
 
           const rowId = row?.id
           const answers = (row.answers || {}) as Record<string, unknown>
+
+          if (rowId && payload.eventType === 'UPDATE') {
+            const questions = formQuestionsRef.current
+            const patched = mapFormResponseToParticipant(
+              {
+                id: rowId,
+                user_id: row.user_id,
+                answers: row.answers,
+                checked_in_at: row.checked_in_at,
+                created_at: row.created_at,
+              },
+              questions
+            )
+            setParticipants((prev) => {
+              const idx = prev.findIndex((p) => p.id === rowId)
+              if (idx === -1) {
+                if (!suppressParticipantRefreshRef.current) scheduleParticipantsRefresh()
+                return prev
+              }
+              const next = [...prev]
+              next[idx] = patched
+              participantsRef.current = next
+              return next
+            })
+          } else if (!suppressParticipantRefreshRef.current) {
+            scheduleParticipantsRefresh()
+          }
+
           if (
             rowId &&
             row.checked_in_at &&
@@ -1558,16 +1600,36 @@ export default function AdminArrangePage() {
     setActiveId(event.active.id as string)
   }
 
-  const performAdminDragCheckin = useCallback(
-    async (participantId: string, name: string, target: 'table' | 'unassigned' = 'table') => {
-      if (target === 'table') {
-        const ok = window.confirm(
-          `${name}님을 QR 체크인 없이 배정합니다.\n\n운영자 확인으로 체크인 처리한 뒤 테이블에 배치합니다. 계속할까요?`
-        )
-        if (!ok) return null
-      }
-
+  const applyOptimisticCheckin = useCallback(
+    (participantId: string) => {
+      const checkedInAt = new Date().toISOString()
       seenCheckedInIdsRef.current.add(participantId)
+      markLocalSeatingEdit()
+      setParticipants((prev) => {
+        const next = prev.map((p) =>
+          p.id === participantId ? { ...p, checked_in_at: checkedInAt } : p
+        )
+        participantsRef.current = next
+        return next
+      })
+      return checkedInAt
+    },
+    [markLocalSeatingEdit]
+  )
+
+  const revertOptimisticCheckin = useCallback((participantId: string) => {
+    seenCheckedInIdsRef.current.delete(participantId)
+    setParticipants((prev) => {
+      const next = prev.map((p) =>
+        p.id === participantId ? { ...p, checked_in_at: null } : p
+      )
+      participantsRef.current = next
+      return next
+    })
+  }, [])
+
+  const syncCheckinToServer = useCallback(
+    async (participantId: string) => {
       try {
         const res = await fetch('/api/admin/manual-checkin', {
           method: 'POST',
@@ -1577,31 +1639,25 @@ export default function AdminArrangePage() {
             source: ADMIN_CHECKIN_SOURCE_DRAG,
           }),
         })
-        if (!res.ok) {
-          seenCheckedInIdsRef.current.delete(participantId)
-          toast.error('체크인 처리에 실패했습니다.')
-          return null
-        }
+        if (!res.ok) throw new Error('checkin_failed')
         const data = (await res.json()) as { checked_in_at?: string }
-        const checkedInAt = data.checked_in_at || new Date().toISOString()
-        setParticipants((prev) => {
-          const next = prev.map((p) =>
-            p.id === participantId ? { ...p, checked_in_at: checkedInAt } : p
-          )
-          participantsRef.current = next
-          return next
-        })
-        if (target === 'table') {
-          toast.success(`${name}님 체크인 처리되었습니다.`)
+        if (data.checked_in_at) {
+          setParticipants((prev) => {
+            const next = prev.map((p) =>
+              p.id === participantId ? { ...p, checked_in_at: data.checked_in_at! } : p
+            )
+            participantsRef.current = next
+            return next
+          })
         }
-        return checkedInAt
+        return true
       } catch {
-        seenCheckedInIdsRef.current.delete(participantId)
+        revertOptimisticCheckin(participantId)
         toast.error('체크인 처리에 실패했습니다.')
-        return null
+        return false
       }
     },
-    []
+    [revertOptimisticCheckin]
   )
 
   const applyRoundAssignmentUpdate = useCallback(
@@ -1616,13 +1672,14 @@ export default function AdminArrangePage() {
           ...newRounds[roundIdx],
           assignments: updater(currentAssignments),
         }
+        roundsRef.current = newRounds
         return newRounds
       })
     },
     [markLocalSeatingEdit]
   )
 
-  const onDragEnd = async (event: DragEndEvent) => {
+  const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     setActiveId(null)
 
@@ -1669,16 +1726,30 @@ export default function AdminArrangePage() {
       }
     }
 
+    if (assignTableLabel) {
+      const tableRoundData = roundsRef.current.find((r) => r.round === targetRound)
+      const tableLang = tableRoundData?.tableLanguages?.[assignTableLabel]
+      if (tableLang && tableLang !== activeParticipant.language) {
+        toast.error(
+          `언어가 다릅니다: ${activeParticipant.language} 참가자는 ${tableLang} 테이블에 앉을 수 없습니다.`,
+          { id: 'lang-mismatch' }
+        )
+        return
+      }
+    }
+
     if (!activeParticipant.checked_in_at) {
       if (!assignTableLabel && !isOverUnassigned) {
         return
       }
-      const checkedIn = await performAdminDragCheckin(
-        activeId,
-        activeParticipant.name,
-        isOverUnassigned ? 'unassigned' : 'table'
-      )
-      if (!checkedIn) return
+      if (assignTableLabel) {
+        const ok = window.confirm(
+          `${activeParticipant.name}님을 QR 체크인 없이 배정합니다.\n\n운영자 확인으로 체크인 처리한 뒤 테이블에 배치합니다. 계속할까요?`
+        )
+        if (!ok) return
+      }
+      applyOptimisticCheckin(activeId)
+      void syncCheckinToServer(activeId)
     }
 
     if (isOverUnassigned && !assignTableLabel) {
@@ -1705,16 +1776,8 @@ export default function AdminArrangePage() {
         })
       } else {
         const currentRoundData = roundsRef.current.find((r) => r.round === targetRound)
-        const tableLang = currentRoundData?.tableLanguages?.[newTableLabel]
         const participant =
           participantsRef.current.find((p) => p.id === activeId) ?? activeParticipant
-
-        if (tableLang && tableLang !== participant.language) {
-          toast.error(`언어가 다릅니다: ${participant.language} 참가자는 ${tableLang} 테이블에 앉을 수 없습니다.`, {
-            id: 'lang-mismatch',
-          })
-          return
-        }
 
         const previousRoundsForDrag = roundsRef.current.filter(
           (r) => r.round < targetRound && r.assignments.length > 0
@@ -1753,16 +1816,8 @@ export default function AdminArrangePage() {
 
       if (overAssignment && overAssignment.table_label !== activeAssignment?.table_label) {
         const newTableLabel = overAssignment.table_label
-        const tableLang = currentRoundData?.tableLanguages?.[newTableLabel]
         const participant =
           participantsRef.current.find((p) => p.id === activeId) ?? activeParticipant
-
-        if (tableLang && tableLang !== participant.language) {
-          toast.error(`언어가 다릅니다: ${participant.language} 참가자는 ${tableLang} 테이블에 앉을 수 없습니다.`, {
-            id: 'lang-mismatch',
-          })
-          return
-        }
 
         const previousRoundsForDrag = roundsRef.current.filter(
           (r) => r.round < targetRound && r.assignments.length > 0
