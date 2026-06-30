@@ -9,22 +9,11 @@ import { QrCode, Loader2, SwitchCamera } from 'lucide-react'
 import { PageHeader } from '@/components/admin/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import {
-  formResponseMatchesTodaySession,
-  koreanWeekdayLetterSeoul,
-  todayYYYYMMDDSeoul,
-} from '@/lib/session-event-date'
 import { loadTodayQrSessions, type TodayQrSessionInfo } from '@/lib/admin-qr-sessions'
 import { QrScannerModeSheet, type QrScannerMode } from '@/components/admin/qr-scanner-mode-sheet'
-
-function classifyResponseFormId(
-  formId: string,
-  sessions: TodayQrSessionInfo
-): 'study' | 'lang' | 'unknown' {
-  if (sessions.study?.formId === formId) return 'study'
-  if (sessions.lang?.formId === formId) return 'lang'
-  return 'unknown'
-}
+import { validateQrCode } from '@/lib/qr-scan-validation'
+import Link from 'next/link'
+import { Bug } from 'lucide-react'
 
 export default function AdminQrScannerPage() {
   const supabase = useMemo(() => createClient(), [])
@@ -90,56 +79,37 @@ export default function AdminQrScannerPage() {
       }
 
       const mode = scanModeRef.current
-      const ctx = sessionsRef.current
-      if (!mode || !ctx) return
-
-      const todayStr = todayYYYYMMDDSeoul()
-      const currentDay = koreanWeekdayLetterSeoul()
+      if (!mode) return
 
       try {
-        const { data: responseData, error: responseError } = await supabase
+        const result = await validateQrCode(supabase, decodedText, {
+          mode: 'production',
+          scanMode: mode,
+        })
+
+        if (!result.ok) {
+          toast.error(result.message)
+          return
+        }
+
+        const responseId = result.response?.id
+        if (!responseId) {
+          toast.error('유효하지 않은 QR 코드입니다.')
+          return
+        }
+
+        const { data: responseData } = await supabase
           .from('form_responses')
-          .select('*')
-          .eq('qr_code', decodedText)
+          .select('checked_in_at')
+          .eq('id', responseId)
           .maybeSingle()
 
-        if (responseError || !responseData) {
-          toast.error('유효하지 않은 QR 코드입니다.')
-          return
-        }
-
-        const kind = classifyResponseFormId(responseData.form_id, ctx)
-        if (kind === 'unknown') {
-          toast.error('유효하지 않은 QR 코드입니다.')
-          return
-        }
-
-        if (mode === 'study' && kind === 'lang') {
-          toast.error('잘못된 QR 코드입니다.')
-          return
-        }
-        if (mode === 'lang' && kind === 'study') {
-          toast.error('잘못된 QR 코드입니다.')
-          return
-        }
-
-        if (
-          !formResponseMatchesTodaySession(
-            responseData.answers as Record<string, unknown>,
-            todayStr,
-            currentDay
-          )
-        ) {
-          toast.error('오늘 일정에 해당하지 않는 신청입니다.')
-          return
-        }
-
-        if (!responseData.checked_in_at) {
+        if (!responseData?.checked_in_at) {
           const nowIso = new Date().toISOString()
           const { error: upErr } = await supabase
             .from('form_responses')
             .update({ checked_in_at: nowIso })
-            .eq('id', responseData.id)
+            .eq('id', responseId)
           if (upErr) {
             toast.error('체크인 처리에 실패했습니다.')
             return
@@ -263,6 +233,13 @@ export default function AdminQrScannerPage() {
         descriptionEn="For a dedicated device scanning QR codes continuously."
         backPath="/admin/dashboard"
       />
+
+      <Button asChild variant="outline" className="w-full rounded-2xl font-bold gap-2 border-dashed">
+        <Link href="/admin/qr-scanner/debug">
+          <Bug className="size-4" />
+          QR 디버그 검증 (체크인 없음)
+        </Link>
+      </Button>
 
       <Card className="rounded-[24px] border-none shadow-lg overflow-hidden">
         <CardContent className="p-5 space-y-4">

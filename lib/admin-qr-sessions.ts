@@ -64,6 +64,59 @@ export async function loadTodayQrSessions(
   return { study, lang }
 }
 
+/** 디버그·QR 시트: 요일별 언어교환 form (is_active 무관) */
+export async function loadLangQrSessionForDay(
+  supabase: SupabaseClient,
+  dayKo: string
+): Promise<{ postingId: string; formId: string } | null> {
+  const { data: langRows } = await supabase
+    .from('postings')
+    .select('id')
+    .eq('category', '언어교환')
+    .is('day_of_week', null)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  const langMaster = langRows?.[0]
+  if (!langMaster?.id) return null
+
+  const { data: ls } = await supabase
+    .from('language_exchange_schedules')
+    .select('form_id')
+    .eq('posting_id', langMaster.id)
+    .eq('day_of_week', dayKo)
+    .maybeSingle()
+
+  if (!ls?.form_id) return null
+  return { postingId: langMaster.id, formId: ls.form_id }
+}
+
+/** 디버그·QR 시트: 요일별 스터디 form (is_active 무관) */
+export async function loadStudyQrSessionForDay(
+  supabase: SupabaseClient,
+  dayKo: string
+): Promise<{ postingId: string; formId: string } | null> {
+  const { data: studyMaster } = await supabase
+    .from('postings')
+    .select('id')
+    .eq('category', '스터디')
+    .is('day_of_week', null)
+    .maybeSingle()
+
+  if (!studyMaster?.id) return null
+
+  const { data: ss } = await supabase
+    .from('study_schedules')
+    .select('form_id')
+    .eq('posting_id', studyMaster.id)
+    .eq('day_of_week', dayKo)
+    .maybeSingle()
+
+  if (!ss?.form_id) return null
+  return { postingId: studyMaster.id, formId: ss.form_id }
+}
+
 export type SeatingAssignmentRow = {
   round: number
   participant_id: string
