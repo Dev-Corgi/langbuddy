@@ -28,8 +28,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { isoDateForKoreanWeekdayInSunWeekSeoul, koreanWeekdayLetterSeoul, todayYYYYMMDDSeoul } from '@/lib/session-event-date'
-import { validateQrCode, type QrValidationResult, type QrScanMode } from '@/lib/qr-scan-validation'
-import { QrScannerModeSheet } from '@/components/admin/qr-scanner-mode-sheet'
+import { validateQrCode, type QrValidationResult } from '@/lib/qr-scan-validation'
 
 const WEEK_DAYS = ['월', '화', '수', '목', '금', '토', '일'] as const
 
@@ -39,8 +38,6 @@ export default function QrDebugScannerPage() {
   const supabase = useMemo(() => createClient(), [])
   const [authChecked, setAuthChecked] = useState(false)
   const [targetDay, setTargetDay] = useState<string>('목')
-  const [scanMode, setScanMode] = useState<QrScanMode>('lang')
-  const [modeSheetOpen, setModeSheetOpen] = useState(false)
   const [cameraOn, setCameraOn] = useState(false)
   const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user')
   const [manualCode, setManualCode] = useState('')
@@ -51,9 +48,7 @@ export default function QrDebugScannerPage() {
   const qrScannerRef = useRef<QrScanner | null>(null)
   const lastScanRef = useRef<{ at: number; text: string } | null>(null)
   const targetDayRef = useRef(targetDay)
-  const scanModeRef = useRef(scanMode)
   targetDayRef.current = targetDay
-  scanModeRef.current = scanMode
 
   const targetEventDate = useMemo(() => {
     try {
@@ -98,7 +93,7 @@ export default function QrDebugScannerPage() {
       try {
         const result = await validateQrCode(supabase, qrCode, {
           mode: 'debug',
-          scanMode: scanModeRef.current,
+          scanMode: 'lang',
           targetDayKo: targetDayRef.current,
         })
         pushResult(qrCode, result)
@@ -233,38 +228,25 @@ export default function QrDebugScannerPage() {
             디버그 모드 — DB의 <code className="text-xs">checked_in_at</code> 은 수정하지 않습니다.
             목요일 실제 신청 QR 테스트 시 아래에서 대상 요일을 <b>목</b>으로 두세요.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-xs font-bold">검증 기준 요일</Label>
-              <Select value={targetDay} onValueChange={setTargetDay}>
-                <SelectTrigger className="rounded-xl font-bold">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {WEEK_DAYS.map((d) => (
-                    <SelectItem key={d} value={d}>
-                      {d}요일
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {targetEventDate ? (
-                <p className="text-xs text-muted-foreground font-medium">
-                  회차 날짜: {targetEventDate}
-                </p>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs font-bold">스캔 모드</Label>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full rounded-xl font-bold justify-start"
-                onClick={() => setModeSheetOpen(true)}
-              >
-                {scanMode === 'study' ? '스터디' : '언어교환'}
-              </Button>
-            </div>
+          <div className="space-y-2 max-w-xs">
+            <Label className="text-xs font-bold">검증 기준 요일</Label>
+            <Select value={targetDay} onValueChange={setTargetDay}>
+              <SelectTrigger className="rounded-xl font-bold">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {WEEK_DAYS.map((d) => (
+                  <SelectItem key={d} value={d}>
+                    {d}요일
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {targetEventDate ? (
+              <p className="text-xs text-muted-foreground font-medium">
+                회차 날짜: {targetEventDate}
+              </p>
+            ) : null}
           </div>
           <p className="text-xs text-muted-foreground font-medium">
             오늘: {todayStr} ({todayDay}) · 검증 기준: {targetDay}요일 / {targetEventDate || '—'}
@@ -379,13 +361,6 @@ export default function QrDebugScannerPage() {
         </Card>
       )}
 
-      <QrScannerModeSheet
-        open={modeSheetOpen}
-        onOpenChange={setModeSheetOpen}
-        studyAvailable
-        langAvailable
-        onSelect={(mode) => setScanMode(mode)}
-      />
     </div>
   )
 }

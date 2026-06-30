@@ -5,26 +5,19 @@ import { createClient } from '@/lib/supabase'
 import { isSuperAdminEmail } from '@/lib/super-admin'
 import QrScanner from 'qr-scanner'
 import { toast } from 'sonner'
-import { QrCode, Loader2, SwitchCamera } from 'lucide-react'
+import { QrCode, Loader2, SwitchCamera, Bug } from 'lucide-react'
 import { PageHeader } from '@/components/admin/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { loadTodayQrSessions, type TodayQrSessionInfo } from '@/lib/admin-qr-sessions'
-import { QrScannerModeSheet, type QrScannerMode } from '@/components/admin/qr-scanner-mode-sheet'
+import { loadTodayQrSessions } from '@/lib/admin-qr-sessions'
 import { validateQrCode } from '@/lib/qr-scan-validation'
 import Link from 'next/link'
-import { Bug } from 'lucide-react'
 
 export default function AdminQrScannerPage() {
   const supabase = useMemo(() => createClient(), [])
   const [authChecked, setAuthChecked] = useState(false)
   const [contextLoading, setContextLoading] = useState(true)
-  const [sessions, setSessions] = useState<TodayQrSessionInfo | null>(null)
-
-  const [modeSheetOpen, setModeSheetOpen] = useState(false)
-  const [scanMode, setScanMode] = useState<QrScannerMode | null>(null)
-  const scanModeRef = useRef<QrScannerMode | null>(null)
-  scanModeRef.current = scanMode
+  const [langSessionReady, setLangSessionReady] = useState(false)
 
   const [cameraOn, setCameraOn] = useState(false)
   const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user')
@@ -32,8 +25,6 @@ export default function AdminQrScannerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const qrScannerRef = useRef<QrScanner | null>(null)
   const lastScanRef = useRef<{ at: number; text: string } | null>(null)
-  const sessionsRef = useRef(sessions)
-  sessionsRef.current = sessions
 
   const acceptScan = useCallback((text: string) => {
     const now = Date.now()
@@ -64,7 +55,7 @@ export default function AdminQrScannerPage() {
       setContextLoading(true)
       try {
         const s = await loadTodayQrSessions(supabase)
-        setSessions(s)
+        setLangSessionReady(Boolean(s.lang?.formId))
       } finally {
         setContextLoading(false)
       }
@@ -78,13 +69,10 @@ export default function AdminQrScannerPage() {
         return
       }
 
-      const mode = scanModeRef.current
-      if (!mode) return
-
       try {
         const result = await validateQrCode(supabase, decodedText, {
           mode: 'production',
-          scanMode: mode,
+          scanMode: 'lang',
         })
 
         if (!result.ok) {
@@ -127,7 +115,7 @@ export default function AdminQrScannerPage() {
   )
 
   useEffect(() => {
-    if (!cameraOn || !scanMode) return
+    if (!cameraOn) return
 
     const video = videoRef.current
     if (!video) return
@@ -211,7 +199,15 @@ export default function AdminQrScannerPage() {
         qrScannerRef.current = null
       }
     }
-  }, [cameraOn, scanMode, cameraFacing, onDecoded])
+  }, [cameraOn, cameraFacing, onDecoded])
+
+  const startScanner = () => {
+    if (!langSessionReady) {
+      toast.error('오늘 언어교환 세션이 없습니다. 스케줄을 확인해 주세요.')
+      return
+    }
+    setCameraOn(true)
+  }
 
   if (!authChecked || contextLoading) {
     return (
@@ -220,9 +216,6 @@ export default function AdminQrScannerPage() {
       </div>
     )
   }
-
-  const studyOk = Boolean(sessions?.study?.formId)
-  const langOk = Boolean(sessions?.lang?.formId)
 
   return (
     <div className="p-4 md:p-8 max-w-lg mx-auto space-y-6">
@@ -243,41 +236,11 @@ export default function AdminQrScannerPage() {
 
       <Card className="rounded-[24px] border-none shadow-lg overflow-hidden">
         <CardContent className="p-5 space-y-4">
-          {scanMode && (
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-black">
-                모드:{' '}
-                <span className="text-primary">
-                  {scanMode === 'study' ? '스터디' : '언어교환'}
-                </span>
-              </p>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="font-bold rounded-xl"
-                onClick={() => {
-                  setCameraOn(false)
-                  setScanMode(null)
-                  setModeSheetOpen(true)
-                }}
-              >
-                변경
-              </Button>
-            </div>
-          )}
-
           {!cameraOn && (
             <Button
               type="button"
               className="w-full h-24 rounded-3xl text-lg font-black gap-2 shadow-md"
-              onClick={() => {
-                if (scanMode) {
-                  setCameraOn(true)
-                } else {
-                  setModeSheetOpen(true)
-                }
-              }}
+              onClick={startScanner}
             >
               <QrCode className="size-8" />
               QR 스캐너 시작
@@ -324,17 +287,6 @@ export default function AdminQrScannerPage() {
           )}
         </CardContent>
       </Card>
-
-      <QrScannerModeSheet
-        open={modeSheetOpen}
-        onOpenChange={setModeSheetOpen}
-        studyAvailable={studyOk}
-        langAvailable={langOk}
-        onSelect={(mode) => {
-          setScanMode(mode)
-          setCameraOn(true)
-        }}
-      />
     </div>
   )
 }

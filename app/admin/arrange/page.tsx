@@ -22,6 +22,7 @@ import {
   Download,
   Trash2,
   Plus,
+  Search,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
@@ -57,6 +58,13 @@ function sortParticipantsByRecencyDesc(list: ArrangedParticipant[]): ArrangedPar
     if (bb.checkedIn !== aa.checkedIn) return bb.checkedIn - aa.checkedIn
     return bb.created - aa.created
   })
+}
+
+/** 미체크인 목록: 이름 가나다·ABC 오름차순 */
+function sortParticipantsByNameAsc(list: ArrangedParticipant[]): ArrangedParticipant[] {
+  return [...list].sort((a, b) =>
+    a.name.localeCompare(b.name, 'ko', { sensitivity: 'base', numeric: true })
+  )
 }
 import {
   loadSeatingLiveState,
@@ -469,29 +477,76 @@ function UnassignedList({ participants, round, onEdit }: { participants: Partici
 }
 
 function UncheckedInList({ participants, onEdit }: { participants: Participant[]; onEdit?: (p: Participant) => void }) {
+  const [panelTab, setPanelTab] = useState<'list' | 'search'>('list')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const filteredParticipants = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return participants
+    return participants.filter((p) => p.name.toLowerCase().includes(q))
+  }, [participants, searchQuery])
+
+  const visibleParticipants = panelTab === 'search' ? filteredParticipants : participants
+
   return (
     <Card className="border-none shadow-lg rounded-[32px] overflow-hidden bg-card border border-dashed border-muted-foreground/20">
-      <CardHeader className="pb-4">
+      <CardHeader className="pb-3">
         <CardTitle className="text-lg font-black flex items-center gap-2">
           <AlertTriangle className="w-5 h-5 text-slate-500" />
           미체크인 인원
+          <span className="text-sm font-bold text-muted-foreground ml-auto tabular-nums">
+            {participants.length}명
+          </span>
         </CardTitle>
         <CardDescription className="text-xs font-medium leading-relaxed">
           신청만 완료되었고 현장 QR 스캔 전입니다. 테이블로 드래그하면 운영자 확인 체크인 후 배정됩니다.
         </CardDescription>
+        <Tabs
+          value={panelTab}
+          onValueChange={(v) => setPanelTab(v as 'list' | 'search')}
+          className="mt-3"
+        >
+          <TabsList className="grid w-full grid-cols-2 h-9 rounded-xl bg-muted/80 p-0.5">
+            <TabsTrigger value="list" className="rounded-lg text-xs font-black data-[state=active]:shadow-sm">
+              전체
+            </TabsTrigger>
+            <TabsTrigger value="search" className="rounded-lg text-xs font-black data-[state=active]:shadow-sm gap-1.5">
+              <Search className="w-3.5 h-3.5" />
+              검색
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="search" className="mt-3 space-y-1">
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="이름으로 검색"
+              className="h-9 rounded-xl text-sm font-medium"
+              autoComplete="off"
+            />
+            {searchQuery.trim() ? (
+              <p className="text-[10px] font-bold text-muted-foreground px-1">
+                {filteredParticipants.length}명 / {participants.length}명
+              </p>
+            ) : null}
+          </TabsContent>
+        </Tabs>
       </CardHeader>
       <CardContent className="max-h-[400px] overflow-y-auto p-3 min-h-[80px]">
         <SortableContext
-          items={participants.map((p) => p.id)}
+          items={visibleParticipants.map((p) => p.id)}
           strategy={verticalListSortingStrategy}
         >
-          {participants.map((p) => (
+          {visibleParticipants.map((p) => (
             <ParticipantCard key={p.id} participant={p} onEdit={onEdit} />
           ))}
         </SortableContext>
-        {participants.length === 0 && (
+        {participants.length === 0 ? (
           <p className="text-center py-4 text-xs font-bold text-muted-foreground">미체크인 신청자가 없습니다.</p>
-        )}
+        ) : panelTab === 'search' && searchQuery.trim() && visibleParticipants.length === 0 ? (
+          <p className="text-center py-4 text-xs font-bold text-muted-foreground">
+            「{searchQuery.trim()}」과(와) 일치하는 이름이 없습니다.
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -1015,7 +1070,7 @@ export default function AdminArrangePage() {
   [participants])
 
   const uncheckedInParticipants = useMemo(
-    () => participants.filter((p) => !p.checked_in_at),
+    () => sortParticipantsByNameAsc(participants.filter((p) => !p.checked_in_at)),
     [participants]
   )
 
