@@ -84,7 +84,10 @@ export function buildCheckinModalPayloadFromResponse(
     tableLabel: table.label,
     showTable: options?.showTable ?? true,
     userId,
-    stampSlider: userId != null ? storedStampToSlider(stampProgress) : null,
+    stampSlider:
+      userId != null && stampProgress != null
+        ? storedStampToSlider(stampProgress)
+        : null,
     sessionUsedCoupon: isCouponApplication(answers),
     stampEditable: userId != null,
   }

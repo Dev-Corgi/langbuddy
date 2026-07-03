@@ -103,68 +103,30 @@ export async function loadSeatingLiveState(
   return { rounds, langTableCounts }
 }
 
-export async function persistSeatingLive(
-  supabase: SupabaseClient,
-  params: {
-    postingId: string
-    sessionDate: string
-    rounds: RoundData[]
-    langTableCounts: Record<string, number>
-    checkedParticipantIds: Set<string>
-  }
-): Promise<void> {
+export async function persistSeatingLive(params: {
+  postingId: string
+  sessionDate: string
+  rounds: RoundData[]
+  langTableCounts: Record<string, number>
+  checkedParticipantIds: Set<string>
+}): Promise<void> {
   const { postingId, sessionDate, rounds, langTableCounts, checkedParticipantIds } = params
 
-  const seating_config: SeatingConfigPayload = {
-    langTableCounts,
-    tableLanguagesByRound: roundsToTableLanguagesByRound(rounds),
-  }
+  const res = await fetch('/api/admin/seating-live/persist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      postingId,
+      sessionDate,
+      rounds,
+      langTableCounts,
+      checkedParticipantIds: [...checkedParticipantIds],
+    }),
+  })
 
-  const { error: postingErr } = await supabase
-    .from('postings')
-    .update({ seating_config })
-    .eq('id', postingId)
-  if (postingErr) throw postingErr
-
-  const { error: delTodayErr } = await supabase
-    .from('seating_assignments')
-    .delete()
-    .eq('posting_id', postingId)
-    .eq('session_date', sessionDate)
-  if (delTodayErr) throw delTodayErr
-
-  const { error: delLegacyErr } = await supabase
-    .from('seating_assignments')
-    .delete()
-    .eq('posting_id', postingId)
-    .is('session_date', null)
-  if (delLegacyErr) throw delLegacyErr
-
-  const rawRows = rounds.flatMap((r) =>
-    r.assignments
-      .filter(
-        (a) =>
-          a.table_label &&
-          String(a.table_label).trim() &&
-          checkedParticipantIds.has(a.participant_id)
-      )
-      .map((a) => ({
-        posting_id: postingId,
-        session_date: sessionDate,
-        round: r.round,
-        table_label: String(a.table_label).trim(),
-        participant_id: a.participant_id,
-      }))
-  )
-
-  const dedupedMap = new Map<string, (typeof rawRows)[0]>()
-  for (const row of rawRows) {
-    dedupedMap.set(`${row.round}:${row.participant_id}`, row)
-  }
-  const allAssignments = [...dedupedMap.values()]
-
-  if (allAssignments.length > 0) {
-    const { error: insErr } = await supabase.from('seating_assignments').insert(allAssignments)
-    if (insErr) throw insErr
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    const err = new Error(body.error || 'persist_failed') as Error & { message: string }
+    throw err
   }
 }

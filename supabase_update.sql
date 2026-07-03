@@ -152,6 +152,16 @@ ALTER TABLE public.seating_assignments
 CREATE INDEX IF NOT EXISTS idx_seating_assignments_posting_session
   ON public.seating_assignments (posting_id, session_date);
 
+ALTER TABLE public.seating_assignments
+  DROP CONSTRAINT IF EXISTS seating_assignments_posting_id_round_participant_id_key;
+
+ALTER TABLE public.seating_assignments
+  DROP CONSTRAINT IF EXISTS seating_assignments_posting_round_participant_session_key;
+
+ALTER TABLE public.seating_assignments
+  ADD CONSTRAINT seating_assignments_posting_round_participant_session_key
+  UNIQUE (posting_id, round, participant_id, session_date);
+
 -- 온보딩 시 개인정보 처리방침 동의 기록
 ALTER TABLE public.users
   ADD COLUMN IF NOT EXISTS privacy_accepted_at TIMESTAMPTZ,

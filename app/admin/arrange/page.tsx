@@ -34,7 +34,7 @@ import {
 } from '@/lib/session-event-date'
 import { deriveArrangeStage, targetRoundForLateJoin } from '@/lib/arrange-stage'
 import { buildLangCheckinModalPayload } from '@/lib/admin-checkin-display'
-import { ADMIN_CHECKIN_SOURCE_DRAG } from '@/lib/admin-manual-checkin'
+import { ADMIN_CHECKIN_SOURCE_DRAG, ADMIN_CHECKIN_SOURCE_MODAL } from '@/lib/admin-manual-checkin'
 import {
   isWalkInAnswers,
   mapFormResponseToParticipant,
@@ -545,6 +545,9 @@ export default function AdminArrangePage() {
   const applyingRemoteSeatingRef = useRef(false)
   const suppressRemoteReloadRef = useRef(false)
   const pendingPersistAfterRemoteRef = useRef(false)
+  const seatingPersistInFlightRef = useRef(false)
+  const seatingPersistPendingRef = useRef(false)
+  const persistFailedAtRef = useRef(0)
   const participantsRef = useRef<Participant[]>([])
   const roundsRef = useRef<RoundData[]>([])
   const langTableCountsRef = useRef<Record<string, number>>({})
@@ -690,6 +693,8 @@ export default function AdminArrangePage() {
   const reloadSeatingFromServer = useCallback(async () => {
     const s = sessionRef.current
     if (!s?.id) return
+    if (suppressRemoteReloadRef.current) return
+    if (persistFailedAtRef.current !== 0) return
 
     const todayStr = todayYYYYMMDDSeoul()
     const currentParticipants = participantsRef.current
@@ -729,6 +734,12 @@ export default function AdminArrangePage() {
     const s = sessionRef.current
     if (!s?.id) return
 
+    if (seatingPersistInFlightRef.current) {
+      seatingPersistPendingRef.current = true
+      return
+    }
+
+    seatingPersistInFlightRef.current = true
     const todayStr = todayYYYYMMDDSeoul()
     const currentParticipants = participantsRef.current
     const checkedIds = new Set(
@@ -738,27 +749,43 @@ export default function AdminArrangePage() {
     setSeatingSyncing(true)
     suppressRemoteReloadRef.current = true
     try {
-      await persistSeatingLive(supabase, {
+      await persistSeatingLive({
         postingId: s.id,
         sessionDate: todayStr,
         rounds: roundsRef.current,
         langTableCounts: langTableCountsRef.current,
         checkedParticipantIds: checkedIds,
       })
+      persistFailedAtRef.current = 0
+      setTimeout(() => {
+        if (!seatingPersistInFlightRef.current && persistFailedAtRef.current === 0) {
+          suppressRemoteReloadRef.current = false
+        }
+      }, 800)
     } catch (err) {
+      persistFailedAtRef.current = Date.now()
       console.error('[arrange] seating persist:', err)
       const msg =
         err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string'
           ? (err as { message: string }).message
           : '동기화에 실패했습니다.'
       toast.error(msg.length < 200 ? `동기화 실패: ${msg}` : `동기화 실패: ${msg.slice(0, 180)}…`)
+      seatingPersistPendingRef.current = true
     } finally {
       setSeatingSyncing(false)
-      setTimeout(() => {
-        suppressRemoteReloadRef.current = false
-      }, 800)
+      seatingPersistInFlightRef.current = false
+      if (seatingPersistPendingRef.current) {
+        seatingPersistPendingRef.current = false
+        if (seatingPersistTimerRef.current) {
+          clearTimeout(seatingPersistTimerRef.current)
+        }
+        seatingPersistTimerRef.current = setTimeout(() => {
+          seatingPersistTimerRef.current = null
+          scheduleSeatingPersistRef.current?.()
+        }, 1500)
+      }
     }
-  }, [supabase])
+  }, [])
 
   const scheduleSeatingPersist = useCallback(() => {
     if (!readyForPersistRef.current) return
@@ -1357,132 +1384,152 @@ export default function AdminArrangePage() {
     )
   }
 
-  const handleUpdateParticipant = async (updated: Participant) => {
-    const oldParticipant = participants.find(p => p.id === updated.id)
-    if (!oldParticipant) return
+  const applyLanguageReassignment = useCallback(
+    (oldParticipant: Participant, updated: Participant) => {
+      if (oldParticipant.language === updated.language) return
 
-    if (updated.isWalkIn) {
-      try {
-        const res = await fetch(`/api/admin/walk-in-participant/${updated.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: updated.name,
-            gender: updated.gender,
-            nationality: updated.nationality,
-            language: updated.language,
-          }),
+      const currentRoundData = roundsRef.current.find((r) => r.round === currentRound)
+      if (!currentRoundData || currentRoundData.assignments.length === 0) return
+
+      const currentAssignment = currentRoundData.assignments.find(
+        (a) => a.participant_id === updated.id
+      )
+      if (!currentAssignment) return
+
+      const tableLanguages = currentRoundData.tableLanguages || {}
+      const currentTableLang = tableLanguages[currentAssignment.table_label]
+      if (currentTableLang === updated.language) return
+
+      const assignmentsByTable = _.groupBy(currentRoundData.assignments, 'table_label')
+      const matchingTables = Object.keys(tableLanguages).filter(
+        (label) => tableLanguages[label] === updated.language
+      )
+
+      if (matchingTables.length > 0) {
+        let minTable = matchingTables[0]
+        let minCount = (assignmentsByTable[minTable] || []).length
+
+        matchingTables.forEach((label) => {
+          const count = (assignmentsByTable[label] || []).length
+          if (count < minCount) {
+            minCount = count
+            minTable = label
+          }
         })
-        const data = (await res.json().catch(() => ({}))) as {
-          error?: string
-          participant?: Participant
+
+        markLocalSeatingEdit()
+        setRounds((prev) => {
+          const updatedRounds = [...prev]
+          const roundIdx = updatedRounds.findIndex((r) => r.round === currentRound)
+          if (roundIdx !== -1) {
+            updatedRounds[roundIdx] = {
+              ...updatedRounds[roundIdx],
+              assignments: updatedRounds[roundIdx].assignments.map((a) =>
+                a.participant_id === updated.id ? { ...a, table_label: minTable } : a
+              ),
+            }
+          }
+          roundsRef.current = updatedRounds
+          return updatedRounds
+        })
+
+        toast.success(
+          `${updated.name}님의 언어가 ${updated.language}로 변경되어 ${minTable}테이블로 재배정되었습니다.`,
+          { duration: 5000 }
+        )
+        return
+      }
+
+      markLocalSeatingEdit()
+      setRounds((prev) => {
+        const updatedRounds = [...prev]
+        const roundIdx = updatedRounds.findIndex((r) => r.round === currentRound)
+        if (roundIdx !== -1) {
+          updatedRounds[roundIdx] = {
+            ...updatedRounds[roundIdx],
+            assignments: updatedRounds[roundIdx].assignments.filter(
+              (a) => a.participant_id !== updated.id
+            ),
+          }
         }
-        if (!res.ok || !data.participant) {
-          toast.error(data.error || '참가자 정보 저장에 실패했습니다.')
-          return
+        roundsRef.current = updatedRounds
+        return updatedRounds
+      })
+
+      toast.warning(
+        `${updated.name}님의 언어가 ${updated.language}로 변경되었으나, 현재 라운드에 해당 언어 테이블이 없어 미배정 상태입니다.`,
+        { duration: 5000 }
+      )
+    },
+    [currentRound, markLocalSeatingEdit]
+  )
+
+  const handleParticipantFieldSave = useCallback(
+    async (updated: Participant): Promise<boolean> => {
+      const oldParticipant = participantsRef.current.find((p) => p.id === updated.id)
+      if (!oldParticipant) return false
+
+      let persisted = updated
+      try {
+        if (updated.isWalkIn) {
+          const res = await fetch(`/api/admin/walk-in-participant/${updated.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: updated.name,
+              gender: updated.gender,
+              nationality: updated.nationality,
+              language: updated.language,
+            }),
+          })
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string
+            participant?: Participant
+          }
+          if (!res.ok || !data.participant) {
+            toast.error(data.error || '참가자 정보 저장에 실패했습니다.')
+            return false
+          }
+          persisted = data.participant
+        } else {
+          const res = await fetch(`/api/admin/form-response-participant/${updated.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: updated.name,
+              gender: updated.gender,
+              nationality: updated.nationality,
+              language: updated.language,
+            }),
+          })
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string
+            participant?: Participant
+          }
+          if (!res.ok || !data.participant) {
+            toast.error(data.error || '참가자 정보 저장에 실패했습니다.')
+            return false
+          }
+          persisted = data.participant
         }
-        updated = data.participant
       } catch (err) {
         console.error(err)
         toast.error('참가자 정보 저장에 실패했습니다.')
-        return
+        return false
       }
-    }
 
-    // 참가자 정보 업데이트
-    setParticipants(prev =>
-      prev.map(p => p.id === updated.id ? updated : p)
-    )
-
-    // 언어가 변경된 경우 현재 라운드 자동 재배정
-    if (oldParticipant.language !== updated.language) {
-      const currentRoundData = rounds.find(r => r.round === currentRound)
-      if (currentRoundData && currentRoundData.assignments.length > 0) {
-        const currentAssignment = currentRoundData.assignments.find(
-          a => a.participant_id === updated.id
-        )
-
-        if (currentAssignment) {
-          const tableLanguages = currentRoundData.tableLanguages || {}
-          const currentTableLang = tableLanguages[currentAssignment.table_label]
-
-          // 현재 테이블 언어와 새 언어가 다르면 재배정
-          if (currentTableLang !== updated.language) {
-            const assignmentsByTable = _.groupBy(currentRoundData.assignments, 'table_label')
-
-            // 새 언어와 일치하는 테이블 찾기
-            const matchingTables = Object.keys(tableLanguages).filter(
-              label => tableLanguages[label] === updated.language
-            )
-
-            if (matchingTables.length > 0) {
-              // 인원이 가장 적은 테이블 찾기
-              let minTable = matchingTables[0]
-              let minCount = (assignmentsByTable[minTable] || []).length
-
-              matchingTables.forEach(label => {
-                const count = (assignmentsByTable[label] || []).length
-                if (count < minCount) {
-                  minCount = count
-                  minTable = label
-                }
-              })
-
-              // 재배정
-              setRounds(prev => {
-                const updatedRounds = [...prev]
-                const roundIdx = updatedRounds.findIndex(r => r.round === currentRound)
-                if (roundIdx !== -1) {
-                  updatedRounds[roundIdx] = {
-                    ...updatedRounds[roundIdx],
-                    assignments: updatedRounds[roundIdx].assignments.map(a =>
-                      a.participant_id === updated.id
-                        ? { ...a, table_label: minTable }
-                        : a
-                    )
-                  }
-                }
-                return updatedRounds
-              })
-
-              toast.success(
-                `${updated.name}님의 언어가 ${updated.language}로 변경되어 ${minTable}테이블로 재배정되었습니다.`,
-                { duration: 5000 }
-              )
-            } else {
-              // 일치하는 테이블이 없으면 미배정으로
-              setRounds(prev => {
-                const updatedRounds = [...prev]
-                const roundIdx = updatedRounds.findIndex(r => r.round === currentRound)
-                if (roundIdx !== -1) {
-                  updatedRounds[roundIdx] = {
-                    ...updatedRounds[roundIdx],
-                    assignments: updatedRounds[roundIdx].assignments.filter(
-                      a => a.participant_id !== updated.id
-                    )
-                  }
-                }
-                return updatedRounds
-              })
-
-              toast.warning(
-                `${updated.name}님의 언어가 ${updated.language}로 변경되었으나, 현재 라운드에 해당 언어 테이블이 없어 미배정 상태입니다.`,
-                { duration: 5000 }
-              )
-            }
-          } else {
-            toast.success(`${updated.name}님의 정보가 수정되었습니다.`)
-          }
-        } else {
-          toast.success(`${updated.name}님의 정보가 수정되었습니다.`)
-        }
-      } else {
-        toast.success(`${updated.name}님의 정보가 수정되었습니다.`)
-      }
-    } else {
-      toast.success(`${updated.name}님의 정보가 수정되었습니다.`)
-    }
-  }
+      markLocalSeatingEdit()
+      setParticipants((prev) => {
+        const next = prev.map((p) => (p.id === persisted.id ? persisted : p))
+        participantsRef.current = next
+        return next
+      })
+      setEditingParticipant((prev) => (prev?.id === persisted.id ? persisted : prev))
+      applyLanguageReassignment(oldParticipant, persisted)
+      return true
+    },
+    [applyLanguageReassignment, markLocalSeatingEdit]
+  )
 
   const [deletingParticipantId, setDeletingParticipantId] = useState<string | null>(null)
 
@@ -1629,14 +1676,14 @@ export default function AdminArrangePage() {
   }, [])
 
   const syncCheckinToServer = useCallback(
-    async (participantId: string) => {
+    async (participantId: string, source: string = ADMIN_CHECKIN_SOURCE_DRAG) => {
       try {
         const res = await fetch('/api/admin/manual-checkin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             responseId: participantId,
-            source: ADMIN_CHECKIN_SOURCE_DRAG,
+            source,
           }),
         })
         if (!res.ok) throw new Error('checkin_failed')
@@ -1658,6 +1705,70 @@ export default function AdminArrangePage() {
       }
     },
     [revertOptimisticCheckin]
+  )
+
+  const handleModalCheckin = useCallback(
+    async (participant: Participant) => {
+      applyOptimisticCheckin(participant.id)
+      const ok = await syncCheckinToServer(participant.id, ADMIN_CHECKIN_SOURCE_MODAL)
+      if (ok) {
+        setEditingParticipant(null)
+      }
+    },
+    [applyOptimisticCheckin, syncCheckinToServer]
+  )
+
+  const handleModalUncheckin = useCallback(
+    async (participant: Participant) => {
+      const prevCheckedInAt = participant.checked_in_at
+      const prevRounds = structuredClone(roundsRef.current) as RoundData[]
+
+      seenCheckedInIdsRef.current.delete(participant.id)
+      markLocalSeatingEdit()
+      setParticipants((prev) => {
+        const next = prev.map((p) =>
+          p.id === participant.id ? { ...p, checked_in_at: null } : p
+        )
+        participantsRef.current = next
+        return next
+      })
+      setRounds((prev) => {
+        const next = prev.map((r) => ({
+          ...r,
+          assignments: r.assignments.filter((a) => a.participant_id !== participant.id),
+        }))
+        roundsRef.current = next
+        return next
+      })
+      scheduleSeatingPersist()
+
+      try {
+        const res = await fetch('/api/admin/manual-uncheckin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ responseId: participant.id }),
+        })
+        if (!res.ok) throw new Error('uncheckin_failed')
+        setEditingParticipant(null)
+      } catch {
+        if (prevCheckedInAt) {
+          seenCheckedInIdsRef.current.add(participant.id)
+        }
+        setParticipants((prev) => {
+          const next = prev.map((p) =>
+            p.id === participant.id ? { ...p, checked_in_at: prevCheckedInAt } : p
+          )
+          participantsRef.current = next
+          return next
+        })
+        setRounds(prevRounds)
+        roundsRef.current = prevRounds
+        scheduleSeatingPersist()
+        toast.error('체크인 해제에 실패했습니다.')
+        throw new Error('uncheckin_failed')
+      }
+    },
+    [markLocalSeatingEdit, scheduleSeatingPersist]
   )
 
   const applyRoundAssignmentUpdate = useCallback(
@@ -2333,7 +2444,9 @@ export default function AdminArrangePage() {
           participant={editingParticipant}
           isOpen={true}
           onClose={() => setEditingParticipant(null)}
-          onSave={handleUpdateParticipant}
+          onFieldSave={handleParticipantFieldSave}
+          onCheckin={handleModalCheckin}
+          onUncheckin={handleModalUncheckin}
           onDelete={handleDeleteParticipant}
           isDeleting={deletingParticipantId === editingParticipant.id}
         />
