@@ -23,15 +23,19 @@ type Props = {
   /** participant/user 변경 시 상태 리셋 */
   resetKey?: string
   disabled?: boolean
+  /** false면 슬라이더 변경 시 자동 저장하지 않고 flushPendingSave 때만 저장 */
+  autoSave?: boolean
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 export type StampProgressEditorHandle = {
   flushPendingSave: () => Promise<boolean>
+  isDirty: () => boolean
 }
 
 export const StampProgressEditor = forwardRef<StampProgressEditorHandle, Props>(
   function StampProgressEditor(
-    { userId, initialSlider, resetKey, disabled = false },
+    { userId, initialSlider, resetKey, disabled = false, autoSave = true, onDirtyChange },
     ref
   ) {
     const [stampSlider, setStampSlider] = useState(0)
@@ -134,14 +138,14 @@ export const StampProgressEditor = forwardRef<StampProgressEditorHandle, Props>(
     )
 
     useEffect(() => {
-      if (loadingStamp || savedStamp == null || stampSlider === savedStamp) return
+      if (!autoSave || loadingStamp || savedStamp == null || stampSlider === savedStamp) return
 
       const timer = setTimeout(() => {
         void saveStamp(stampSlider, { silent: true })
       }, 400)
 
       return () => clearTimeout(timer)
-    }, [stampSlider, savedStamp, loadingStamp, saveStamp])
+    }, [autoSave, stampSlider, savedStamp, loadingStamp, saveStamp])
 
     useImperativeHandle(
       ref,
@@ -150,12 +154,17 @@ export const StampProgressEditor = forwardRef<StampProgressEditorHandle, Props>(
           if (savedStamp == null || stampSlider === savedStamp) return true
           return saveStamp(stampSlider, { silent: true })
         },
+        isDirty: () => savedStamp != null && stampSlider !== savedStamp,
       }),
       [saveStamp, savedStamp, stampSlider]
     )
 
     const stampDirty = savedStamp != null && stampSlider !== savedStamp
     const stampAtCouponRedeem = stampSlider >= STAMP_SLIDER_MAX
+
+    useEffect(() => {
+      onDirtyChange?.(stampDirty)
+    }, [onDirtyChange, stampDirty])
 
     if (loadingStamp) {
       return (
@@ -203,7 +212,11 @@ export const StampProgressEditor = forwardRef<StampProgressEditorHandle, Props>(
         )}
         {savingStamp || stampDirty ? (
           <p className="text-[11px] font-medium text-muted-foreground text-center">
-            {savingStamp ? '스탬프 저장 중…' : '스탬프 변경 저장 대기…'}
+            {savingStamp
+              ? '스탬프 저장 중…'
+              : autoSave
+                ? '스탬프 변경 저장 대기…'
+                : '스탬프 변경됨 (닫을 때 저장)'}
           </p>
         ) : null}
       </div>

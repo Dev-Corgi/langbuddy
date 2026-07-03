@@ -73,11 +73,14 @@ export function ParticipantEditor({
   const [paymentStatus, setPaymentStatus] = useState<string | null>(
     participant.paymentStatus ?? null
   )
-  const [savingFields, setSavingFields] = useState(false)
-  const [uploadingReceipt, setUploadingReceipt] = useState(false)
+  const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null)
+  const [pendingReceiptPreview, setPendingReceiptPreview] = useState<string | null>(null)
+  const [flushing, setFlushing] = useState(false)
   const [checkinBusy, setCheckinBusy] = useState(false)
+  const [stampDirty, setStampDirty] = useState(false)
   const stampEditorRef = useRef<StampProgressEditorHandle>(null)
   const receiptInputRef = useRef<HTMLInputElement>(null)
+  const pendingPreviewRef = useRef<string | null>(null)
 
   const savedFieldsRef = useRef<SavedFields>({
     name: participant.name,
@@ -87,6 +90,15 @@ export function ParticipantEditor({
     paymentMethod: participant.paymentMethod ?? null,
   })
 
+  const clearPendingReceiptPreview = useCallback(() => {
+    if (pendingPreviewRef.current) {
+      URL.revokeObjectURL(pendingPreviewRef.current)
+      pendingPreviewRef.current = null
+    }
+    setPendingReceiptPreview(null)
+    setPendingReceiptFile(null)
+  }, [])
+
   useEffect(() => {
     setName(participant.name)
     setGender(participant.gender as '남' | '여')
@@ -95,6 +107,8 @@ export function ParticipantEditor({
     setPaymentMethod(participant.paymentMethod ?? null)
     setReceiptUrl(participant.paymentReceiptUrl ?? null)
     setPaymentStatus(participant.paymentStatus ?? null)
+    clearPendingReceiptPreview()
+    setStampDirty(false)
     savedFieldsRef.current = {
       name: participant.name,
       gender: participant.gender,
@@ -102,7 +116,15 @@ export function ParticipantEditor({
       language: participant.language,
       paymentMethod: participant.paymentMethod ?? null,
     }
-  }, [participant])
+  }, [participant, clearPendingReceiptPreview])
+
+  useEffect(() => {
+    return () => {
+      if (pendingPreviewRef.current) {
+        URL.revokeObjectURL(pendingPreviewRef.current)
+      }
+    }
+  }, [])
 
   const buildPatch = useCallback((): Participant => {
     return {
@@ -117,184 +139,158 @@ export function ParticipantEditor({
     }
   }, [participant, name, gender, nationality, language, paymentMethod, paymentStatus, receiptUrl])
 
-  const persistIfChanged = useCallback(
-    async (patch: Participant): Promise<boolean> => {
+  const hasFieldChanges = useCallback(
+    (patch: Participant) => {
       const prev = savedFieldsRef.current
-      if (
-        patch.name === prev.name &&
-        patch.gender === prev.gender &&
-        patch.nationality === prev.nationality &&
-        patch.language === prev.language &&
-        (patch.paymentMethod ?? null) === prev.paymentMethod
-      ) {
-        return true
-      }
+      return (
+        patch.name !== prev.name ||
+        patch.gender !== prev.gender ||
+        patch.nationality !== prev.nationality ||
+        patch.language !== prev.language ||
+        (patch.paymentMethod ?? null) !== prev.paymentMethod
+      )
+    },
+    []
+  )
+
+  const hasPendingChanges = useCallback(() => {
+    const patch = buildPatch()
+    return (
+      hasFieldChanges(patch) ||
+      pendingReceiptFile != null ||
+      stampDirty
+    )
+  }, [buildPatch, hasFieldChanges, pendingReceiptFile, stampDirty])
+
+  const persistFieldsIfChanged = useCallback(
+    async (patch: Participant): Promise<boolean> => {
+      if (!hasFieldChanges(patch)) return true
       if (!patch.name.trim()) {
         toast.error('이름을 입력해주세요.')
         return false
       }
 
-      setSavingFields(true)
-      try {
-        const ok = await onFieldSave(patch)
-        if (ok) {
-          savedFieldsRef.current = {
-            name: patch.name,
-            gender: patch.gender,
-            nationality: patch.nationality,
-            language: patch.language,
-            paymentMethod: patch.paymentMethod ?? null,
-          }
+      const ok = await onFieldSave(patch)
+      if (ok) {
+        savedFieldsRef.current = {
+          name: patch.name,
+          gender: patch.gender,
+          nationality: patch.nationality,
+          language: patch.language,
+          paymentMethod: patch.paymentMethod ?? null,
         }
-        return ok
-      } finally {
-        setSavingFields(false)
       }
+      return ok
     },
-    [onFieldSave]
-  )
-
-  useEffect(() => {
-    const trimmed = name.trim()
-    if (trimmed === savedFieldsRef.current.name) return
-
-    const timer = setTimeout(() => {
-      void persistIfChanged(buildPatch())
-    }, 400)
-
-    return () => clearTimeout(timer)
-  }, [name, buildPatch, persistIfChanged])
-
-  const handleGenderChange = useCallback(
-    (value: '남' | '여') => {
-      setGender(value)
-      void persistIfChanged({ ...buildPatch(), gender: value })
-    },
-    [buildPatch, persistIfChanged]
-  )
-
-  const handleNationalityChange = useCallback(
-    (value: '한국인' | '외국인') => {
-      setNationality(value)
-      void persistIfChanged({ ...buildPatch(), nationality: value })
-    },
-    [buildPatch, persistIfChanged]
-  )
-
-  const handleLanguageChange = useCallback(
-    (value: string) => {
-      setLanguage(value)
-      void persistIfChanged({ ...buildPatch(), language: value })
-    },
-    [buildPatch, persistIfChanged]
-  )
-
-  const handlePaymentMethodChange = useCallback(
-    (value: PaymentMethod) => {
-      setPaymentMethod(value)
-      if (!isBankTransferMethod(value)) {
-        setReceiptUrl(null)
-        setPaymentStatus(null)
-      } else if (!receiptUrl) {
-        setPaymentStatus(null)
-      }
-      void persistIfChanged({ ...buildPatch(), paymentMethod: value })
-    },
-    [buildPatch, persistIfChanged, receiptUrl]
-  )
-
-  const handleReceiptFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      e.target.value = ''
-      if (!file || !onReceiptUpload) return
-      if (checkinBusy || savingFields || isDeleting || uploadingReceipt) return
-
-      setUploadingReceipt(true)
-      try {
-        const updated = await onReceiptUpload(participant.id, file)
-        if (updated) {
-          setPaymentMethod(updated.paymentMethod ?? '계좌이체')
-          setReceiptUrl(updated.paymentReceiptUrl ?? null)
-          setPaymentStatus(updated.paymentStatus ?? 'pending')
-          savedFieldsRef.current.paymentMethod = updated.paymentMethod ?? '계좌이체'
-        }
-      } finally {
-        setUploadingReceipt(false)
-      }
-    },
-    [
-      checkinBusy,
-      isDeleting,
-      onReceiptUpload,
-      participant.id,
-      savingFields,
-      uploadingReceipt,
-    ]
+    [hasFieldChanges, onFieldSave]
   )
 
   const flushPendingChanges = useCallback(async (): Promise<boolean> => {
-    const fieldsOk = await persistIfChanged(buildPatch())
+    const patch = buildPatch()
+
+    if (pendingReceiptFile && onReceiptUpload) {
+      const updated = await onReceiptUpload(participant.id, pendingReceiptFile)
+      if (!updated) return false
+      setPaymentMethod(updated.paymentMethod ?? '계좌이체')
+      setReceiptUrl(updated.paymentReceiptUrl ?? null)
+      setPaymentStatus(updated.paymentStatus ?? 'pending')
+      savedFieldsRef.current.paymentMethod = updated.paymentMethod ?? '계좌이체'
+      clearPendingReceiptPreview()
+      patch.paymentMethod = updated.paymentMethod ?? '계좌이체'
+      patch.paymentReceiptUrl = updated.paymentReceiptUrl ?? null
+      patch.paymentStatus = updated.paymentStatus ?? 'pending'
+    }
+
+    const fieldsOk = await persistFieldsIfChanged(patch)
     if (!fieldsOk) return false
+
     return (await stampEditorRef.current?.flushPendingSave()) ?? true
-  }, [buildPatch, persistIfChanged])
+  }, [
+    buildPatch,
+    clearPendingReceiptPreview,
+    onReceiptUpload,
+    participant.id,
+    pendingReceiptFile,
+    persistFieldsIfChanged,
+  ])
 
   const handleClose = useCallback(async () => {
-    if (checkinBusy || savingFields || isDeleting || uploadingReceipt) return
-    const ok = await flushPendingChanges()
-    if (ok) onClose()
-  }, [checkinBusy, flushPendingChanges, isDeleting, onClose, savingFields, uploadingReceipt])
+    if (checkinBusy || flushing || isDeleting) return
+
+    if (!hasPendingChanges()) {
+      onClose()
+      return
+    }
+
+    setFlushing(true)
+    try {
+      const ok = await flushPendingChanges()
+      if (ok) onClose()
+    } finally {
+      setFlushing(false)
+    }
+  }, [checkinBusy, flushPendingChanges, flushing, hasPendingChanges, isDeleting, onClose])
 
   const handleCheckin = useCallback(async () => {
-    if (checkinBusy || savingFields || isDeleting || uploadingReceipt) return
-    if (!(await flushPendingChanges())) return
+    if (checkinBusy || flushing || isDeleting) return
 
-    const patch = buildPatch()
-    setCheckinBusy(true)
+    setFlushing(true)
     try {
-      await onCheckin({ ...patch, checked_in_at: participant.checked_in_at })
-    } catch {
-      /* arrange 페이지에서 오류 토스트 처리 */
+      if (!(await flushPendingChanges())) return
+
+      const patch = buildPatch()
+      setCheckinBusy(true)
+      try {
+        await onCheckin({ ...patch, checked_in_at: participant.checked_in_at })
+      } catch {
+        /* arrange 페이지에서 오류 토스트 처리 */
+      } finally {
+        setCheckinBusy(false)
+      }
     } finally {
-      setCheckinBusy(false)
+      setFlushing(false)
     }
   }, [
     buildPatch,
     checkinBusy,
     flushPendingChanges,
+    flushing,
     isDeleting,
     onCheckin,
     participant.checked_in_at,
-    savingFields,
-    uploadingReceipt,
   ])
 
   const handleUncheckin = useCallback(async () => {
-    if (checkinBusy || savingFields || isDeleting || uploadingReceipt) return
-    if (!(await flushPendingChanges())) return
+    if (checkinBusy || flushing || isDeleting) return
 
-    const patch = buildPatch()
-    setCheckinBusy(true)
+    setFlushing(true)
     try {
-      await onUncheckin({ ...patch, checked_in_at: participant.checked_in_at })
-    } catch {
-      /* arrange 페이지에서 오류 토스트 처리 */
+      if (!(await flushPendingChanges())) return
+
+      const patch = buildPatch()
+      setCheckinBusy(true)
+      try {
+        await onUncheckin({ ...patch, checked_in_at: participant.checked_in_at })
+      } catch {
+        /* arrange 페이지에서 오류 토스트 처리 */
+      } finally {
+        setCheckinBusy(false)
+      }
     } finally {
-      setCheckinBusy(false)
+      setFlushing(false)
     }
   }, [
     buildPatch,
     checkinBusy,
     flushPendingChanges,
+    flushing,
     isDeleting,
     onUncheckin,
     participant.checked_in_at,
-    savingFields,
-    uploadingReceipt,
   ])
 
   const handleDelete = useCallback(async () => {
-    if (!onDelete) return
+    if (!onDelete || flushing || checkinBusy) return
     const ok = window.confirm(
       `「${participant.name}」님의 신청을 삭제할까요?\n\n` +
         '신청·체크인·자리 배치 기록이 모두 제거되며, 사용자 마이페이지에서도 사라집니다. 이 작업은 되돌릴 수 없습니다.'
@@ -306,13 +302,50 @@ export function ParticipantEditor({
     } catch {
       /* arrange 페이지에서 오류 토스트 처리 */
     }
-  }, [onDelete, participant, onClose])
+  }, [checkinBusy, flushing, onDelete, participant, onClose])
+
+  const handlePaymentMethodChange = useCallback(
+    (value: PaymentMethod) => {
+      setPaymentMethod(value)
+      if (!isBankTransferMethod(value)) {
+        setReceiptUrl(null)
+        setPaymentStatus(null)
+        clearPendingReceiptPreview()
+      } else if (!receiptUrl && !pendingReceiptFile) {
+        setPaymentStatus(null)
+      }
+    },
+    [clearPendingReceiptPreview, pendingReceiptFile, receiptUrl]
+  )
+
+  const handleReceiptFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      e.target.value = ''
+      if (!file) return
+
+      if (pendingPreviewRef.current) {
+        URL.revokeObjectURL(pendingPreviewRef.current)
+      }
+      const preview = URL.createObjectURL(file)
+      pendingPreviewRef.current = preview
+      setPendingReceiptFile(file)
+      setPendingReceiptPreview(preview)
+      if (!isBankTransferMethod(paymentMethod)) {
+        setPaymentMethod('계좌이체')
+      }
+    },
+    [paymentMethod]
+  )
 
   if (!isOpen) return null
 
-  const busy = savingFields || checkinBusy || isDeleting || uploadingReceipt
+  const busy = flushing || checkinBusy || isDeleting
   const checkedIn = Boolean(participant.checked_in_at)
   const showBankTransfer = isBankTransferMethod(paymentMethod)
+  const displayReceiptUrl = pendingReceiptPreview ?? receiptUrl
+  const dirty =
+    hasFieldChanges(buildPatch()) || pendingReceiptFile != null || stampDirty
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -359,7 +392,7 @@ export function ParticipantEditor({
                     type="button"
                     variant={gender === '남' ? 'default' : 'outline'}
                     className="flex-1 rounded-xl text-xs font-bold"
-                    onClick={() => handleGenderChange('남')}
+                    onClick={() => setGender('남')}
                     disabled={busy}
                   >
                     남
@@ -368,7 +401,7 @@ export function ParticipantEditor({
                     type="button"
                     variant={gender === '여' ? 'default' : 'outline'}
                     className="flex-1 rounded-xl text-xs font-bold"
-                    onClick={() => handleGenderChange('여')}
+                    onClick={() => setGender('여')}
                     disabled={busy}
                   >
                     여
@@ -383,7 +416,7 @@ export function ParticipantEditor({
                     type="button"
                     variant={nationality === '한국인' ? 'default' : 'outline'}
                     className="flex-1 rounded-xl text-xs font-bold"
-                    onClick={() => handleNationalityChange('한국인')}
+                    onClick={() => setNationality('한국인')}
                     disabled={busy}
                   >
                     한국인
@@ -392,7 +425,7 @@ export function ParticipantEditor({
                     type="button"
                     variant={nationality === '외국인' ? 'default' : 'outline'}
                     className="flex-1 rounded-xl text-xs font-bold"
-                    onClick={() => handleNationalityChange('외국인')}
+                    onClick={() => setNationality('외국인')}
                     disabled={busy}
                   >
                     외국인
@@ -410,7 +443,7 @@ export function ParticipantEditor({
                     type="button"
                     variant={language === lang ? 'default' : 'outline'}
                     className="flex-1 rounded-xl text-xs font-bold min-w-[60px]"
-                    onClick={() => handleLanguageChange(lang)}
+                    onClick={() => setLanguage(lang)}
                     disabled={busy}
                   >
                     {lang}
@@ -442,19 +475,22 @@ export function ParticipantEditor({
               ) : null}
             </div>
 
-            {showBankTransfer ? (
+            {showBankTransfer || pendingReceiptFile ? (
               <div className="space-y-2 p-3 rounded-xl bg-muted/40 border border-border/60">
                 <p className="text-xs font-bold text-muted-foreground">입금 영수증</p>
-                {receiptUrl ? (
+                {displayReceiptUrl ? (
                   <a
-                    href={receiptUrl}
+                    href={displayReceiptUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block relative aspect-video rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
+                    onClick={(e) => {
+                      if (pendingReceiptPreview) e.preventDefault()
+                    }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={receiptUrl}
+                      src={displayReceiptUrl}
                       alt="입금 영수증"
                       className="w-full h-full object-cover"
                     />
@@ -471,7 +507,7 @@ export function ParticipantEditor({
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(e) => void handleReceiptFileChange(e)}
+                      onChange={handleReceiptFileChange}
                     />
                     <Button
                       type="button"
@@ -480,13 +516,14 @@ export function ParticipantEditor({
                       disabled={busy}
                       onClick={() => receiptInputRef.current?.click()}
                     >
-                      {uploadingReceipt ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Upload className="w-4 h-4" />
-                      )}
-                      {receiptUrl ? '영수증 변경' : '영수증 업로드'}
+                      <Upload className="w-4 h-4" />
+                      {displayReceiptUrl ? '영수증 변경' : '영수증 업로드'}
                     </Button>
+                    {pendingReceiptFile ? (
+                      <p className="text-[11px] font-medium text-muted-foreground text-center">
+                        선택됨 — 닫을 때 업로드됩니다
+                      </p>
+                    ) : null}
                   </>
                 ) : null}
               </div>
@@ -529,6 +566,8 @@ export function ParticipantEditor({
                 userId={participant.userId}
                 resetKey={participant.id}
                 disabled={busy}
+                autoSave={false}
+                onDirtyChange={setStampDirty}
               />
             ) : (
               <p className="text-xs font-medium text-muted-foreground text-center py-1">
@@ -555,7 +594,11 @@ export function ParticipantEditor({
 
             <div className="flex items-center justify-between pt-1">
               <p className="text-[11px] font-medium text-muted-foreground">
-                {savingFields || uploadingReceipt ? '저장 중…' : '변경 사항은 자동 저장됩니다.'}
+                {flushing
+                  ? '저장 중…'
+                  : dirty
+                    ? '변경 사항 있음 — 닫을 때 저장'
+                    : '변경 없음'}
               </p>
               <Button
                 type="button"
