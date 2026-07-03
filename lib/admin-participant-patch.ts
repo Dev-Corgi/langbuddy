@@ -3,20 +3,36 @@ import {
   normalizeLanguage,
   type CanonicalFormQuestion,
 } from '@/lib/form-answer-canonical'
+import {
+  couponFlagForMethod,
+  defaultPaymentStatusForMethod,
+  isSupportedPaymentMethod,
+  type PaymentMethod,
+} from '@/lib/supported-payment-methods'
 
 export type ParticipantFieldPatch = {
   name: string
   gender: '남' | '여'
   nationality: '한국인' | '외국인'
   language: string
+  paymentMethod?: PaymentMethod
 }
 
-/** form_responses.answers에 이름·성별·국적·언어 변경 반영 (flat key + question id) */
+export type ParticipantPaymentPatchResult = {
+  answers: Record<string, unknown>
+  payment_status: string | null
+}
+
+/** form_responses.answers + payment_status 갱신 payload */
 export function mergeParticipantFieldPatchIntoAnswers(
   prevAnswers: Record<string, unknown>,
   questions: CanonicalFormQuestion[],
-  fields: ParticipantFieldPatch
-): Record<string, unknown> {
+  fields: ParticipantFieldPatch,
+  options?: {
+    hasReceipt?: boolean
+    previousPaymentStatus?: string | null
+  }
+): ParticipantPaymentPatchResult {
   const language = normalizeLanguage(fields.language)
   const next: Record<string, unknown> = {
     ...prevAnswers,
@@ -47,5 +63,22 @@ export function mergeParticipantFieldPatchIntoAnswers(
     }
   }
 
-  return next
+  let payment_status: string | null = options?.previousPaymentStatus ?? null
+
+  if (fields.paymentMethod && isSupportedPaymentMethod(fields.paymentMethod)) {
+    next._payment_method = fields.paymentMethod
+    next._le_free_coupon = couponFlagForMethod(fields.paymentMethod)
+    const hasReceipt = Boolean(options?.hasReceipt)
+    if (fields.paymentMethod === '계좌이체') {
+      if (options?.previousPaymentStatus === 'confirmed' && hasReceipt) {
+        payment_status = 'confirmed'
+      } else {
+        payment_status = defaultPaymentStatusForMethod(fields.paymentMethod, hasReceipt)
+      }
+    } else {
+      payment_status = null
+    }
+  }
+
+  return { answers: next, payment_status }
 }

@@ -24,6 +24,10 @@ import {
   getCustomFormQuestions,
   getQuestionLabel,
 } from '@/lib/admin-response-table'
+import {
+  formatPaymentMethodLabel,
+  isBankTransferMethod,
+} from '@/lib/supported-payment-methods'
 
 type ViewMode = 'card' | 'table'
 
@@ -116,7 +120,7 @@ export function LanguageResponsesPanel({
                     </span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {res.answers?._payment_method === '계좌송금' && (
+                    {isBankTransferMethod(res.answers?._payment_method) && (
                       <div
                         className={cn(
                           'px-2 py-1 rounded-full text-xs font-black flex items-center gap-1',
@@ -166,7 +170,12 @@ export function LanguageResponsesPanel({
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-muted-foreground">{en ? 'Method: ' : '방식: '}</span>
-                        <span className="font-bold">{String(res.answers._payment_method)}</span>
+                        <span className="font-bold">
+                          {formatPaymentMethodLabel(
+                            res.answers._payment_method,
+                            res.payment_status
+                          )}
+                        </span>
                       </div>
                       <div>
                         <span className="text-muted-foreground">{en ? 'Status: ' : '상태: '}</span>
@@ -206,7 +215,7 @@ export function LanguageResponsesPanel({
                         </a>
                       </div>
                     )}
-                    {res.answers._payment_method === '계좌송금' &&
+                    {isBankTransferMethod(res.answers._payment_method) &&
                       res.payment_status !== 'confirmed' && (
                         <Button
                           onClick={() => onConfirmPayment(res)}
@@ -308,7 +317,7 @@ export function LanguageResponsesPanel({
               <tbody>
                 {tableRows.map((row) => {
                   const res = responses.find((r) => r.id === row.id)!
-                  const isBankTransfer = row.paymentMethod === '계좌송금'
+                  const isBankTransfer = isBankTransferMethod(res.answers?._payment_method)
                   return (
                     <tr
                       key={row.id}
@@ -330,7 +339,9 @@ export function LanguageResponsesPanel({
                         {row.kakaoId}
                       </td>
                       <td className="px-3 py-3 font-bold whitespace-nowrap">{row.drink}</td>
-                      <td className="px-3 py-3 font-bold whitespace-nowrap">{row.paymentMethod}</td>
+                      <td className="px-3 py-3 font-bold whitespace-nowrap">
+                        {formatPaymentMethodLabel(row.paymentMethod, row.paymentStatus)}
+                      </td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         {isBankTransfer ? (
                           <span

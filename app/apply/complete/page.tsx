@@ -18,6 +18,10 @@ import {
   resolveApplicationSessionYmd,
   buildRecurringSessionDisplayTitles,
 } from "@/lib/session-event-date"
+import {
+  formatPaymentMethodLabel,
+  isBankTransferMethod,
+} from "@/lib/supported-payment-methods"
 import { toast } from "sonner"
 
 const mailDeliveryProblemToast = (locale: string) =>
@@ -490,8 +494,10 @@ export default function ApplicationCompletePage() {
       ? builtSessionTitles.title_en
       : builtSessionTitles.title
     : (typeof formTitleRaw === 'string' && formTitleRaw.trim()) || ''
-  const displayPayment = data.answers?._payment_method || (locale === 'en' ? 'On-site' : '현장 결제')
-  const isBankTransfer = displayPayment === '계좌송금'
+  const displayPayment =
+    formatPaymentMethodLabel(data.answers?._payment_method, data.payment_status) ||
+    (locale === 'en' ? 'On-site' : '현장 결제')
+  const isBankTransfer = isBankTransferMethod(data.answers?._payment_method)
   const isPaymentPending = isBankTransfer && data.payment_status === 'pending'
 
   return (

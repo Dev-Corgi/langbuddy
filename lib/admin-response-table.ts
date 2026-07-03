@@ -1,4 +1,5 @@
 import { CoreFormQuestion, extractParticipantInfoFromAnswers } from '@/lib/utils'
+import { normalizePaymentMethod } from '@/lib/supported-payment-methods'
 
 export type FormResponseRecord = {
   id: string
@@ -50,7 +51,10 @@ export function buildResponseTableRows(
     const answers = res.answers ?? {}
     const info = extractParticipantInfoFromAnswers(answers, questions)
     const paymentMethod =
-      typeof answers._payment_method === 'string' ? answers._payment_method : ''
+      normalizePaymentMethod(answers._payment_method) ??
+      (typeof answers._payment_method === 'string' && answers._payment_method.trim()
+        ? answers._payment_method.trim()
+        : null)
 
     const customAnswers: Record<string, string> = {}
     for (const q of customQuestions) {

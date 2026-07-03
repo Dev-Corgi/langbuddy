@@ -16,12 +16,12 @@ export function sliderStampToStored(slider: number): number {
   return Math.min(STAMP_STORED_MAX, Math.max(0, n))
 }
 
+import { isCouponPaymentMethod } from '@/lib/supported-payment-methods'
+
 export function isCouponApplication(
   answers: Record<string, unknown> | null | undefined
 ): boolean {
   if (!answers) return false
   if (answers._le_free_coupon === true) return true
-  const method =
-    typeof answers._payment_method === 'string' ? answers._payment_method.trim() : ''
-  return method.includes('무료쿠폰') || method === '무료쿠폰'
+  return isCouponPaymentMethod(answers._payment_method)
 }

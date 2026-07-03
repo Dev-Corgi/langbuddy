@@ -4,6 +4,7 @@ import {
 } from '@/lib/utils'
 import { normalizeNationality } from '@/lib/form-answer-canonical'
 import { isCouponApplication, storedStampToSlider } from '@/lib/le-stamp'
+import { formatPaymentMethodLabel as formatCanonicalPaymentMethodLabel } from '@/lib/supported-payment-methods'
 import {
   fetchSeatingRowsForToday,
   tableLabelForParticipantFromDb,
@@ -38,15 +39,9 @@ export function formatPaymentMethodLabel(
 ): string {
   const method =
     answers && typeof answers._payment_method === 'string'
-      ? answers._payment_method.trim()
-      : ''
-  if (!method) return '—'
-  if (method === '계좌송금') {
-    if (paymentStatus === 'confirmed') return '계좌송금 (확인됨)'
-    if (paymentStatus === 'pending') return '계좌송금 (입금 대기)'
-    return '계좌송금'
-  }
-  return method
+      ? answers._payment_method
+      : null
+  return formatCanonicalPaymentMethodLabel(method, paymentStatus)
 }
 
 type FormResponseRow = {

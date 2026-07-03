@@ -22,6 +22,7 @@ import { Separator } from '@/components/ui/separator'
 import { useLocale } from '@/hooks/use-locale'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { formatPaymentMethodLabel, isBankTransferMethod } from '@/lib/supported-payment-methods'
 
 export default function FormResponsesPage() {
   const params = useParams()
@@ -213,7 +214,7 @@ export default function FormResponsesPage() {
                         </div>
                       </div>
                       {/* Payment Status Badge */}
-                      {res.answers?._payment_method === '계좌송금' && (
+                      {isBankTransferMethod(res.answers?._payment_method) && (
                         <div className={cn(
                           "px-3 py-1.5 rounded-full text-xs font-black flex items-center gap-1.5",
                           res.payment_status === 'confirmed' 
@@ -250,7 +251,12 @@ export default function FormResponsesPage() {
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
                               <p className="text-xs text-muted-foreground">{locale === 'en' ? 'Method' : '결제 방식'}</p>
-                              <p className="font-black text-foreground">{res.answers._payment_method}</p>
+                              <p className="font-black text-foreground">
+                                {formatPaymentMethodLabel(
+                                  res.answers._payment_method,
+                                  res.payment_status
+                                )}
+                              </p>
                             </div>
                             <div className="space-y-1">
                               <p className="text-xs text-muted-foreground">{locale === 'en' ? 'Status' : '결제 상태'}</p>
@@ -290,7 +296,7 @@ export default function FormResponsesPage() {
                           )}
 
                           {/* Confirm Payment Button - only for bank transfer + pending */}
-                          {res.answers._payment_method === '계좌송금' && res.payment_status !== 'confirmed' && (
+                          {isBankTransferMethod(res.answers._payment_method) && res.payment_status !== 'confirmed' && (
                             <div className="pt-2">
                               <Button
                                 onClick={() => handleConfirmPayment(res)}
@@ -318,7 +324,7 @@ export default function FormResponsesPage() {
                           )}
 
                           {/* Already confirmed message */}
-                          {res.answers._payment_method === '계좌송금' && res.payment_status === 'confirmed' && (
+                          {isBankTransferMethod(res.answers._payment_method) && res.payment_status === 'confirmed' && (
                             <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
                               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                               <span className="text-sm font-bold text-emerald-700">

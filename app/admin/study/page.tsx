@@ -47,6 +47,10 @@ import { fetchFormBuilderData } from '@/lib/load-form-data'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from '@/components/ui/switch'
 import { useAdminAuth } from '@/hooks/use-admin-auth'
+import {
+  formatPaymentMethodLabel,
+  isBankTransferMethod,
+} from '@/lib/supported-payment-methods'
 
 const WEEK_DAYS = ["월", "화", "수", "목", "금", "토", "일"];
 
@@ -593,7 +597,7 @@ function StudyManagementContent() {
                                       </span>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
-                                      {res.answers?._payment_method === '계좌송금' && (
+                                      {isBankTransferMethod(res.answers?._payment_method) && (
                                         <div className={cn(
                                           "px-2 py-1 rounded-full text-xs font-black flex items-center gap-1",
                                           res.payment_status === 'confirmed'
@@ -636,7 +640,12 @@ function StudyManagementContent() {
                                       <div className="grid grid-cols-2 gap-4 text-sm">
                                         <div>
                                           <span className="text-muted-foreground">{locale === 'en' ? 'Method: ' : '방식: '}</span>
-                                          <span className="font-bold">{res.answers._payment_method}</span>
+                                          <span className="font-bold">
+                                            {formatPaymentMethodLabel(
+                                              res.answers._payment_method,
+                                              res.payment_status
+                                            )}
+                                          </span>
                                         </div>
                                         <div>
                                           <span className="text-muted-foreground">{locale === 'en' ? 'Status: ' : '상태: '}</span>
@@ -671,7 +680,7 @@ function StudyManagementContent() {
                                         </div>
                                       )}
                                       {/* Confirm Payment Button */}
-                                      {res.answers._payment_method === '계좌송금' && res.payment_status !== 'confirmed' && (
+                                      {isBankTransferMethod(res.answers._payment_method) && res.payment_status !== 'confirmed' && (
                                         <Button
                                           onClick={() => handleConfirmPayment(res)}
                                           disabled={confirmingId === res.id}

@@ -3,6 +3,7 @@ import {
   type CoreFormQuestion,
 } from '@/lib/utils'
 import { normalizeLanguage, normalizeParticipantFields } from '@/lib/form-answer-canonical'
+import { normalizePaymentMethod, couponFlagForMethod, type PaymentMethod } from '@/lib/supported-payment-methods'
 
 export const WALK_IN_SOURCE = 'admin_manual' as const
 
@@ -13,6 +14,7 @@ export type WalkInParticipantInput = {
   language: string
   sessionDate: string
   selectedDay: string
+  paymentMethod?: PaymentMethod
 }
 
 export function isWalkInAnswers(answers: Record<string, unknown> | null | undefined): boolean {
@@ -24,12 +26,15 @@ export function buildWalkInAnswers(input: WalkInParticipantInput): Record<string
   const language = input.language.trim() || '영어'
   const languageKo = normalizeLanguage(language)
 
+  const paymentMethod = input.paymentMethod ?? '현장현금'
+
   return {
     _source: WALK_IN_SOURCE,
     _event_date: input.sessionDate,
     _selected_day: input.selectedDay,
     _selected_language: languageKo,
-    _payment_method: '현장추가',
+    _payment_method: paymentMethod,
+    _le_free_coupon: couponFlagForMethod(paymentMethod),
     name,
     gender: input.gender,
     nationality: input.nationality,
@@ -49,6 +54,9 @@ export type ArrangedParticipant = {
   /** 회원 신청 시 profiles 연결 */
   userId?: string | null
   isWalkIn?: boolean
+  paymentMethod?: PaymentMethod | null
+  paymentStatus?: string | null
+  paymentReceiptUrl?: string | null
 }
 
 export type WalkInParticipant = ArrangedParticipant & { isWalkIn: true }
@@ -60,6 +68,8 @@ export function mapFormResponseToParticipant(
     answers?: Record<string, unknown> | null
     checked_in_at?: string | null
     created_at?: string | null
+    payment_status?: string | null
+    payment_receipt_url?: string | null
   },
   questions: CoreFormQuestion[] = []
 ): ArrangedParticipant {
@@ -81,6 +91,9 @@ export function mapFormResponseToParticipant(
     created_at: row.created_at ?? null,
     userId: row.user_id ?? null,
     isWalkIn: isWalkInAnswers(answers) || undefined,
+    paymentMethod: normalizePaymentMethod(answers._payment_method),
+    paymentStatus: row.payment_status ?? null,
+    paymentReceiptUrl: row.payment_receipt_url ?? null,
   }
 }
 

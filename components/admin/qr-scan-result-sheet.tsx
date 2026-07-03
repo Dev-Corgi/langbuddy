@@ -63,7 +63,7 @@ export function QrScanResultSheet({ open, onOpenChange, payload }: Props) {
               <InfoRow label="한국인/외국인" value={payload.nationalityLabel} />
               <InfoRow label="결제 수단" value={payload.paymentMethod} />
               {payload.sessionUsedCoupon ? (
-                <InfoRow label="이번 신청" value="무료쿠폰 (실물 확인)" />
+                <InfoRow label="이번 신청" value="쿠폰사용 (실물 확인)" />
               ) : null}
               <InfoRow label="선택 음료" value={payload.drink} />
               {payload.showTable === false && (

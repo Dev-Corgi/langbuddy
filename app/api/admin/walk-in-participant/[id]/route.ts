@@ -12,9 +12,21 @@ import {
   isWalkInAnswers,
   mapFormResponseToWalkInParticipant,
 } from '@/lib/walk-in-participant'
+import {
+  defaultPaymentStatusForMethod,
+  isSupportedPaymentMethod,
+  type PaymentMethod,
+} from '@/lib/supported-payment-methods'
 import { isSupportedLanguage } from '@/lib/supported-languages'
 
 type RouteContext = { params: Promise<{ id: string }> }
+
+function parsePaymentMethod(body: Record<string, unknown>): PaymentMethod | undefined {
+  if (body.paymentMethod === undefined) return undefined
+  const raw = typeof body.paymentMethod === 'string' ? body.paymentMethod.trim() : ''
+  if (!isSupportedPaymentMethod(raw)) return undefined
+  return raw
+}
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
@@ -33,6 +45,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const gender = normalizeGender(genderRaw)
     const nationality = normalizeNationality(nationalityRaw)
     const language = normalizeLanguage(languageRaw)
+    const paymentMethod = parsePaymentMethod(body as Record<string, unknown>)
 
     if (!name) {
       return NextResponse.json({ error: 'name_required' }, { status: 400 })
@@ -49,11 +62,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (!isSupportedLanguage(language)) {
       return NextResponse.json({ error: 'invalid_language' }, { status: 400 })
     }
+    if (body.paymentMethod !== undefined && !paymentMethod) {
+      return NextResponse.json({ error: 'invalid_payment_method' }, { status: 400 })
+    }
 
     const admin = createSupabaseAdmin()
     const { data: existing, error: loadErr } = await admin
       .from('form_responses')
-      .select('id, answers, checked_in_at, created_at')
+      .select('id, answers, checked_in_at, created_at, payment_status, payment_receipt_url')
       .eq('id', id)
       .single()
 
@@ -79,20 +95,53 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'invalid_walk_in_session' }, { status: 400 })
     }
 
+    let resolvedPaymentMethod: PaymentMethod = '현장현금'
+    if (paymentMethod) {
+      resolvedPaymentMethod = paymentMethod
+    } else {
+      const prevMethod =
+        typeof prevAnswers._payment_method === 'string'
+          ? prevAnswers._payment_method.trim()
+          : ''
+      if (isSupportedPaymentMethod(prevMethod)) {
+        resolvedPaymentMethod = prevMethod
+      }
+    }
+
+    const hasReceipt = Boolean(existing.payment_receipt_url)
+    let payment_status: string | null = existing.payment_status ?? null
+    if (paymentMethod !== undefined) {
+      if (paymentMethod === '계좌이체') {
+        if (existing.payment_status === 'confirmed' && hasReceipt) {
+          payment_status = 'confirmed'
+        } else {
+          payment_status = defaultPaymentStatusForMethod(paymentMethod, hasReceipt)
+        }
+      } else {
+        payment_status = null
+      }
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      answers: buildWalkInAnswers({
+        name,
+        gender,
+        nationality,
+        language,
+        sessionDate,
+        selectedDay,
+        paymentMethod: resolvedPaymentMethod,
+      }),
+    }
+    if (paymentMethod !== undefined) {
+      updatePayload.payment_status = payment_status
+    }
+
     const { data: row, error } = await admin
       .from('form_responses')
-      .update({
-        answers: buildWalkInAnswers({
-          name,
-          gender,
-          nationality,
-          language,
-          sessionDate,
-          selectedDay,
-        }),
-      })
+      .update(updatePayload)
       .eq('id', id)
-      .select('id, answers, checked_in_at, created_at')
+      .select('id, answers, checked_in_at, created_at, payment_status, payment_receipt_url')
       .single()
 
     if (error || !row) {

@@ -872,6 +872,7 @@ export default function AdminArrangePage() {
             user_id?: string | null
             answers?: Record<string, unknown> | null
             payment_status?: string | null
+            payment_receipt_url?: string | null
             checked_in_at?: string | null
             created_at?: string | null
           }
@@ -888,6 +889,8 @@ export default function AdminArrangePage() {
                 answers: row.answers,
                 checked_in_at: row.checked_in_at,
                 created_at: row.created_at,
+                payment_status: row.payment_status,
+                payment_receipt_url: row.payment_receipt_url,
               },
               questions
             )
@@ -902,6 +905,7 @@ export default function AdminArrangePage() {
               participantsRef.current = next
               return next
             })
+            setEditingParticipant((prev) => (prev?.id === rowId ? patched : prev))
           } else if (!suppressParticipantRefreshRef.current) {
             scheduleParticipantsRefresh()
           }
@@ -1469,18 +1473,23 @@ export default function AdminArrangePage() {
       const oldParticipant = participantsRef.current.find((p) => p.id === updated.id)
       if (!oldParticipant) return false
 
+      const body: Record<string, string | null | undefined> = {
+        name: updated.name,
+        gender: updated.gender,
+        nationality: updated.nationality,
+        language: updated.language,
+      }
+      if (updated.paymentMethod) {
+        body.paymentMethod = updated.paymentMethod
+      }
+
       let persisted = updated
       try {
         if (updated.isWalkIn) {
           const res = await fetch(`/api/admin/walk-in-participant/${updated.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: updated.name,
-              gender: updated.gender,
-              nationality: updated.nationality,
-              language: updated.language,
-            }),
+            body: JSON.stringify(body),
           })
           const data = (await res.json().catch(() => ({}))) as {
             error?: string
@@ -1495,12 +1504,7 @@ export default function AdminArrangePage() {
           const res = await fetch(`/api/admin/form-response-participant/${updated.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: updated.name,
-              gender: updated.gender,
-              nationality: updated.nationality,
-              language: updated.language,
-            }),
+            body: JSON.stringify(body),
           })
           const data = (await res.json().catch(() => ({}))) as {
             error?: string
@@ -1529,6 +1533,46 @@ export default function AdminArrangePage() {
       return true
     },
     [applyLanguageReassignment, markLocalSeatingEdit]
+  )
+
+  const handleReceiptUpload = useCallback(
+    async (participantId: string, file: File): Promise<Participant | null> => {
+      const oldParticipant = participantsRef.current.find((p) => p.id === participantId)
+      if (!oldParticipant) return null
+
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        const res = await fetch(`/api/admin/form-response-participant/${participantId}`, {
+          method: 'POST',
+          body: formData,
+        })
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string
+          participant?: Participant
+        }
+        if (!res.ok || !data.participant) {
+          toast.error(data.error || '영수증 업로드에 실패했습니다.')
+          return null
+        }
+
+        const persisted = data.participant
+        markLocalSeatingEdit()
+        setParticipants((prev) => {
+          const next = prev.map((p) => (p.id === persisted.id ? persisted : p))
+          participantsRef.current = next
+          return next
+        })
+        setEditingParticipant((prev) => (prev?.id === persisted.id ? persisted : prev))
+        toast.success('영수증이 업로드되었습니다.')
+        return persisted
+      } catch (err) {
+        console.error(err)
+        toast.error('영수증 업로드에 실패했습니다.')
+        return null
+      }
+    },
+    [markLocalSeatingEdit]
   )
 
   const [deletingParticipantId, setDeletingParticipantId] = useState<string | null>(null)
@@ -2445,6 +2489,7 @@ export default function AdminArrangePage() {
           isOpen={true}
           onClose={() => setEditingParticipant(null)}
           onFieldSave={handleParticipantFieldSave}
+          onReceiptUpload={handleReceiptUpload}
           onCheckin={handleModalCheckin}
           onUncheckin={handleModalUncheckin}
           onDelete={handleDeleteParticipant}

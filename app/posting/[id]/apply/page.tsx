@@ -38,6 +38,11 @@ import {
   buildAutoRecurringFormTitles,
 } from '@/lib/session-event-date'
 import { filterSupportedLanguages, SUPPORTED_LANGUAGES } from '@/lib/supported-languages'
+import {
+  couponFlagForMethod,
+  paymentMethodFromApplyChoice,
+  type ApplyPaymentChoice,
+} from '@/lib/supported-payment-methods'
 
 // Basic Radio Group Implementation
 function RadioGroup({ value, onValueChange, children, className }: any) {
@@ -85,7 +90,7 @@ export default function ApplicationFormPage() {
   const [answers, setAnswers] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState<"bank" | "on_site" | "coupon" | "">("")
+  const [paymentMethod, setPaymentMethod] = useState<ApplyPaymentChoice>("")
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentReceiptFile, setPaymentReceiptFile] = useState<File | null>(null)
   const [paymentReceiptPreview, setPaymentReceiptPreview] = useState<string | null>(null)
@@ -739,6 +744,10 @@ export default function ApplicationFormPage() {
       }
     }
 
+    const canonicalPaymentMethod = paymentMethodFromApplyChoice(paymentMethod, {
+      leCouponWaived,
+    })
+
     const canonicalAnswers = canonicalizeFormAnswers(questions, {
       ...answers,
       ...(selectedLang
@@ -750,20 +759,19 @@ export default function ApplicationFormPage() {
       form_id: form.id,
       qr_code: qrCode,
       payment_receipt_url: paymentReceiptUrl,
-      payment_status: feeWaived || paymentMethod === 'coupon' ? null : paymentMethod === 'bank' ? 'pending' : null,
+      payment_status:
+        feeWaived || paymentMethod === 'coupon'
+          ? null
+          : paymentMethod === 'bank'
+            ? 'pending'
+            : null,
       answers: {
         ...canonicalAnswers,
         _selected_day: selectedDay,
         _event_date: finalEventDate,
         _study_bundle_free: bundleWaived,
-        _le_free_coupon: leCouponWaived || paymentMethod === 'coupon',
-        _payment_method: paymentMethod === 'coupon'
-          ? '무료쿠폰'
-          : leCouponWaived
-            ? '무료쿠폰(10스탬프)'
-            : paymentMethod === 'bank'
-              ? '계좌송금'
-              : '현장결제',
+        _le_free_coupon: couponFlagForMethod(canonicalPaymentMethod),
+        _payment_method: canonicalPaymentMethod,
       },
     }
     if (user?.id) {
@@ -852,14 +860,13 @@ export default function ApplicationFormPage() {
             form_title: webhookFormTitle,
             submitted_at: new Date(responseData.created_at).toLocaleString(),
             qr_code: qrCode,
-            payment_method: paymentMethod === 'coupon'
-              ? '무료쿠폰'
-              : leCouponWaived
-                ? '무료쿠폰(10스탬프)'
+            payment_method: canonicalPaymentMethod,
+            payment_status:
+              feeWaived || paymentMethod === 'coupon'
+                ? 'confirmed'
                 : paymentMethod === 'bank'
-                  ? '계좌송금'
-                  : '현장결제',
-            payment_status: feeWaived || paymentMethod === 'coupon' ? 'confirmed' : paymentMethod === 'bank' ? 'pending' : 'confirmed',
+                  ? 'pending'
+                  : 'confirmed',
             responses: [
               ...questions.map(q => ({
                 question: q.question_text,
@@ -869,13 +876,7 @@ export default function ApplicationFormPage() {
               { question: "선택 언어", answer: selectedLang },
               {
                 question: "결제 방식",
-                answer: paymentMethod === 'coupon'
-                  ? '무료쿠폰'
-                  : leCouponWaived
-                    ? '무료쿠폰(10스탬프)'
-                    : paymentMethod === 'bank'
-                      ? '계좌송금'
-                      : '현장결제',
+                answer: canonicalPaymentMethod,
               },
             ]
           }
@@ -1458,7 +1459,7 @@ export default function ApplicationFormPage() {
                           : "bg-emerald-50/50 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                       )}
                     >
-                      <span className="text-lg font-black">{locale === 'en' ? 'Use Coupon' : '쿠폰 사용'}</span>
+                      <span className="text-lg font-black">{locale === 'en' ? 'Use Coupon' : '쿠폰사용'}</span>
                       <span className={cn("text-xs font-medium", paymentMethod === "coupon" ? "text-white/80" : "text-emerald-600")}>
                         {locale === 'en'
                           ? 'Bring your physical coupon to the venue'
@@ -1479,7 +1480,7 @@ export default function ApplicationFormPage() {
                       : "bg-card border-border text-muted-foreground hover:border-primary/30"
                   )}
                 >
-                  <span className="text-lg font-black">{locale === 'en' ? 'Bank Transfer' : '계좌 송금'}</span>
+                  <span className="text-lg font-black">{locale === 'en' ? 'Bank Transfer' : '계좌이체'}</span>
                   <span className={cn("text-xs font-medium", paymentMethod === "bank" ? "text-white/80" : "text-muted-foreground")}>
                     {locale === 'en' ? 'Pay now via bank transfer' : '지금 바로 계좌로 이체'}
                   </span>
@@ -1497,7 +1498,7 @@ export default function ApplicationFormPage() {
                       : "bg-card border-border text-muted-foreground hover:border-border"
                   )}
                 >
-                  <span className="text-lg font-black">{locale === 'en' ? 'Pay on Site' : '현장 결제'}</span>
+                  <span className="text-lg font-black">{locale === 'en' ? 'Pay on Site' : '현장현금'}</span>
                   <span className={cn("text-xs font-medium", paymentMethod === "on_site" ? "text-white/80" : "text-muted-foreground")}>
                     {locale === 'en' ? 'Pay at the venue' : '모임 장소에서 직접 결제'}
                   </span>

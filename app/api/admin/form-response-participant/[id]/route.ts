@@ -9,6 +9,11 @@ import {
   type CanonicalFormQuestion,
 } from '@/lib/form-answer-canonical'
 import { mergeParticipantFieldPatchIntoAnswers } from '@/lib/admin-participant-patch'
+import { uploadPaymentReceipt } from '@/lib/payment-receipt-upload'
+import {
+  isSupportedPaymentMethod,
+  type PaymentMethod,
+} from '@/lib/supported-payment-methods'
 import {
   isWalkInAnswers,
   mapFormResponseToParticipant,
@@ -16,6 +21,13 @@ import {
 import { isSupportedLanguage } from '@/lib/supported-languages'
 
 type RouteContext = { params: Promise<{ id: string }> }
+
+function parsePaymentMethod(body: Record<string, unknown>): PaymentMethod | undefined {
+  if (body.paymentMethod === undefined) return undefined
+  const raw = typeof body.paymentMethod === 'string' ? body.paymentMethod.trim() : ''
+  if (!isSupportedPaymentMethod(raw)) return undefined
+  return raw
+}
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
@@ -34,6 +46,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const gender = normalizeGender(genderRaw)
     const nationality = normalizeNationality(nationalityRaw)
     const language = normalizeLanguage(languageRaw)
+    const paymentMethod = parsePaymentMethod(body as Record<string, unknown>)
 
     if (!name) {
       return NextResponse.json({ error: 'name_required' }, { status: 400 })
@@ -50,11 +63,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (!isSupportedLanguage(language)) {
       return NextResponse.json({ error: 'invalid_language' }, { status: 400 })
     }
+    if (body.paymentMethod !== undefined && !paymentMethod) {
+      return NextResponse.json({ error: 'invalid_payment_method' }, { status: 400 })
+    }
 
     const admin = createSupabaseAdmin()
     const { data: existing, error: loadErr } = await admin
       .from('form_responses')
-      .select('id, form_id, user_id, answers, checked_in_at, created_at')
+      .select(
+        'id, form_id, user_id, answers, checked_in_at, created_at, payment_status, payment_receipt_url'
+      )
       .eq('id', id)
       .single()
 
@@ -78,18 +96,34 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const questions = (questionRows || []) as CanonicalFormQuestion[]
-    const nextAnswers = mergeParticipantFieldPatchIntoAnswers(prevAnswers, questions, {
-      name,
-      gender,
-      nationality,
-      language,
-    })
+    const { answers: nextAnswers, payment_status } = mergeParticipantFieldPatchIntoAnswers(
+      prevAnswers,
+      questions,
+      {
+        name,
+        gender,
+        nationality,
+        language,
+        paymentMethod,
+      },
+      {
+        hasReceipt: Boolean(existing.payment_receipt_url),
+        previousPaymentStatus: existing.payment_status,
+      }
+    )
+
+    const updatePayload: Record<string, unknown> = { answers: nextAnswers }
+    if (paymentMethod !== undefined) {
+      updatePayload.payment_status = payment_status
+    }
 
     const { data: row, error } = await admin
       .from('form_responses')
-      .update({ answers: nextAnswers })
+      .update(updatePayload)
       .eq('id', id)
-      .select('id, user_id, answers, checked_in_at, created_at')
+      .select(
+        'id, user_id, answers, checked_in_at, created_at, payment_status, payment_receipt_url'
+      )
       .single()
 
     if (error || !row) {
@@ -105,6 +139,83 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     })
   } catch (err) {
     console.error('[form-response-participant] unexpected PATCH:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest, context: RouteContext) {
+  try {
+    const supabase = await createClient()
+    const adminUser = await getAdminUser(supabase)
+    if (!adminUser) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
+
+    const { id } = await context.params
+    const formData = await request.formData()
+    const file = formData.get('file')
+
+    if (!(file instanceof File) || file.size === 0) {
+      return NextResponse.json({ error: 'file_required' }, { status: 400 })
+    }
+
+    const admin = createSupabaseAdmin()
+    const { data: existing, error: loadErr } = await admin
+      .from('form_responses')
+      .select('id, form_id, answers, payment_status, payment_receipt_url')
+      .eq('id', id)
+      .single()
+
+    if (loadErr || !existing) {
+      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    }
+
+    const publicUrl = await uploadPaymentReceipt(admin, id, file, file.name)
+
+    const prevAnswers = (existing.answers || {}) as Record<string, unknown>
+    const nextAnswers = {
+      ...prevAnswers,
+      _payment_method: '계좌이체',
+      _le_free_coupon: false,
+    }
+
+    const payment_status =
+      existing.payment_status === 'confirmed' ? 'confirmed' : 'pending'
+
+    const { data: questionRows } = await admin
+      .from('form_questions')
+      .select('id, system_key, question_type, options, options_en')
+      .eq('form_id', existing.form_id)
+
+    const { data: row, error } = await admin
+      .from('form_responses')
+      .update({
+        answers: nextAnswers,
+        payment_receipt_url: publicUrl,
+        payment_status,
+      })
+      .eq('id', id)
+      .select(
+        'id, user_id, answers, checked_in_at, created_at, payment_status, payment_receipt_url'
+      )
+      .single()
+
+    if (error || !row) {
+      console.error('[form-response-participant] receipt upload error:', error)
+      return NextResponse.json(
+        { error: error?.message || 'upload_failed' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      participant: mapFormResponseToParticipant(
+        row,
+        (questionRows || []) as CanonicalFormQuestion[]
+      ),
+    })
+  } catch (err) {
+    console.error('[form-response-participant] unexpected POST receipt:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
