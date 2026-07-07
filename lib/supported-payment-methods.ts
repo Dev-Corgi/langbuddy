@@ -25,6 +25,14 @@ export function isSupportedPaymentMethod(value: string): value is PaymentMethod 
   return (PAYMENT_METHODS as readonly string[]).includes(value)
 }
 
+/** API body.paymentMethod — undefined면 미전달, 잘못된 값이면 undefined */
+export function parseOptionalPaymentMethod(raw: unknown): PaymentMethod | undefined {
+  if (raw === undefined) return undefined
+  const trimmed = typeof raw === 'string' ? raw.trim() : ''
+  if (!isSupportedPaymentMethod(trimmed)) return undefined
+  return trimmed
+}
+
 /** DB/레거시 문자열 → canonical (알 수 없으면 null) */
 export function normalizePaymentMethod(raw: unknown): PaymentMethod | null {
   if (typeof raw !== 'string') return null

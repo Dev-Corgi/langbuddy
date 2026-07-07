@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { UserPlus, X, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,10 +8,15 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
+import { PaymentMethodFields } from '@/components/admin/payment-method-fields'
 import { parseWalkInCsvText, type WalkInCsvRow } from '@/lib/walk-in-csv-parser'
 import type { CoreFormQuestion } from '@/lib/utils'
 import type { WalkInParticipant } from '@/lib/walk-in-participant'
 import { SUPPORTED_LANGUAGES } from '@/lib/supported-languages'
+import {
+  isBankTransferMethod,
+  type PaymentMethod,
+} from '@/lib/supported-payment-methods'
 
 interface ParticipantAdderProps {
   onAddParticipant: (participant: WalkInParticipant) => void
@@ -35,6 +40,7 @@ async function postWalkInParticipant(
     gender: string
     nationality: string
     language: string
+    paymentMethod?: PaymentMethod
   }
 ): Promise<{ ok: true; participant: WalkInParticipant } | { ok: false; error: string }> {
   const res = await fetch('/api/admin/walk-in-participant', {
@@ -49,6 +55,27 @@ async function postWalkInParticipant(
 
   if (!res.ok || !data.participant) {
     return { ok: false, error: data.error || '참가자 추가에 실패했습니다.' }
+  }
+  return { ok: true, participant: data.participant }
+}
+
+async function uploadParticipantReceipt(
+  participantId: string,
+  file: File
+): Promise<{ ok: true; participant: WalkInParticipant } | { ok: false; error: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch(`/api/admin/form-response-participant/${participantId}`, {
+    method: 'POST',
+    body: formData,
+  })
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string
+    participant?: WalkInParticipant
+  }
+
+  if (!res.ok || !data.participant) {
+    return { ok: false, error: data.error || '영수증 업로드에 실패했습니다.' }
   }
   return { ok: true, participant: data.participant }
 }
@@ -99,7 +126,54 @@ export function ParticipantAdder({
   const [gender, setGender] = useState<'남' | '여'>('남')
   const [nationality, setNationality] = useState<'한국인' | '외국인'>('한국인')
   const [language, setLanguage] = useState('영어')
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('현장현금')
+  const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null)
+  const [pendingReceiptPreview, setPendingReceiptPreview] = useState<string | null>(null)
   const [csvText, setCsvText] = useState('')
+  const pendingPreviewRef = useRef<string | null>(null)
+
+  const clearPendingReceiptPreview = useCallback(() => {
+    if (pendingPreviewRef.current) {
+      URL.revokeObjectURL(pendingPreviewRef.current)
+      pendingPreviewRef.current = null
+    }
+    setPendingReceiptPreview(null)
+    setPendingReceiptFile(null)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (pendingPreviewRef.current) {
+        URL.revokeObjectURL(pendingPreviewRef.current)
+      }
+    }
+  }, [])
+
+  const handlePaymentMethodChange = useCallback(
+    (value: PaymentMethod) => {
+      setPaymentMethod(value)
+      if (!isBankTransferMethod(value)) {
+        clearPendingReceiptPreview()
+      }
+    },
+    [clearPendingReceiptPreview]
+  )
+
+  const handleReceiptFileSelect = useCallback(
+    (file: File) => {
+      if (pendingPreviewRef.current) {
+        URL.revokeObjectURL(pendingPreviewRef.current)
+      }
+      const preview = URL.createObjectURL(file)
+      pendingPreviewRef.current = preview
+      setPendingReceiptFile(file)
+      setPendingReceiptPreview(preview)
+      if (!isBankTransferMethod(paymentMethod)) {
+        setPaymentMethod('계좌이체')
+      }
+    },
+    [paymentMethod]
+  )
 
   const csvParse = useMemo(() => {
     if (!csvText.trim()) return null
@@ -111,7 +185,9 @@ export function ParticipantAdder({
     setLanguage('영어')
     setGender('남')
     setNationality('한국인')
-  }, [])
+    setPaymentMethod('현장현금')
+    clearPendingReceiptPreview()
+  }, [clearPendingReceiptPreview])
 
   const closePanel = useCallback(() => {
     setIsOpen(false)
@@ -140,6 +216,7 @@ export function ParticipantAdder({
         gender,
         nationality,
         language: language.trim() || '영어',
+        paymentMethod,
       })
 
       if (!result.ok) {
@@ -147,13 +224,30 @@ export function ParticipantAdder({
         return
       }
 
-      if (existingParticipantIds.includes(result.participant.id)) {
-        toast.info(`${result.participant.name}님은 이미 목록에 있습니다.`)
+      let participant = result.participant
+
+      if (pendingReceiptFile) {
+        const uploadResult = await uploadParticipantReceipt(participant.id, pendingReceiptFile)
+        if (!uploadResult.ok) {
+          toast.error(uploadResult.error)
+          toast.info(`${participant.name}님은 추가되었습니다. 영수증은 참가자 수정에서 다시 올려주세요.`)
+          if (!existingParticipantIds.includes(participant.id)) {
+            onAddParticipant(participant)
+          }
+          resetManualForm()
+          closePanel()
+          return
+        }
+        participant = uploadResult.participant as WalkInParticipant
+      }
+
+      if (existingParticipantIds.includes(participant.id)) {
+        toast.info(`${participant.name}님은 이미 목록에 있습니다.`)
         return
       }
 
-      onAddParticipant(result.participant)
-      toast.success(`${result.participant.name}님이 추가되었습니다.`)
+      onAddParticipant(participant)
+      toast.success(`${participant.name}님이 추가되었습니다.`)
       resetManualForm()
       closePanel()
     } catch (err) {
@@ -170,6 +264,8 @@ export function ParticipantAdder({
     gender,
     nationality,
     language,
+    paymentMethod,
+    pendingReceiptFile,
     onAddParticipant,
     existingParticipantIds,
     resetManualForm,
@@ -392,6 +488,17 @@ export function ParticipantAdder({
                 ))}
               </div>
             </div>
+
+            <PaymentMethodFields
+              paymentMethod={paymentMethod}
+              onPaymentMethodChange={handlePaymentMethodChange}
+              disabled={submitting}
+              pendingReceiptPreview={pendingReceiptPreview}
+              onReceiptFileSelect={handleReceiptFileSelect}
+              pendingReceiptHint={
+                pendingReceiptFile ? '선택됨 — 추가 시 업로드됩니다' : undefined
+              }
+            />
 
             <Button
               onClick={() => void handleManualSubmit()}

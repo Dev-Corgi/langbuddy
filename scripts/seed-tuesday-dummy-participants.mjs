@@ -1,10 +1,11 @@
 /**
- * 화요일 언어교환 테스트용 더미 form_responses 30명 삽입
- * - 한국 이름 15, 영어 이름 15
+ * 화요일 언어교환 테스트용 더미 form_responses 20명 삽입
+ * - 한국 이름 10, 영어 이름 10
  * - _source: test_dummy_tuesday (주간 리셋·수동 삭제 시 식별용)
  *
  * Usage: node scripts/seed-tuesday-dummy-participants.mjs
  *        node scripts/seed-tuesday-dummy-participants.mjs --dry-run
+ *        node scripts/seed-tuesday-dummy-participants.mjs --date=2026-07-07
  */
 import { createClient } from '@supabase/supabase-js'
 import { randomUUID } from 'crypto'
@@ -32,6 +33,10 @@ if (!url || !key) {
 }
 
 const dryRun = process.argv.includes('--dry-run')
+const dateArg = process.argv.find((a) => a.startsWith('--date='))
+const SELECTED_DAY = '화'
+const DUMMY_SOURCE = 'test_dummy_tuesday'
+
 const supabase = createClient(url, key)
 
 const SUN_START = ['일', '월', '화', '수', '목', '금', '토']
@@ -75,19 +80,21 @@ const GENDERS = ['남', '여']
 const KOREAN_NAMES = [
   '김민준', '이서연', '박지훈', '최유나', '정도현',
   '강하은', '조민서', '윤재원', '임수빈', '한지우',
-  '오예린', '신동혁', '권소율', '황민재', '배서진',
 ]
 
 const ENGLISH_NAMES = [
   'James Wilson', 'Emily Chen', 'Michael Brown', 'Sarah Kim', 'David Lee',
   'Jessica Park', 'Robert Taylor', 'Amanda Johnson', 'Christopher Davis', 'Rachel Miller',
-  'Daniel White', 'Olivia Martinez', 'Matthew Anderson', 'Sophia Thomas', 'Andrew Jackson',
 ]
 
-function buildParticipant(name, nationality, index) {
+function resolveSessionDate() {
+  if (dateArg) return dateArg.slice('--date='.length).slice(0, 10)
+  return isoDateForKoreanWeekdayInSunWeekSeoul(SELECTED_DAY)
+}
+
+function buildParticipant(name, nationality, index, sessionDate) {
   const gender = GENDERS[index % 2]
   const language = LANGUAGES[index % LANGUAGES.length]
-  const sessionDate = isoDateForKoreanWeekdayInSunWeekSeoul('화')
   return {
     form_id: null, // filled later
     qr_code: randomUUID(),
@@ -95,9 +102,9 @@ function buildParticipant(name, nationality, index) {
     checked_in_at: null,
     payment_status: null,
     answers: {
-      _source: 'test_dummy_tuesday',
+      _source: DUMMY_SOURCE,
       _event_date: sessionDate,
-      _selected_day: '화',
+      _selected_day: SELECTED_DAY,
       _selected_language: language,
       _payment_method: '테스트더미',
       name,
@@ -109,8 +116,8 @@ function buildParticipant(name, nationality, index) {
 }
 
 async function main() {
-  const sessionDate = isoDateForKoreanWeekdayInSunWeekSeoul('화')
-  console.log(`Target: 화요일 ${sessionDate}`)
+  const sessionDate = resolveSessionDate()
+  console.log(`Target: ${SELECTED_DAY}요일 ${sessionDate}`)
 
   const { data: langRows } = await supabase
     .from('postings')
@@ -128,7 +135,7 @@ async function main() {
     .from('language_exchange_schedules')
     .select('form_id')
     .eq('posting_id', postingId)
-    .eq('day_of_week', '화')
+    .eq('day_of_week', SELECTED_DAY)
     .maybeSingle()
 
   const formId = schedule?.form_id
@@ -138,17 +145,18 @@ async function main() {
     .from('form_responses')
     .select('id, answers')
     .eq('form_id', formId)
-    .contains('answers', { _source: 'test_dummy_tuesday' })
+    .contains('answers', { _source: DUMMY_SOURCE })
+    .filter('answers->>_event_date', 'eq', sessionDate)
 
   if (existing?.length) {
-    console.log(`Already have ${existing.length} test_dummy_tuesday rows for this form. Skipping insert.`)
+    console.log(`Already have ${existing.length} ${DUMMY_SOURCE} rows for ${sessionDate}. Skipping insert.`)
     console.log('Delete them first if you want a fresh batch.')
     return
   }
 
   const rows = [
-    ...KOREAN_NAMES.map((name, i) => buildParticipant(name, '한국인', i)),
-    ...ENGLISH_NAMES.map((name, i) => buildParticipant(name, '외국인', i + 15)),
+    ...KOREAN_NAMES.map((name, i) => buildParticipant(name, '한국인', i, sessionDate)),
+    ...ENGLISH_NAMES.map((name, i) => buildParticipant(name, '외국인', i + 10, sessionDate)),
   ].map((r) => ({ ...r, form_id: formId }))
 
   console.log(`Prepared ${rows.length} dummy participants for form ${formId}`)

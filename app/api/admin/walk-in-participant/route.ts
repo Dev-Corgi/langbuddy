@@ -16,6 +16,11 @@ import {
   todayYYYYMMDDSeoul,
 } from '@/lib/session-event-date'
 import { isSupportedLanguage } from '@/lib/supported-languages'
+import {
+  defaultPaymentStatusForMethod,
+  parseOptionalPaymentMethod,
+  type PaymentMethod,
+} from '@/lib/supported-payment-methods'
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,6 +67,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'invalid_language' }, { status: 400 })
     }
 
+    const paymentMethodRaw = parseOptionalPaymentMethod(body.paymentMethod)
+    if (body.paymentMethod !== undefined && !paymentMethodRaw) {
+      return NextResponse.json({ error: 'invalid_payment_method' }, { status: 400 })
+    }
+    const paymentMethod: PaymentMethod = paymentMethodRaw ?? '현장현금'
+
     const admin = createSupabaseAdmin()
     const checkedInAt = new Date().toISOString()
 
@@ -76,13 +87,14 @@ export async function POST(request: NextRequest) {
           language,
           sessionDate,
           selectedDay,
+          paymentMethod,
         }),
         checked_in_at: checkedInAt,
-        payment_status: null,
+        payment_status: defaultPaymentStatusForMethod(paymentMethod, false),
         user_id: null,
         qr_code: null,
       })
-      .select('id, answers, checked_in_at, created_at')
+      .select('id, answers, checked_in_at, created_at, payment_status, payment_receipt_url')
       .single()
 
     if (error || !row) {

@@ -129,6 +129,19 @@ type ArrangePostingSession = {
   seating_config?: SeatingConfigPayload | null
 }
 
+/** 라운드당 participant_id 1건 — 드래그 시 중복 배정 방지 */
+function setParticipantTableAssignment(
+  assignments: RoundData['assignments'],
+  participantId: string,
+  tableLabel: string | null
+): RoundData['assignments'] {
+  const next = assignments.filter((a) => a.participant_id !== participantId)
+  if (tableLabel && tableLabel.trim()) {
+    next.push({ participant_id: participantId, table_label: tableLabel })
+  }
+  return next
+}
+
 // --- Components ---
 
 function ParticipantCard({ participant, isOverlay = false, onEdit }: { participant: Participant, isOverlay?: boolean, onEdit?: (participant: Participant) => void }) {
@@ -553,6 +566,7 @@ export default function AdminArrangePage() {
   const langTableCountsRef = useRef<Record<string, number>>({})
   const lastCheckinModalRef = useRef<{ id: string; at: number } | null>(null)
   const seenCheckedInIdsRef = useRef<Set<string>>(new Set())
+  const activeDragIdRef = useRef<string | null>(null)
 
   const [checkinModalOpen, setCheckinModalOpen] = useState(false)
   const [checkinModalPayload, setCheckinModalPayload] =
@@ -693,6 +707,7 @@ export default function AdminArrangePage() {
   const reloadSeatingFromServer = useCallback(async () => {
     const s = sessionRef.current
     if (!s?.id) return
+    if (activeDragIdRef.current) return
     if (suppressRemoteReloadRef.current) return
     if (persistFailedAtRef.current !== 0) return
 
@@ -804,6 +819,18 @@ export default function AdminArrangePage() {
   }, [runSeatingPersist, markLocalSeatingEdit])
 
   scheduleSeatingPersistRef.current = scheduleSeatingPersist
+
+  const flushSeatingPersistSoon = useCallback(() => {
+    if (!readyForPersistRef.current) return
+    markLocalSeatingEdit()
+    if (seatingPersistTimerRef.current) {
+      clearTimeout(seatingPersistTimerRef.current)
+    }
+    seatingPersistTimerRef.current = setTimeout(() => {
+      seatingPersistTimerRef.current = null
+      void runSeatingPersist()
+    }, 50)
+  }, [markLocalSeatingEdit, runSeatingPersist])
 
   useEffect(() => {
     if (!readyForPersistRef.current || !session?.id) return
@@ -1688,8 +1715,18 @@ export default function AdminArrangePage() {
   // --- DnD Handlers ---
 
   const onDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string)
+    const id = event.active.id as string
+    activeDragIdRef.current = id
+    markLocalSeatingEdit()
+    setActiveId(id)
   }
+
+  const showReunionHint = useCallback((maxReunions: number, toastId: string) => {
+    toast.info(
+      `이 테이블에는 이전 라운드에서 ${maxReunions}번 만난 참가자가 있습니다. 배치는 적용됩니다.`,
+      { id: toastId, duration: 5000 }
+    )
+  }, [])
 
   const applyOptimisticCheckin = useCallback(
     (participantId: string) => {
@@ -1838,14 +1875,23 @@ export default function AdminArrangePage() {
     const { active, over } = event
     setActiveId(null)
 
-    if (!over || !active) return
+    try {
+      if (!over || !active) return
 
-    const activeId = active.id as string
-    const overId = over.id as string
-    const activeParticipant = participantsRef.current.find((p) => p.id === activeId)
-    if (!activeParticipant) return
+      const activeId = active.id as string
+      const overId = over.id as string
+      const activeParticipant = participantsRef.current.find((p) => p.id === activeId)
+      if (!activeParticipant) return
 
-    const overContainerRound =
+      let assignmentChanged = false
+      const commitAssignment = (targetRound: number, tableLabel: string | null) => {
+        assignmentChanged = true
+        applyRoundAssignmentUpdate(targetRound, (currentAssignments) =>
+          setParticipantTableAssignment(currentAssignments, activeId, tableLabel)
+        )
+      }
+
+      const overContainerRound =
       over.data?.current?.type === 'container' && over.data.current.round != null
         ? Number(over.data.current.round)
         : currentRound
@@ -1908,13 +1954,8 @@ export default function AdminArrangePage() {
     }
 
     if (isOverUnassigned && !assignTableLabel) {
-      applyRoundAssignmentUpdate(targetRound, (currentAssignments) => {
-        const activeIdx = currentAssignments.findIndex((a) => a.participant_id === activeId)
-        if (activeIdx !== -1) {
-          currentAssignments.splice(activeIdx, 1)
-        }
-        return currentAssignments
-      })
+      commitAssignment(targetRound, null)
+      flushSeatingPersistSoon()
       return
     }
 
@@ -1922,17 +1963,9 @@ export default function AdminArrangePage() {
       const newTableLabel = over.data.current.tableLabel as string
 
       if (newTableLabel === 'unassigned') {
-        applyRoundAssignmentUpdate(targetRound, (currentAssignments) => {
-          const activeIdx = currentAssignments.findIndex((a) => a.participant_id === activeId)
-          if (activeIdx !== -1) {
-            currentAssignments.splice(activeIdx, 1)
-          }
-          return currentAssignments
-        })
+        commitAssignment(targetRound, null)
       } else {
         const currentRoundData = roundsRef.current.find((r) => r.round === targetRound)
-        const participant =
-          participantsRef.current.find((p) => p.id === activeId) ?? activeParticipant
 
         const previousRoundsForDrag = roundsRef.current.filter(
           (r) => r.round < targetRound && r.assignments.length > 0
@@ -1944,24 +1977,10 @@ export default function AdminArrangePage() {
           previousRoundsForDrag
         )
         if (maxReunions > 0) {
-          toast.info(
-            `이 테이블에는 이전 라운드에서 ${maxReunions}번 만난 참가자가 있습니다.`,
-            { id: 'reunion-hint', duration: 5000 }
-          )
+          showReunionHint(maxReunions, 'reunion-hint')
         }
 
-        applyRoundAssignmentUpdate(targetRound, (currentAssignments) => {
-          const activeIdx = currentAssignments.findIndex((a) => a.participant_id === activeId)
-          if (activeIdx !== -1) {
-            currentAssignments[activeIdx] = {
-              ...currentAssignments[activeIdx],
-              table_label: newTableLabel,
-            }
-          } else {
-            currentAssignments.push({ participant_id: activeId, table_label: newTableLabel })
-          }
-          return currentAssignments
-        })
+        commitAssignment(targetRound, newTableLabel)
       }
     } else {
       const currentRoundData = roundsRef.current.find((r) => r.round === targetRound)
@@ -1971,8 +1990,6 @@ export default function AdminArrangePage() {
 
       if (overAssignment && overAssignment.table_label !== activeAssignment?.table_label) {
         const newTableLabel = overAssignment.table_label
-        const participant =
-          participantsRef.current.find((p) => p.id === activeId) ?? activeParticipant
 
         const previousRoundsForDrag = roundsRef.current.filter(
           (r) => r.round < targetRound && r.assignments.length > 0
@@ -1984,33 +2001,20 @@ export default function AdminArrangePage() {
           previousRoundsForDrag
         )
         if (maxReunions > 0) {
-          toast.info(
-            `이 테이블에는 이전 라운드에서 ${maxReunions}번 만난 참가자가 있습니다.`,
-            { id: 'reunion-hint-participant', duration: 5000 }
-          )
+          showReunionHint(maxReunions, 'reunion-hint-participant')
         }
 
-        applyRoundAssignmentUpdate(targetRound, (currentAssignments) => {
-          const activeIdx = currentAssignments.findIndex((a) => a.participant_id === activeId)
-          if (activeIdx !== -1) {
-            currentAssignments[activeIdx] = {
-              ...currentAssignments[activeIdx],
-              table_label: newTableLabel,
-            }
-          } else {
-            currentAssignments.push({ participant_id: activeId, table_label: newTableLabel })
-          }
-          return currentAssignments
-        })
+        commitAssignment(targetRound, newTableLabel)
       } else if (!overAssignment && activeAssignment) {
-        applyRoundAssignmentUpdate(targetRound, (currentAssignments) => {
-          const activeIdx = currentAssignments.findIndex((a) => a.participant_id === activeId)
-          if (activeIdx !== -1) {
-            currentAssignments.splice(activeIdx, 1)
-          }
-          return currentAssignments
-        })
+        commitAssignment(targetRound, null)
       }
+    }
+
+    if (assignmentChanged) {
+      flushSeatingPersistSoon()
+    }
+    } finally {
+      activeDragIdRef.current = null
     }
   }
 

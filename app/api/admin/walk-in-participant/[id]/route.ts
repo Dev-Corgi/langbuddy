@@ -15,18 +15,12 @@ import {
 import {
   defaultPaymentStatusForMethod,
   isSupportedPaymentMethod,
+  parseOptionalPaymentMethod,
   type PaymentMethod,
 } from '@/lib/supported-payment-methods'
 import { isSupportedLanguage } from '@/lib/supported-languages'
 
 type RouteContext = { params: Promise<{ id: string }> }
-
-function parsePaymentMethod(body: Record<string, unknown>): PaymentMethod | undefined {
-  if (body.paymentMethod === undefined) return undefined
-  const raw = typeof body.paymentMethod === 'string' ? body.paymentMethod.trim() : ''
-  if (!isSupportedPaymentMethod(raw)) return undefined
-  return raw
-}
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
@@ -45,7 +39,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const gender = normalizeGender(genderRaw)
     const nationality = normalizeNationality(nationalityRaw)
     const language = normalizeLanguage(languageRaw)
-    const paymentMethod = parsePaymentMethod(body as Record<string, unknown>)
+    const paymentMethod = parseOptionalPaymentMethod(body.paymentMethod)
 
     if (!name) {
       return NextResponse.json({ error: 'name_required' }, { status: 400 })

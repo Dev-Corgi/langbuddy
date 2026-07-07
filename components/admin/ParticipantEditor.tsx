@@ -1,16 +1,15 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Settings, X, Trash2, Loader2, LogIn, LogOut, ImageIcon, Upload } from 'lucide-react'
+import { Settings, X, Trash2, Loader2, LogIn, LogOut } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { StampProgressEditor, type StampProgressEditorHandle } from '@/components/admin/stamp-progress-editor'
+import { PaymentMethodFields } from '@/components/admin/payment-method-fields'
 import { SUPPORTED_LANGUAGES } from '@/lib/supported-languages'
 import {
-  PAYMENT_METHODS,
-  formatPaymentMethodLabel,
   isBankTransferMethod,
   type PaymentMethod,
 } from '@/lib/supported-payment-methods'
@@ -79,7 +78,6 @@ export function ParticipantEditor({
   const [checkinBusy, setCheckinBusy] = useState(false)
   const [stampDirty, setStampDirty] = useState(false)
   const stampEditorRef = useRef<StampProgressEditorHandle>(null)
-  const receiptInputRef = useRef<HTMLInputElement>(null)
   const pendingPreviewRef = useRef<string | null>(null)
 
   const savedFieldsRef = useRef<SavedFields>({
@@ -318,12 +316,8 @@ export function ParticipantEditor({
     [clearPendingReceiptPreview, pendingReceiptFile, receiptUrl]
   )
 
-  const handleReceiptFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      e.target.value = ''
-      if (!file) return
-
+  const handleReceiptFileSelect = useCallback(
+    (file: File) => {
       if (pendingPreviewRef.current) {
         URL.revokeObjectURL(pendingPreviewRef.current)
       }
@@ -342,8 +336,6 @@ export function ParticipantEditor({
 
   const busy = flushing || checkinBusy || isDeleting
   const checkedIn = Boolean(participant.checked_in_at)
-  const showBankTransfer = isBankTransferMethod(paymentMethod)
-  const displayReceiptUrl = pendingReceiptPreview ?? receiptUrl
   const dirty =
     hasFieldChanges(buildPatch()) || pendingReceiptFile != null || stampDirty
 
@@ -452,82 +444,18 @@ export function ParticipantEditor({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-muted-foreground">결제 수단</label>
-              <div className="grid grid-cols-2 gap-2">
-                {PAYMENT_METHODS.map((method) => (
-                  <Button
-                    key={method}
-                    type="button"
-                    variant={paymentMethod === method ? 'default' : 'outline'}
-                    className="rounded-xl text-xs font-bold h-10"
-                    onClick={() => handlePaymentMethodChange(method)}
-                    disabled={busy}
-                  >
-                    {method}
-                  </Button>
-                ))}
-              </div>
-              {paymentMethod ? (
-                <p className="text-[11px] font-medium text-muted-foreground">
-                  {formatPaymentMethodLabel(paymentMethod, paymentStatus)}
-                </p>
-              ) : null}
-            </div>
-
-            {showBankTransfer || pendingReceiptFile ? (
-              <div className="space-y-2 p-3 rounded-xl bg-muted/40 border border-border/60">
-                <p className="text-xs font-bold text-muted-foreground">입금 영수증</p>
-                {displayReceiptUrl ? (
-                  <a
-                    href={displayReceiptUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block relative aspect-video rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
-                    onClick={(e) => {
-                      if (pendingReceiptPreview) e.preventDefault()
-                    }}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={displayReceiptUrl}
-                      alt="입금 영수증"
-                      className="w-full h-full object-cover"
-                    />
-                  </a>
-                ) : (
-                  <div className="flex items-center justify-center aspect-video rounded-lg border border-dashed border-border bg-muted/20">
-                    <ImageIcon className="w-8 h-8 text-muted-foreground/50" />
-                  </div>
-                )}
-                {onReceiptUpload ? (
-                  <>
-                    <input
-                      ref={receiptInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleReceiptFileChange}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full rounded-xl text-xs font-bold gap-2"
-                      disabled={busy}
-                      onClick={() => receiptInputRef.current?.click()}
-                    >
-                      <Upload className="w-4 h-4" />
-                      {displayReceiptUrl ? '영수증 변경' : '영수증 업로드'}
-                    </Button>
-                    {pendingReceiptFile ? (
-                      <p className="text-[11px] font-medium text-muted-foreground text-center">
-                        선택됨 — 닫을 때 업로드됩니다
-                      </p>
-                    ) : null}
-                  </>
-                ) : null}
-              </div>
-            ) : null}
+            <PaymentMethodFields
+              paymentMethod={paymentMethod}
+              onPaymentMethodChange={handlePaymentMethodChange}
+              paymentStatus={paymentStatus}
+              disabled={busy}
+              receiptUrl={receiptUrl}
+              pendingReceiptPreview={pendingReceiptPreview}
+              onReceiptFileSelect={onReceiptUpload ? handleReceiptFileSelect : undefined}
+              pendingReceiptHint={
+                pendingReceiptFile ? '선택됨 — 닫을 때 업로드됩니다' : undefined
+              }
+            />
 
             {checkedIn ? (
               <Button
