@@ -6,6 +6,7 @@ import { Download } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { toast } from 'sonner'
 import type { RoundData } from '@/lib/seating-algorithm'
+import { sortTableLabels } from '@/lib/seating-table-ops'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export type RoundImageParticipant = {
@@ -49,7 +50,8 @@ export function RoundImageExporter({ round, roundData, participants }: RoundImag
     }
   }
 
-  const tableLabels = Object.keys(roundData.tableLanguages || {}).sort()
+  // 이미지 내보내기는 관리자 커스텀 순서와 무관하게 라벨 알파벳 순
+  const tableLabels = sortTableLabels(Object.keys(roundData.tableLanguages || {}))
 
   return (
     <>

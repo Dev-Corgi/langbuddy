@@ -4,6 +4,8 @@ import type { Assignment, RoundData } from '@/lib/seating-algorithm'
 export type SeatingConfigPayload = {
   langTableCounts?: Record<string, number>
   tableLanguagesByRound?: Record<string, Record<string, string>>
+  /** arrange UI 테이블 표시 순서 (라운드별 라벨 배열) */
+  tableOrderByRound?: Record<string, string[]>
 }
 
 export type SeatingAssignmentRow = {
@@ -37,6 +39,16 @@ export function roundsToTableLanguagesByRound(rounds: RoundData[]): Record<strin
   return out
 }
 
+export function roundsToTableOrderByRound(rounds: RoundData[]): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (const r of rounds) {
+    if (r.tableOrder?.length) {
+      out[String(r.round)] = r.tableOrder
+    }
+  }
+  return out
+}
+
 export function buildRoundsFromAssignmentRows(
   rows: SeatingAssignmentRow[],
   participants: ParticipantLanguage[],
@@ -55,7 +67,9 @@ export function buildRoundsFromAssignmentRows(
         ? fromConfig
         : inferTableLanguages(assignments, participants)
 
-    return { round: roundNum, assignments, tableLanguages }
+    const tableOrder = config?.tableOrderByRound?.[String(roundNum)]
+
+    return { round: roundNum, assignments, tableLanguages, tableOrder }
   })
 }
 

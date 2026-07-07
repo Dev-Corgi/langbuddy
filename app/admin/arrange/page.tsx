@@ -98,6 +98,7 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
+  rectSortingStrategy,
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -111,8 +112,11 @@ import {
   addTableToRound,
   getNextTableLabel,
   mergeLangTableCounts,
+  orderedTableLabels,
+  parseTableOrderSortableId,
   removeTableFromRound,
-  sortTableLabels,
+  reorderTableLabels,
+  tableOrderSortableId,
   langTableCountsFromRounds,
 } from '@/lib/seating-table-ops'
 
@@ -259,7 +263,7 @@ function ParticipantCard({ participant, isOverlay = false, onEdit }: { participa
   )
 }
 
-function TableContainer({
+function SortableTableContainer({
   label,
   participants,
   round,
@@ -274,91 +278,125 @@ function TableContainer({
   onEdit?: (participant: Participant) => void
   onDelete?: () => void
 }) {
-  const { setNodeRef } = useDroppable({
+  const sortableId = tableOrderSortableId(round, label)
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setSortableRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: sortableId,
+    data: { type: 'table-order', round, label },
+  })
+
+  const { setNodeRef: setDropRef } = useDroppable({
     id: `table-${label}-${round}`,
     data: {
       type: 'container',
       tableLabel: label,
-      round: round
-    }
+      round: round,
+    },
   })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.45 : 1,
+  }
 
   const warnings = getTableWarnings(participants)
 
   return (
-    <Card className="border-none shadow-md bg-muted/20 rounded-[24px] overflow-hidden flex flex-col h-full">
-      <CardHeader className="p-4 bg-card border-b flex flex-col gap-2">
-        <div className="flex flex-row items-center justify-between w-full">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-lg font-black">{label} Table</CardTitle>
-            {tableLanguage ? (
-              <span className="text-[10px] font-black text-primary uppercase bg-primary/10 px-2 py-1 rounded flex items-center gap-1">
-                {tableLanguage === '영어' ? (
-                  <svg className="w-3 h-3" viewBox="0 0 20 14" fill="none">
-                    <rect width="20" height="14" fill="#B22234" />
-                    <rect y="1.08" width="20" height="1.08" fill="white" />
-                    <rect y="3.23" width="20" height="1.08" fill="white" />
-                    <rect y="5.38" width="20" height="1.08" fill="white" />
-                    <rect y="7.54" width="20" height="1.08" fill="white" />
-                    <rect y="9.69" width="20" height="1.08" fill="white" />
-                    <rect y="11.85" width="20" height="1.08" fill="white" />
-                    <rect width="8" height="7.54" fill="#3C3B6E" />
-                  </svg>
-                ) : tableLanguage === '일본어' ? (
-                  <svg className="w-3 h-3" viewBox="0 0 20 14" fill="none">
-                    <rect width="20" height="14" fill="white" />
-                    <circle cx="10" cy="7" r="3.5" fill="#BC002D" />
-                  </svg>
-                ) : null}
-                {tableLanguage}
-              </span>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <span className="text-xs font-bold text-muted-foreground">{participants.length} 명</span>
-            {onDelete ? (
-              <Button
+    <div ref={setSortableRef} style={style} {...attributes}>
+      <Card className="border-none shadow-md bg-muted/20 rounded-[24px] overflow-hidden flex flex-col h-full">
+        <CardHeader className="p-4 bg-card border-b flex flex-col gap-2">
+          <div className="flex flex-row items-center justify-between w-full">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
                 type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 relative z-50"
-                title="테이블 삭제"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  e.preventDefault()
-                  onDelete()
-                }}
-                onPointerDown={(e) => {
-                  e.stopPropagation()
-                }}
+                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted cursor-grab active:cursor-grabbing shrink-0 touch-none"
+                title="테이블 순서 변경"
+                {...listeners}
+                onClick={(e) => e.stopPropagation()}
               >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            ) : null}
+                <GripVertical className="w-4 h-4" />
+              </button>
+              <CardTitle className="text-lg font-black truncate">{label} Table</CardTitle>
+              {tableLanguage ? (
+                <span className="text-[10px] font-black text-primary uppercase bg-primary/10 px-2 py-1 rounded flex items-center gap-1 shrink-0">
+                  {tableLanguage === '영어' ? (
+                    <svg className="w-3 h-3" viewBox="0 0 20 14" fill="none">
+                      <rect width="20" height="14" fill="#B22234" />
+                      <rect y="1.08" width="20" height="1.08" fill="white" />
+                      <rect y="3.23" width="20" height="1.08" fill="white" />
+                      <rect y="5.38" width="20" height="1.08" fill="white" />
+                      <rect y="7.54" width="20" height="1.08" fill="white" />
+                      <rect y="9.69" width="20" height="1.08" fill="white" />
+                      <rect y="11.85" width="20" height="1.08" fill="white" />
+                      <rect width="8" height="7.54" fill="#3C3B6E" />
+                    </svg>
+                  ) : tableLanguage === '일본어' ? (
+                    <svg className="w-3 h-3" viewBox="0 0 20 14" fill="none">
+                      <rect width="20" height="14" fill="white" />
+                      <circle cx="10" cy="7" r="3.5" fill="#BC002D" />
+                    </svg>
+                  ) : null}
+                  {tableLanguage}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-xs font-bold text-muted-foreground">{participants.length} 명</span>
+              {onDelete ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 relative z-50"
+                  title="테이블 삭제"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    onDelete()
+                  }}
+                  onPointerDown={(e) => {
+                    e.stopPropagation()
+                  }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              ) : null}
+            </div>
           </div>
-        </div>
 
-        {warnings.length > 0 ? (
-          <div className="flex flex-wrap gap-1 mt-1">
-            {warnings.map(w => (
-              <span key={w} className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
-                {w}
-              </span>
+          {warnings.length > 0 ? (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {warnings.map((w) => (
+                <span
+                  key={w}
+                  className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200"
+                >
+                  {w}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </CardHeader>
+        <CardContent ref={setDropRef} className="p-3 flex-1 min-h-[100px]">
+          <SortableContext
+            items={participants.map((p) => p.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {participants.map((p) => (
+              <ParticipantCard key={p.id} participant={p} onEdit={onEdit} />
             ))}
-          </div>
-        ) : null}
-      </CardHeader>
-      <CardContent ref={setNodeRef} className="p-3 flex-1 min-h-[100px]">
-        <SortableContext
-          items={participants.map(p => p.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          {participants.map(p => (
-            <ParticipantCard key={p.id} participant={p} onEdit={onEdit} />
-          ))}
-        </SortableContext>
-      </CardContent>
-    </Card>
+          </SortableContext>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
@@ -865,6 +903,10 @@ export default function AdminArrangePage() {
   )
 
   const seatingCollisionDetection = useCallback<CollisionDetection>((args) => {
+    if (args.active.data.current?.type === 'table-order') {
+      return closestCenter(args)
+    }
+
     const pointerHits = pointerWithin(args)
     if (pointerHits.length > 0) {
       const containerHit = pointerHits.find((c) => c.data?.current?.type === 'container')
@@ -1878,6 +1920,37 @@ export default function AdminArrangePage() {
     try {
       if (!over || !active) return
 
+      if (active.data.current?.type === 'table-order') {
+        const activeMeta = parseTableOrderSortableId(String(active.id))
+        const overMeta =
+          over.data.current?.type === 'table-order'
+            ? parseTableOrderSortableId(String(over.id))
+            : null
+        if (!activeMeta || !overMeta || activeMeta.round !== overMeta.round) return
+        if (activeMeta.label === overMeta.label) return
+
+        markLocalSeatingEdit()
+        setRounds((prev) => {
+          const next = prev.map((roundData) => {
+            if (roundData.round !== activeMeta.round) return roundData
+            const tableLanguages = roundData.tableLanguages ?? {}
+            return {
+              ...roundData,
+              tableOrder: reorderTableLabels(
+                tableLanguages,
+                roundData.tableOrder,
+                activeMeta.label,
+                overMeta.label
+              ),
+            }
+          })
+          roundsRef.current = next
+          return next
+        })
+        flushSeatingPersistSoon()
+        return
+      }
+
       const activeId = active.id as string
       const overId = over.id as string
       const activeParticipant = participantsRef.current.find((p) => p.id === activeId)
@@ -2019,21 +2092,25 @@ export default function AdminArrangePage() {
   }
 
   const handleCopyResults = () => {
-    const currentAssignments = rounds.find(r => r.round === currentRound)?.assignments || []
+    const roundData = rounds.find((r) => r.round === currentRound)
+    const currentAssignments = roundData?.assignments || []
     if (currentAssignments.length === 0) return
 
     const tableGroups = _.groupBy(currentAssignments, 'table_label')
+    const labels = orderedTableLabels(roundData?.tableLanguages ?? {}, roundData?.tableOrder)
     let text = `[LangBuddy ${currentRound}라운드 배치 결과]\n\n`
-    
-    Object.keys(tableGroups).sort().forEach(label => {
-      const members = tableGroups[label]
-        .map(a => {
-          const p = participants.find(p => p.id === a.participant_id)
+
+    labels.forEach((label) => {
+      const members = (tableGroups[label] ?? [])
+        .map((a) => {
+          const p = participants.find((p) => p.id === a.participant_id)
           return p ? `${p.name}(${p.language})` : ''
         })
         .filter(Boolean)
         .join(', ')
-      text += `${label} 테이블: ${members}\n`
+      if (members) {
+        text += `${label} 테이블: ${members}\n`
+      }
     })
 
     navigator.clipboard.writeText(text)
@@ -2427,38 +2504,44 @@ export default function AdminArrangePage() {
               {[1, 2, 3].map((r) => {
                 const roundData = rounds.find((rd) => rd.round === r)
                 const assignments = roundData?.assignments || []
-                const tableLabelsForRound = sortTableLabels(
-                  Object.keys(roundData?.tableLanguages || {})
+                const tableLabelsForRound = orderedTableLabels(
+                  roundData?.tableLanguages || {},
+                  roundData?.tableOrder
+                )
+                const tableSortableIds = tableLabelsForRound.map((label) =>
+                  tableOrderSortableId(r, label)
                 )
                 const canAddTable =
                   getNextTableLabel(tableLabelsForRound) !== null
                 return (
                   <TabsContent key={r} value={r.toString()} className="mt-0 focus-visible:outline-none">
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                      {tableLabelsForRound.map((label) => {
-                        const tableParticipants = assignments
-                          .filter((a) => a.table_label === label)
-                          .map((a) => participants.find((p) => p.id === a.participant_id))
-                          .filter(Boolean) as Participant[]
+                    <SortableContext items={tableSortableIds} strategy={rectSortingStrategy}>
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                        {tableLabelsForRound.map((label) => {
+                          const tableParticipants = assignments
+                            .filter((a) => a.table_label === label)
+                            .map((a) => participants.find((p) => p.id === a.participant_id))
+                            .filter(Boolean) as Participant[]
 
-                        return (
-                          <TableContainer
-                            key={label}
-                            label={label}
-                            participants={tableParticipants}
-                            round={r}
-                            tableLanguage={roundData?.tableLanguages?.[label]}
-                            onEdit={setEditingParticipant}
-                            onDelete={() => handleDeleteTable(r, label)}
-                          />
-                        )
-                      })}
-                      <AddTableCard
-                        languages={tableLanguageOptions}
-                        disabled={!canAddTable}
-                        onAdd={(lang) => handleAddTable(r, lang)}
-                      />
-                    </div>
+                          return (
+                            <SortableTableContainer
+                              key={label}
+                              label={label}
+                              participants={tableParticipants}
+                              round={r}
+                              tableLanguage={roundData?.tableLanguages?.[label]}
+                              onEdit={setEditingParticipant}
+                              onDelete={() => handleDeleteTable(r, label)}
+                            />
+                          )
+                        })}
+                        <AddTableCard
+                          languages={tableLanguageOptions}
+                          disabled={!canAddTable}
+                          onAdd={(lang) => handleAddTable(r, lang)}
+                        />
+                      </div>
+                    </SortableContext>
                     {tableLabelsForRound.length === 0 ? (
                       <p className="text-center text-sm font-bold text-muted-foreground mt-4">
                         테이블이 없습니다. 「테이블 추가」로 빈 테이블을 만든 뒤 드래그하거나, 위에서「배치」를 실행하세요.

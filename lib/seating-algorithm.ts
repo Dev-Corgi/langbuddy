@@ -17,6 +17,8 @@ export type RoundData = {
   round: number
   assignments: Assignment[]
   tableLanguages?: Record<string, string>
+  /** arrange UI 표시 순서 (없으면 라벨 알파벳 순) */
+  tableOrder?: string[]
 }
 
 export type DuplicatePairSummary = {

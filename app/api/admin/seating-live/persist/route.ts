@@ -5,6 +5,7 @@ import { getAdminUser } from '@/lib/admin-api-auth'
 import type { RoundData } from '@/lib/seating-algorithm'
 import {
   roundsToTableLanguagesByRound,
+  roundsToTableOrderByRound,
   type SeatingConfigPayload,
 } from '@/lib/seating-live-sync'
 
@@ -46,9 +47,11 @@ export async function POST(request: NextRequest) {
     }
 
     const checkedIds = new Set(checkedParticipantIds)
+    const tableOrderByRound = roundsToTableOrderByRound(rounds)
     const seating_config: SeatingConfigPayload = {
       langTableCounts,
       tableLanguagesByRound: roundsToTableLanguagesByRound(rounds),
+      ...(Object.keys(tableOrderByRound).length > 0 ? { tableOrderByRound } : {}),
     }
 
     const deduped = new Map<string, AssignmentPayload>()
