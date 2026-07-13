@@ -19,7 +19,8 @@ import {
   Share2,
   QrCode,
   Users,
-  LayoutGrid
+  LayoutGrid,
+  Flag,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -112,7 +113,8 @@ export default function AdminLayout({
     { href: '/admin/meetups', label: locale === 'en' ? 'Social' : '번개 관리', icon: Zap },
     ...(isSuperAdmin ? [
       { href: '/admin/instagram', label: locale === 'en' ? 'Instagram' : '인스타 연동', icon: Instagram },
-      { href: '/admin/export', label: locale === 'en' ? 'Export Poster' : '포스터 내보내기', icon: Share2 }
+      { href: '/admin/export', label: locale === 'en' ? 'Export Poster' : '포스터 내보내기', icon: Share2 },
+      { href: '/admin/reports', label: locale === 'en' ? 'Reports' : '신고 관리', icon: Flag },
     ] : []),
     { href: '/admin/settings', label: locale === 'en' ? 'Settings' : '설정', icon: Settings },
   ]

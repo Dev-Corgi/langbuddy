@@ -24,6 +24,13 @@ export type SeatingMemory = {
   mateNames: string[]
 }
 
+export type SeatingSession = {
+  posting_id: string
+  session_date: string
+  dayLabel: string
+  rounds: number[]
+}
+
 export function monthMatrix(year: number, month0: number): (number | null)[][] {
   const firstDow = new Date(year, month0, 1).getDay()
   const daysInMonth = new Date(year, month0 + 1, 0).getDate()

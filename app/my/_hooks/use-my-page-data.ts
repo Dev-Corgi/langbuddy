@@ -8,7 +8,7 @@ import {
   resolveApplicationSessionYmd,
   buildRecurringSessionDisplayTitles,
 } from '@/lib/session-event-date'
-import type { AppCategory, ApplicationRow, SeatingMemory } from '../_lib/types'
+import type { AppCategory, ApplicationRow, SeatingMemory, SeatingSession } from '../_lib/types'
 
 export function useMyPageData(isEn: boolean) {
   const supabase = createClient()
@@ -23,6 +23,7 @@ export function useMyPageData(isEn: boolean) {
   const [showAuth, setShowAuth] = useState(false)
   const [applications, setApplications] = useState<ApplicationRow[]>([])
   const [seatingHistory, setSeatingHistory] = useState<SeatingMemory[]>([])
+  const [seatingSessions, setSeatingSessions] = useState<SeatingSession[]>([])
   const [markedDates, setMarkedDates] = useState<Set<string>>(new Set())
 
   const load = useCallback(async () => {
@@ -34,9 +35,10 @@ export function useMyPageData(isEn: boolean) {
     if (!u) {
       setShowAuth(true)
       setUserRow(null)
-      setApplications([])
-      setSeatingHistory([])
-      setMarkedDates(new Set())
+    setApplications([])
+    setSeatingHistory([])
+    setSeatingSessions([])
+    setMarkedDates(new Set())
       setReady(true)
       return
     }
@@ -135,6 +137,7 @@ export function useMyPageData(isEn: boolean) {
 
     if (!myAssignments?.length) {
       setSeatingHistory([])
+      setSeatingSessions([])
       setReady(true)
       return
     }
@@ -207,6 +210,34 @@ export function useMyPageData(isEn: boolean) {
     })
 
     setSeatingHistory(history)
+
+    // 최근 30일 세션 그룹핑
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const cutoff = thirtyDaysAgo.toISOString().slice(0, 10)
+
+    const sessionMap = new Map<string, SeatingSession>()
+    for (const h of history) {
+      const date = h.session_date || ''
+      if (!date || date < cutoff) continue
+      const sessionKey = `${h.posting_id}|${date}`
+      const existing = sessionMap.get(sessionKey)
+      if (existing) {
+        if (!existing.rounds.includes(h.round)) existing.rounds.push(h.round)
+      } else {
+        sessionMap.set(sessionKey, {
+          posting_id: h.posting_id,
+          session_date: date,
+          dayLabel: h.dayLabel,
+          rounds: [h.round],
+        })
+      }
+    }
+    const sessions = Array.from(sessionMap.values()).sort((a, b) =>
+      b.session_date.localeCompare(a.session_date)
+    )
+    setSeatingSessions(sessions)
+
     setReady(true)
   }, [supabase, isEn])
 
@@ -230,6 +261,7 @@ export function useMyPageData(isEn: boolean) {
     showAuth,
     applications,
     seatingHistory,
+    seatingSessions,
     markedDates,
     reload: load,
   }

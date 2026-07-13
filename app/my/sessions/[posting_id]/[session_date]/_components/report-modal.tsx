@@ -1,0 +1,221 @@
+'use client'
+
+import { useState } from 'react'
+import { toast } from 'sonner'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+
+export type ReportReason =
+  | '폭언/욕설'
+  | '성희롱/부적절한 언행'
+  | '노쇼/자리이탈'
+  | '허위 정보'
+  | '기타'
+
+const REASONS: { value: ReportReason; labelKo: string; labelEn: string }[] = [
+  { value: '폭언/욕설', labelKo: '폭언 / 욕설', labelEn: 'Verbal abuse / Profanity' },
+  { value: '성희롱/부적절한 언행', labelKo: '성희롱 / 부적절한 언행', labelEn: 'Harassment / Inappropriate behavior' },
+  { value: '노쇼/자리이탈', labelKo: '노쇼 / 자리 이탈', labelEn: 'No-show / Left early' },
+  { value: '허위 정보', labelKo: '허위 정보 (국적, 언어 수준 등)', labelEn: 'False information (nationality, language level, etc.)' },
+  { value: '기타', labelKo: '기타', labelEn: 'Other' },
+]
+
+type Props = {
+  open: boolean
+  onClose: () => void
+  reportedResponseId: string
+  reportedName: string
+  reporterResponseId: string
+  postingId: string
+  sessionDate: string
+  round: number
+  isEn: boolean
+  onSuccess: () => void
+}
+
+export function ReportModal({
+  open,
+  onClose,
+  reportedResponseId,
+  reportedName,
+  reporterResponseId,
+  postingId,
+  sessionDate,
+  round,
+  isEn,
+  onSuccess,
+}: Props) {
+  const [reason, setReason] = useState<ReportReason | ''>('')
+  const [otherText, setOtherText] = useState('')
+  const [description, setDescription] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleClose = () => {
+    setReason('')
+    setOtherText('')
+    setDescription('')
+    onClose()
+  }
+
+  const handleSubmit = async () => {
+    if (!reason) return
+
+    const finalReason = reason === '기타' ? '기타' : reason
+    const finalDescription =
+      reason === '기타'
+        ? [otherText, description].filter(Boolean).join('\n')
+        : description
+
+    if (reason === '기타' && !otherText.trim()) {
+      toast.error(isEn ? 'Please describe the reason.' : '기타 사유를 입력해주세요.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const res = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportedResponseId,
+          reporterResponseId,
+          postingId,
+          sessionDate,
+          round,
+          reason: finalReason,
+          description: finalDescription || undefined,
+        }),
+      })
+
+      if (res.status === 409) {
+        toast.error(isEn ? 'You have already reported this person for this round.' : '이미 해당 라운드에 이 참가자를 신고한 기록이 있습니다.')
+        handleClose()
+        return
+      }
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        toast.error(body?.error || (isEn ? 'Failed to submit report.' : '신고 접수에 실패했습니다.'))
+        return
+      }
+
+      toast.success(isEn ? 'Report submitted.' : '신고가 접수되었습니다.')
+      onSuccess()
+      handleClose()
+    } catch {
+      toast.error(isEn ? 'Network error. Please try again.' : '네트워크 오류가 발생했습니다.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose() }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-black">
+            {isEn ? 'Report participant' : '참가자 신고'}
+          </DialogTitle>
+          <DialogDescription>
+            {isEn
+              ? `Submit a report about "${reportedName}". Reports are reviewed by administrators.`
+              : `"${reportedName}" 참가자에 대한 신고를 접수합니다. 관리자가 검토 후 처리합니다.`}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* 신고 사유 */}
+          <div className="space-y-1.5">
+            <Label className="text-sm font-semibold">
+              {isEn ? 'Reason *' : '신고 사유 *'}
+            </Label>
+            <Select value={reason} onValueChange={(v) => setReason(v as ReportReason)}>
+              <SelectTrigger>
+                <SelectValue placeholder={isEn ? 'Select a reason' : '사유를 선택하세요'} />
+              </SelectTrigger>
+              <SelectContent>
+                {REASONS.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {isEn ? r.labelEn : r.labelKo}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 기타 선택 시 직접 입력 */}
+          {reason === '기타' && (
+            <div className="space-y-1.5">
+              <Label className="text-sm font-semibold">
+                {isEn ? 'Please describe *' : '직접 입력 *'}
+              </Label>
+              <Input
+                value={otherText}
+                onChange={(e) => setOtherText(e.target.value)}
+                placeholder={isEn ? 'Brief description of the reason' : '신고 사유를 간략히 입력하세요'}
+                maxLength={200}
+              />
+            </div>
+          )}
+
+          {/* 추가 설명 */}
+          <div className="space-y-1.5">
+            <Label className="text-sm font-semibold">
+              {isEn ? 'Additional details (optional)' : '추가 내용 (선택)'}
+            </Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={
+                isEn
+                  ? 'Describe what happened in more detail...'
+                  : '구체적인 상황을 추가로 설명해주세요...'
+              }
+              rows={3}
+              maxLength={1000}
+            />
+          </div>
+
+          {/* 안내 */}
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {isEn
+              ? 'False reports may result in account restrictions.'
+              : '허위 신고 시 계정 이용이 제한될 수 있습니다.'}
+          </p>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" onClick={handleClose} disabled={loading}>
+            {isEn ? 'Cancel' : '취소'}
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={handleSubmit}
+            disabled={loading || !reason}
+          >
+            {loading
+              ? isEn ? 'Submitting...' : '접수 중...'
+              : isEn ? 'Submit report' : '신고 접수'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}

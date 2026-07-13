@@ -19,7 +19,7 @@ export function MyPageShell() {
   const t = i18n[locale].myPage
   const isEn = locale === 'en'
 
-  const { ready, user, userRow, showAuth, applications, seatingHistory, markedDates, reload } =
+  const { ready, user, userRow, showAuth, applications, seatingSessions, markedDates, reload } =
     useMyPageData(isEn)
 
   const greetingName = userRow?.name || user?.email?.split('@')[0] || ''
@@ -82,10 +82,9 @@ export function MyPageShell() {
         <SeatingHistoryCard
           title={t.seatingTitle}
           emptyMessage={t.noSeating}
+          seatingDetail={t.seatingDetail}
           roundLabel={t.round}
-          tableLabel={t.table}
-          withLabel={t.with}
-          history={seatingHistory}
+          sessions={seatingSessions}
           isEn={isEn}
         />
       </main>
