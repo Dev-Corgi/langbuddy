@@ -18,7 +18,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select"
-import { ChevronLeft, Loader2, CheckCircle2, X, MapPin, Wallet, Upload, Info } from "lucide-react"
+import { ChevronLeft, Loader2, X, MapPin, Wallet, Upload, Info } from "lucide-react"
 import { useLocale } from "@/hooks/use-locale"
 import { i18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -93,7 +93,6 @@ export default function ApplicationFormPage() {
   const [paymentMethod, setPaymentMethod] = useState<ApplyPaymentChoice>("")
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentReceiptFile, setPaymentReceiptFile] = useState<File | null>(null)
-  const [paymentReceiptPreview, setPaymentReceiptPreview] = useState<string | null>(null)
   const [useLeFreeCoupon, setUseLeFreeCoupon] = useState(false)
   
   const [selectedDay, setSelectedDay] = useState<string>("")
@@ -107,7 +106,6 @@ export default function ApplicationFormPage() {
   const [authRefreshTick, setAuthRefreshTick] = useState(0)
   const [showApplyAuthGate, setShowApplyAuthGate] = useState(false)
   const [studyBundleFree, setStudyBundleFree] = useState(false)
-  const [showSuccessModal, setShowSuccessModal] = useState(false)
   /** 반복 모임: 이번 회차(user+form+_event_date) 기존 신청 여부 */
   const [duplicateApplicationPending, setDuplicateApplicationPending] = useState(false)
   const [hasDuplicateApplication, setHasDuplicateApplication] = useState(false)
@@ -258,19 +256,22 @@ export default function ApplicationFormPage() {
   useEffect(() => {
     if (!authChecked) return
 
+    let cancelled = false
     let currentUserInfo: any = null
     
     async function fetchData() {
       // 0. Check user authentication
       const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (cancelled) return
       setUser(authUser)
-      
+
       if (authUser) {
         const { data: userInfo } = await supabase
           .from('users')
           .select('*')
           .eq('id', authUser.id)
           .single()
+        if (cancelled) return
         setUserData(userInfo)
         currentUserInfo = userInfo
       }
@@ -311,7 +312,7 @@ export default function ApplicationFormPage() {
         if (schedules && schedules.length > 0) {
           postingData.recurring_days = schedules.map(s => s.day_of_week)
           postingData.is_recurring = true
-          // 첫 번째 스케줄의 form_id 사용
+          // 첫 번째 스케줄의 form_id 사용 (fetchScheduleForDay가 선택 요일 기준으로 덮어씀)
           postingData.form_id = schedules[0].form_id
         }
       } else if (postingData.category === '스터디') {
@@ -325,7 +326,7 @@ export default function ApplicationFormPage() {
         if (schedules && schedules.length > 0) {
           postingData.recurring_days = schedules.map(s => s.day_of_week)
           postingData.is_recurring = true
-          // 첫 번째 스케줄의 form_id 사용
+          // 첫 번째 스케줄의 form_id 사용 (fetchScheduleForDay가 선택 요일 기준으로 덮어씀)
           postingData.form_id = schedules[0].form_id
         }
       }
@@ -335,6 +336,8 @@ export default function ApplicationFormPage() {
         router.push(`/posting/${id}`)
         return
       }
+
+      if (cancelled) return
 
       if (
         (postingData.category === '언어교환' || postingData.category === '스터디') &&
@@ -350,12 +353,12 @@ export default function ApplicationFormPage() {
       }
       setShowApplyAuthGate(false)
       setLoading(true)
-      
+
       // Category check - Study and Language Exchange always allowed to use form
-      const isCustomFormAllowed = postingData.apply_type === 'form' || 
-                                 postingData.category === '스터디' || 
-                                 postingData.category === '언어교환';
-      
+      const isCustomFormAllowed = postingData.apply_type === 'form' ||
+                                 postingData.category === '스터디' ||
+                                 postingData.category === '언어교환'
+
       if (!isCustomFormAllowed) {
         router.push(`/posting/${id}`)
         return
@@ -363,102 +366,94 @@ export default function ApplicationFormPage() {
 
       setPosting(postingData)
 
-      // 2. Fetch form and questions
+      // 반복 모임(언어교환/스터디)의 form은 fetchScheduleForDay가 단독으로 관리한다.
+      // fetchData가 첫 번째 스케줄 form을 세팅하면 fetchScheduleForDay와 race가 생기므로
+      // 여기서는 form을 건드리지 않는다. 사용자가 요일을 선택하면 fetchScheduleForDay가 로드한다.
+      if (postingData.is_recurring &&
+          (postingData.category === '언어교환' || postingData.category === '스터디')) {
+        setForm(null)
+        setQuestions([])
+        setAnswers({})
+        setLoading(false)
+        return
+      }
+
+      // 2. 일반 모임: form 및 질문 로드
       const { data: formData, error: fError } = await supabase
         .from('forms')
         .select('*')
         .eq('id', postingData.form_id)
         .maybeSingle()
-      
+
       if (fError) {
         console.error('Error fetching form:', fError)
       }
-      
+
       if (formData) {
+        if (cancelled) return
         setForm(formData)
         const { data: questionData, error: qError } = await supabase
           .from('form_questions')
           .select('*')
           .eq('form_id', formData.id)
           .order('display_order', { ascending: true })
-        
+
         if (qError) {
           console.error('Error fetching questions:', qError)
         }
 
         if (questionData) {
+          if (cancelled) return
           setQuestions(questionData)
-          // currentUserInfo를 사용하여 자동 입력
           const initialAnswers: Record<string, any> = {}
           questionData.forEach(q => {
             if (q.question_type === 'checkbox') initialAnswers[q.id] = []
             else initialAnswers[q.id] = ''
-            
-            // 로그인 사용자의 온보딩 정보 자동 입력
+
             if (currentUserInfo) {
-              console.log('🔍 질문:', q.question_text, 'system_key:', q.system_key, 'type:', q.question_type, 'locale:', locale, 'options:', q.options, 'options_en:', q.options_en)
-              
               if (q.system_key === 'name') {
                 initialAnswers[q.id] = currentUserInfo.name
-                console.log('✅ 이름 자동 입력:', currentUserInfo.name)
-              }
-              else if (q.system_key === 'gender') {
+              } else if (q.system_key === 'gender') {
                 const genderOptions = locale === 'en' && q.options_en ? q.options_en : q.options
-                const userGender = currentUserInfo.gender // "남" or "여" or "Male" or "Female"
-                
-                // Normalize user input to standard internal keys
+                const userGender = currentUserInfo.gender
                 let normalized = ''
                 if (userGender === '남' || userGender === '남자' || userGender === 'Male') normalized = 'male'
                 else if (userGender === '여' || userGender === '여자' || userGender === 'Female') normalized = 'female'
-                
-                // Find matching option in the CURRENT display options
                 const matched = genderOptions?.find((opt: string) => {
                   if (normalized === 'male') return opt === '남자' || opt === 'Male' || opt === '남'
                   if (normalized === 'female') return opt === '여자' || opt === 'Female' || opt === '여'
                   return false
                 })
-                
                 initialAnswers[q.id] = matched || userGender
-              }
-              else if (q.system_key === 'nationality') {
+              } else if (q.system_key === 'nationality') {
                 const natOptions = locale === 'en' && q.options_en ? q.options_en : q.options
-                const userNat = currentUserInfo.nationality // "한국인" or "외국인" or "Korean" or "Foreigner"
-                
+                const userNat = currentUserInfo.nationality
                 let normalized = ''
                 if (userNat === '한국인' || userNat === 'Korean') normalized = 'korean'
                 else if (userNat === '외국인' || userNat === 'Foreigner') normalized = 'foreigner'
-                
                 const matched = natOptions?.find((opt: string) => {
                   if (normalized === 'korean') return opt === '한국인' || opt === 'Korean'
                   if (normalized === 'foreigner') return opt === '외국인' || opt === 'Foreigner'
                   return false
                 })
-                
                 initialAnswers[q.id] = matched || userNat
-              }
-              else if (q.system_key === 'kakao_id' && currentUserInfo.kakao_id) {
+              } else if (q.system_key === 'kakao_id' && currentUserInfo.kakao_id) {
                 initialAnswers[q.id] = currentUserInfo.kakao_id
-                console.log('✅ 카카오ID 자동 입력:', currentUserInfo.kakao_id)
               }
             }
           })
-          console.log('📝 최종 답변 객체:', initialAnswers)
           setAnswers(initialAnswers)
-          
-          // 강제 리렌더링을 위해 약간의 지연 후 다시 설정
-          setTimeout(() => {
-            console.log('🔄 리렌더링 트리거')
-            setAnswers({...initialAnswers})
-          }, 100)
         }
       } else {
         console.error('Form not found for id:', postingData.form_id)
         router.push(`/posting/${id}`)
         return
       }
+      if (cancelled) return
       setLoading(false)
     }
     fetchData()
+    return () => { cancelled = true }
   }, [id, supabase, authChecked, authRefreshTick])
 
   // Update available languages when selected day changes
@@ -555,7 +550,7 @@ export default function ApplicationFormPage() {
     }
     
     fetchScheduleForDay()
-  }, [selectedDay, supabase])
+  }, [selectedDay, posting?.id, posting?.category, supabase, userData])
 
   // UI locale 전환 시 표시 라벨만 교체 (사용자가 고른 값은 유지)
   useEffect(() => {
@@ -670,18 +665,42 @@ export default function ApplicationFormPage() {
       }
     }
 
+    // ─── 핵심 fix: state race를 막기 위해 제출 직전 DB에서 선택 요일의 form_id를 재확인 ───
+    // fetchData(authRefreshTick)와 fetchScheduleForDay 사이의 race 조건으로
+    // form.id가 잘못된 요일의 form_id를 가리킬 수 있어, DB를 직접 읽어 보정한다.
+    let submitFormId = form?.id || ''
+    if (
+      (posting?.category === '언어교환' || posting?.category === '스터디') &&
+      posting?.is_recurring &&
+      selectedDay &&
+      posting?.id
+    ) {
+      const schedulesTable =
+        posting.category === '언어교환' ? 'language_exchange_schedules' : 'study_schedules'
+      const { data: daySchedule } = await supabase
+        .from(schedulesTable)
+        .select('form_id')
+        .eq('posting_id', posting.id)
+        .eq('day_of_week', selectedDay)
+        .single()
+      if (daySchedule?.form_id) {
+        submitFormId = daySchedule.form_id
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────────────────
+
     if (
       posting?.is_recurring &&
       (posting?.category === '스터디' || posting?.category === '언어교환') &&
       user?.id &&
-      form?.id &&
+      submitFormId &&
       finalEventDate.length >= 10
     ) {
       const { data: existingRows, error: dupErr } = await supabase
         .from('form_responses')
         .select('id')
         .eq('user_id', user.id)
-        .eq('form_id', form.id)
+        .eq('form_id', submitFormId)
         .eq('answers->_event_date', finalEventDate)
         .limit(1)
       if (dupErr) {
@@ -756,7 +775,7 @@ export default function ApplicationFormPage() {
     })
 
     const insertPayload: Record<string, unknown> = {
-      form_id: form.id,
+      form_id: submitFormId,
       qr_code: qrCode,
       payment_receipt_url: paymentReceiptUrl,
       payment_status:
@@ -1575,12 +1594,8 @@ export default function ApplicationFormPage() {
                         onFileSelect={(file) => {
                           setPaymentReceiptFile(file)
                         }}
-                        onUploadComplete={(previewUrl) => {
-                          setPaymentReceiptPreview(previewUrl)
-                        }}
                         onRemove={() => {
                           setPaymentReceiptFile(null)
-                          setPaymentReceiptPreview(null)
                         }}
                       />
                     </div>
@@ -1646,34 +1661,6 @@ export default function ApplicationFormPage() {
                   {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : (locale === 'en' ? 'Complete' : '신청 완료하기')}
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-      {/* Success Modal */}
-      {showSuccessModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <Card className="w-full max-w-md border-none shadow-2xl rounded-[32px] overflow-hidden bg-card animate-in zoom-in-95 duration-300">
-            <CardContent className="p-8 text-center space-y-6">
-              <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-10 h-10 text-emerald-500" />
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-2xl font-black text-foreground">
-                  {locale === 'en' ? 'Application Submitted!' : '신청이 완료되었습니다!'}
-                </h3>
-                <p className="text-muted-foreground font-medium leading-relaxed">
-                  {locale === 'en' 
-                    ? 'Thank you for your interest. We will contact you soon.' 
-                    : '참여 신청이 정상적으로 접수되었습니다.\n곧 담당자가 연락드리겠습니다.'}
-                </p>
-              </div>
-              <Button 
-                onClick={() => router.push(`/posting/${id}`)}
-                className="w-full h-14 rounded-2xl bg-primary hover:bg-secondary font-black text-lg shadow-lg shadow-primary/20 mt-4"
-              >
-                {locale === 'en' ? 'Confirm' : '확인'}
-              </Button>
             </CardContent>
           </Card>
         </div>

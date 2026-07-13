@@ -147,6 +147,58 @@ export function useMyPageData(isEn: boolean) {
       { answers?: Record<string, unknown> }
     >
 
+    // Batch-fetch ALL seating assignments for the same postings+sessions at once
+    // to avoid N+1 queries per assignment row.
+    const myParticipantIdSet = new Set(myParticipantIds)
+    const uniquePostingIds = [...new Set(myAssignments.map((a) => a.posting_id as string))]
+    const uniqueSessionDates = [
+      ...new Set(myAssignments.map((a) => a.session_date as string | null)),
+    ].filter((d): d is string => !!d)
+
+    // One query: all assignments for these postings (may include other sessions, filtered locally)
+    let allSessionAssignmentsQuery = supabase
+      .from('seating_assignments')
+      .select('participant_id, posting_id, round, table_label, session_date')
+      .in('posting_id', uniquePostingIds)
+    if (uniqueSessionDates.length > 0) {
+      allSessionAssignmentsQuery = allSessionAssignmentsQuery.in('session_date', uniqueSessionDates)
+    }
+    const { data: allSessionAssignments } = await allSessionAssignmentsQuery
+
+    // Build a lookup: `posting_id|session_date|round|table_label` → participant_id[]
+    const tableParticipants = new Map<string, string[]>()
+    for (const row of allSessionAssignments || []) {
+      const tableKey = `${row.posting_id}|${row.session_date ?? ''}|${row.round}|${row.table_label}`
+      const existing = tableParticipants.get(tableKey)
+      if (existing) {
+        existing.push(row.participant_id as string)
+      } else {
+        tableParticipants.set(tableKey, [row.participant_id as string])
+      }
+    }
+
+    // Collect ALL unique mate participant_ids across all assignments in one pass
+    const allMateIds = new Set<string>()
+    for (const a of myAssignments) {
+      const tableKey = `${a.posting_id}|${a.session_date ?? ''}|${a.round}|${a.table_label}`
+      const pids = tableParticipants.get(tableKey) || []
+      for (const pid of pids) {
+        if (!myParticipantIdSet.has(pid)) allMateIds.add(pid)
+      }
+    }
+
+    // One batch fetch for all mate form_responses
+    const mateAnswersById: Record<string, Record<string, unknown>> = {}
+    if (allMateIds.size > 0) {
+      const { data: matesRows } = await supabase
+        .from('form_responses')
+        .select('id, answers')
+        .in('id', [...allMateIds])
+      for (const row of matesRows || []) {
+        mateAnswersById[row.id as string] = (row.answers || {}) as Record<string, unknown>
+      }
+    }
+
     const history: SeatingMemory[] = []
     const seen = new Set<string>()
 
@@ -163,34 +215,15 @@ export function useMyPageData(isEn: boolean) {
       if (seen.has(key)) continue
       seen.add(key)
 
-      let q = supabase
-        .from('seating_assignments')
-        .select('participant_id')
-        .eq('posting_id', a.posting_id as string)
-        .eq('round', a.round as number)
-        .eq('table_label', a.table_label as string)
+      const tableKey = `${a.posting_id}|${a.session_date ?? ''}|${a.round}|${a.table_label}`
+      const mateIds = (tableParticipants.get(tableKey) || [])
+        .filter((pid) => !myParticipantIdSet.has(pid))
 
-      if (a.session_date) {
-        q = q.eq('session_date', a.session_date as string)
-      } else {
-        q = q.is('session_date', null)
-      }
-
-      const { data: rowMates } = await q
-      const mateIds = (rowMates || [])
-        .map((m) => m.participant_id as string)
-        .filter((pid) => pid !== a.participant_id)
-
-      let mateNames: string[] = []
-      if (mateIds.length) {
-        const { data: matesRows } = await supabase.from('form_responses').select('answers').in('id', mateIds)
-
-        mateNames =
-          matesRows?.map((row) => {
-            const n = extractParticipantInfoFromAnswers((row.answers || {}) as Record<string, unknown>, []).name
-            return n || '?'
-          }) || []
-      }
+      const mateNames = mateIds.map((pid) => {
+        const ans = mateAnswersById[pid]
+        if (!ans) return '?'
+        return extractParticipantInfoFromAnswers(ans, []).name || '?'
+      })
 
       history.push({
         key,

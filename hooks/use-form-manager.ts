@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { FormData as FormBuilderData } from '@/components/admin/form-builder'
+import { fetchFormBuilderData } from '@/lib/load-form-data'
 
 export function useFormManager(formId: string | null) {
   const supabase = createClient()
@@ -17,32 +18,10 @@ export function useFormManager(formId: string | null) {
     }
 
     setLoading(true)
-    const { data: fData } = await supabase.from('forms').select('*').eq('id', formId).single()
-    const { data: qData } = await supabase.from('form_questions').select('*').eq('form_id', formId).order('display_order', { ascending: true })
-
-    if (fData && qData) {
-      setFormDetails({
-        title: fData.title,
-        title_en: fData.title_en || '',
-        description: fData.description || '',
-        description_en: fData.description_en || '',
-        webhook_url: fData.webhook_url || '',
-        questions: qData.map(q => ({
-          id: q.id,
-          question_text: q.question_text,
-          question_text_en: q.question_text_en || '',
-          question_type: q.question_type,
-          is_required: q.is_required,
-          options: q.options || [''],
-          options_en: q.options_en || [''],
-          system_key: q.system_key || undefined
-        }))
-      })
-    } else {
-      setFormDetails(null)
-    }
+    const data = await fetchFormBuilderData(formId)
+    setFormDetails(data)
     setLoading(false)
-  }, [formId, supabase])
+  }, [formId])
 
   useEffect(() => {
     fetchForm()

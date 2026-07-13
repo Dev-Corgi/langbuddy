@@ -7,29 +7,14 @@ import { createClient } from '@/lib/supabase'
 import { useLocale } from '@/hooks/use-locale'
 import { buildAutoRecurringFormTitles } from '@/lib/session-event-date'
 import { 
-  ChevronLeft,
   Loader2,
-  Crown,
   Save,
-  TypeOutline,
-  Info,
-  Clock,
-  MapPin,
-  IdCard,
   User as UserIcon,
   ClipboardList,
-  Calendar,
-  Plus,
-  Minus,
   Users,
-  CreditCard,
   CheckCircle2,
-  ImageIcon,
+  CreditCard,
   Clock as ClockIcon,
-  MessageCircle,
-  Download,
-  CheckCircle,
-  X,
   Trash2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -54,29 +39,6 @@ import {
 
 const WEEK_DAYS = ["월", "화", "수", "목", "금", "토", "일"];
 
-const getDefaultDayData = (day: string, user: any) => ({
-  id: null,
-  day_of_week: day,
-  category: "스터디",
-  title: `${day}요일 정기 스터디`,
-  title_en: `Regular Study - ${day}`,
-  description: `매주 ${day}요일에 진행되는 스터디입니다.`,
-  description_en: `Weekly study session on ${day}s.`,
-  location: "강남역 인근",
-  location_en: "Near Gangnam Station",
-  start_time: "19:00",
-  end_time: "21:00",
-  host: (user == null ? void 0 : user.name) || "팀장",
-  host_en: (user == null ? void 0 : user.name_en) || "Leader",
-  is_recurring: true,
-  status: "inactive",
-  image_url: "",
-  apply_type: "form",
-  form_id: null,
-  rich_content: "",
-  rich_content_en: "",
-  created_by: user == null ? void 0 : user.id
-});
 
 function StudyManagementContent() {
   const locale = useLocale();
@@ -226,6 +188,14 @@ function StudyManagementContent() {
       return;
     }
 
+    // 현재 주 범위 계산 (서울 UTC+9, 일요일 시작)
+    const seoulNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const dayOfWeekSeoul = seoulNow.getUTCDay(); // 0=일, 6=토
+    const weekStartMs = seoulNow.getTime() - dayOfWeekSeoul * 86400000;
+    const weekEndMs = weekStartMs + 6 * 86400000;
+    const weekStartYmd = new Date(weekStartMs).toISOString().slice(0, 10);
+    const weekEndYmd = new Date(weekEndMs).toISOString().slice(0, 10);
+
     setLoadingResponses(true);
     try {
       // Fetch questions first
@@ -239,11 +209,13 @@ function StudyManagementContent() {
         setFormQuestions(questions);
       }
 
-      // Fetch responses
+      // 현재 주 세션(_event_date 기준)만 조회 — 지난 주 데이터와 혼용 방지
       const { data: responseData } = await supabase
         .from('form_responses')
         .select('*')
         .eq('form_id', formId)
+        .gte('answers->>_event_date', weekStartYmd)
+        .lte('answers->>_event_date', weekEndYmd)
         .order('created_at', { ascending: false });
 
       if (responseData) {

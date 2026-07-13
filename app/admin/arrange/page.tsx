@@ -1084,22 +1084,14 @@ export default function AdminArrangePage() {
         .eq('is_active', true)
         .single()
       
-      console.log('🔍 [자리배치] 현재 요일:', currentDay)
-      console.log('🔍 [자리배치] 스케줄 조회 결과:', schedule)
-      
       if (!schedule) {
-        console.error('❌ [자리배치] 오늘 세션 없음:', currentDay)
         toast.error(`오늘(${currentDay}요일) 언어교환 세션이 없습니다.`)
         setTodaySession(null)
         setLoading(false)
         return
       }
       
-      console.log('✅ [자리배치] 스케줄 form_id:', schedule.form_id)
-      
-      // 스케줄의 form_id를 사용
       const sessionWithFormId = { ...foundSession, form_id: schedule.form_id, day_of_week: currentDay }
-      console.log('✅ [자리배치] 세션 설정 완료:', sessionWithFormId)
       setTodaySession(sessionWithFormId as ArrangePostingSession)
 
       let questionsForExtract: CoreFormQuestion[] = []

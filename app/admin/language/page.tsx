@@ -32,29 +32,6 @@ import { useAdminAuth } from '@/hooks/use-admin-auth'
 
 const WEEK_DAYS = ["월", "화", "수", "목", "금", "토", "일"];
 
-const getDefaultDayData = (day: string, user: any) => ({
-  id: null,
-  day_of_week: day,
-  category: "언어교환",
-  title: `${day}요일 정기 언어교환`,
-  title_en: `Regular Language Exchange - ${day}`,
-  description: `매주 ${day}요일에 진행되는 언어교환 모임입니다.`,
-  description_en: `Weekly language exchange on ${day}s.`,
-  location: "홍대입구역 인근",
-  location_en: "Near Hongdae Station",
-  start_time: "19:00",
-  end_time: "21:00",
-  host: (user == null ? void 0 : user.name) || "운영진",
-  host_en: (user == null ? void 0 : user.name_en) || "Staff",
-  is_recurring: true,
-  status: "inactive",
-  image_url: "",
-  apply_type: "form",
-  form_id: null,
-  rich_content: "",
-  rich_content_en: "",
-  created_by: user == null ? void 0 : user.id
-});
 
 function LanguageManagementContent() {
   const locale = useLocale();
@@ -79,11 +56,7 @@ function LanguageManagementContent() {
   const { saveForm } = useFormManager(null);
 
   const handleFormDataChangeForDay = useCallback((day: string, data: FormBuilderData) => {
-    console.log('[USER_EDIT]', day, data.questions.map(q => `${q.system_key||q.id?.slice(0,8)}:${q.options?.length}`).join(', '))
-    setFormDetailsByDay((prev) => {
-      console.log('[USER_EDIT setFormDetailsByDay]', day)
-      return { ...prev, [day]: data }
-    });
+    setFormDetailsByDay((prev) => ({ ...prev, [day]: data }));
   }, []);
 
   useEffect(() => {
@@ -139,7 +112,6 @@ function LanguageManagementContent() {
   useEffect(() => {
     if (loading) return
     let cancelled = false
-    console.log('[HYDRATION EFFECT] running, loading=', loading, 'schedules keys=', Object.keys(schedules))
 
     async function hydrateFormsForSchedules() {
       for (const day of WEEK_DAYS) {
@@ -149,10 +121,7 @@ function LanguageManagementContent() {
         const formId = schedule.form_id as string | null
         const hydrateKey = formId ?? `__default__:${day}`
 
-        if (formHydratedKeyRef.current[day] === hydrateKey) {
-          console.log('[HYDRATION SKIP]', day, '(already hydrated)')
-          continue
-        }
+        if (formHydratedKeyRef.current[day] === hydrateKey) continue
 
         setFormLoadingByDay((prev) => ({ ...prev, [day]: true }))
         try {
@@ -166,7 +135,6 @@ function LanguageManagementContent() {
             data = buildDefaultLanguageFormData(day)
           }
           if (cancelled) continue
-          console.log('[HYDRATION setFormDetailsByDay]', day, formHydratedKeyRef.current[day], '->', hydrateKey)
           formHydratedKeyRef.current[day] = hydrateKey
           setFormDetailsByDay((prev) => ({ ...prev, [day]: data }))
         } finally {
@@ -208,6 +176,14 @@ function LanguageManagementContent() {
       return;
     }
 
+    // 현재 주 범위 계산 (서울 UTC+9, 일요일 시작)
+    const seoulNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const dayOfWeekSeoul = seoulNow.getUTCDay(); // 0=일, 6=토
+    const weekStartMs = seoulNow.getTime() - dayOfWeekSeoul * 86400000;
+    const weekEndMs = weekStartMs + 6 * 86400000;
+    const weekStartYmd = new Date(weekStartMs).toISOString().slice(0, 10);
+    const weekEndYmd = new Date(weekEndMs).toISOString().slice(0, 10);
+
     setLoadingResponses(true);
     try {
       // Fetch questions first
@@ -221,11 +197,13 @@ function LanguageManagementContent() {
         setFormQuestions(questions);
       }
 
-      // Fetch responses
+      // 현재 주 세션(_event_date 기준)만 조회 — 지난 주 데이터와 혼용 방지
       const { data: responseData } = await supabase
         .from('form_responses')
         .select('*')
         .eq('form_id', formId)
+        .gte('answers->>_event_date', weekStartYmd)
+        .lte('answers->>_event_date', weekEndYmd)
         .order('created_at', { ascending: false });
 
       if (responseData) {
