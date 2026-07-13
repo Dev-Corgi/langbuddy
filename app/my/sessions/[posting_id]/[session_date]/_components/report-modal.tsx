@@ -128,29 +128,28 @@ export function ReportModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose() }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
+        <DialogHeader className="border-b border-border/60 px-6 pb-4 pt-6 pr-14 text-left">
           <DialogTitle className="font-black">
             {isEn ? 'Report participant' : '참가자 신고'}
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="mt-1.5 leading-relaxed">
             {isEn
               ? `Submit a report about "${reportedName}". Reports are reviewed by administrators.`
               : `"${reportedName}" 참가자에 대한 신고를 접수합니다. 관리자가 검토 후 처리합니다.`}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          {/* 신고 사유 */}
-          <div className="space-y-1.5">
-            <Label className="text-sm font-semibold">
+        <div className="space-y-4 px-6 py-5">
+          <div className="space-y-2">
+            <Label htmlFor="report-reason" className="text-sm font-semibold">
               {isEn ? 'Reason *' : '신고 사유 *'}
             </Label>
             <Select value={reason} onValueChange={(v) => setReason(v as ReportReason)}>
-              <SelectTrigger>
+              <SelectTrigger id="report-reason" className="w-full">
                 <SelectValue placeholder={isEn ? 'Select a reason' : '사유를 선택하세요'} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper" className="z-60">
                 {REASONS.map((r) => (
                   <SelectItem key={r.value} value={r.value}>
                     {isEn ? r.labelEn : r.labelKo}
@@ -160,13 +159,13 @@ export function ReportModal({
             </Select>
           </div>
 
-          {/* 기타 선택 시 직접 입력 */}
           {reason === '기타' && (
-            <div className="space-y-1.5">
-              <Label className="text-sm font-semibold">
+            <div className="space-y-2">
+              <Label htmlFor="report-other" className="text-sm font-semibold">
                 {isEn ? 'Please describe *' : '직접 입력 *'}
               </Label>
               <Input
+                id="report-other"
                 value={otherText}
                 onChange={(e) => setOtherText(e.target.value)}
                 placeholder={isEn ? 'Brief description of the reason' : '신고 사유를 간략히 입력하세요'}
@@ -175,12 +174,12 @@ export function ReportModal({
             </div>
           )}
 
-          {/* 추가 설명 */}
-          <div className="space-y-1.5">
-            <Label className="text-sm font-semibold">
+          <div className="space-y-2">
+            <Label htmlFor="report-description" className="text-sm font-semibold">
               {isEn ? 'Additional details (optional)' : '추가 내용 (선택)'}
             </Label>
             <Textarea
+              id="report-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={
@@ -190,18 +189,18 @@ export function ReportModal({
               }
               rows={3}
               maxLength={1000}
+              className="min-h-24 resize-none"
             />
           </div>
 
-          {/* 안내 */}
-          <p className="text-xs text-muted-foreground leading-relaxed">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             {isEn
               ? 'False reports may result in account restrictions.'
               : '허위 신고 시 계정 이용이 제한될 수 있습니다.'}
           </p>
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 border-t border-border/60 px-6 py-4 sm:justify-end">
           <Button variant="ghost" onClick={handleClose} disabled={loading}>
             {isEn ? 'Cancel' : '취소'}
           </Button>
