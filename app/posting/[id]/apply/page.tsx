@@ -1001,7 +1001,14 @@ export default function ApplicationFormPage() {
     )
   }
 
-  if (!loading && posting && !form) {
+  const isRecurringApplyAwaitingDay =
+    !!posting?.is_recurring &&
+    (posting?.category === '스터디' || posting?.category === '언어교환') &&
+    !selectedDay
+
+  // 반복 모임에서 요일 미선택 상태는 정상 — 요일 선택 UI를 보여줘야 한다.
+  // selectedDay가 있는데 form이 아직 null이면 fetchScheduleForDay 로딩 중.
+  if (!loading && posting && !form && !isRecurringApplyAwaitingDay) {
     return (
       <div className="min-h-screen bg-background overflow-x-hidden">
         <MainNav />
