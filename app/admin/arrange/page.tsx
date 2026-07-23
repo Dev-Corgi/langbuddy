@@ -41,6 +41,7 @@ import {
   type ArrangedParticipant,
 } from '@/lib/walk-in-participant'
 import { SUPPORTED_LANGUAGES, isSupportedLanguage } from '@/lib/supported-languages'
+import { loadArrangeParticipantsForSession } from '@/lib/arrange-participants'
 
 function participantRecencyMs(p: ArrangedParticipant): { checkedIn: number; created: number } {
   const checkedIn = p.checked_in_at ? Date.parse(p.checked_in_at) : 0
@@ -588,6 +589,8 @@ export default function AdminArrangePage() {
   const supabase = useMemo(() => createClient(), [])
   const sessionRef = useRef<ArrangePostingSession | null>(null)
   const formQuestionsRef = useRef<CoreFormQuestion[]>([])
+  const questionsByFormIdRef = useRef<Record<string, CoreFormQuestion[]>>({})
+  const userNamesByIdRef = useRef<Record<string, string>>({})
   const participantsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seatingPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const suppressParticipantRefreshRef = useRef(false)
@@ -693,28 +696,21 @@ export default function AdminArrangePage() {
       if (suppressParticipantRefreshRef.current) return
       void (async () => {
         const s = sessionRef.current
-        const questionsForExtract = formQuestionsRef.current
-        if (!s?.form_id) return
+        if (!s?.id) return
         const todayStr = todayYYYYMMDDSeoul()
         const currentDay = koreanWeekdayLetterSeoul()
-        const { data: responsesRaw } = await supabase
-          .from('form_responses')
-          .select('*')
-          .eq('form_id', s.form_id)
-        const responses = (responsesRaw || []).filter((r) => {
-          const ans = (r.answers || {}) as Record<string, unknown>
-          const ev = typeof ans._event_date === 'string' ? ans._event_date.slice(0, 10) : ''
-          const sel = typeof ans._selected_day === 'string' ? ans._selected_day.trim() : ''
-          if (ev === todayStr) return true
-          if (!ev && sel === currentDay) return true
-          return false
+        const loaded = await loadArrangeParticipantsForSession(supabase, {
+          postingId: s.id,
+          scheduleFormId: s.form_id ?? null,
+          todayStr,
+          currentDay,
         })
-        const mapped: Participant[] = responses.map((r) =>
-          mapFormResponseToParticipant(r, questionsForExtract)
-        )
-        setParticipants(mapped)
+        questionsByFormIdRef.current = loaded.questionsByFormId
+        userNamesByIdRef.current = loaded.userNamesById
+        setFormQuestions(loaded.scheduleQuestions)
+        setParticipants(loaded.participants)
         seenCheckedInIdsRef.current = new Set(
-          mapped.filter((p) => p.checked_in_at).map((p) => p.id)
+          loaded.participants.filter((p) => p.checked_in_at).map((p) => p.id)
         )
       })()
     }, 350)
@@ -938,6 +934,7 @@ export default function AdminArrangePage() {
         (payload) => {
           const row = payload.new as {
             id?: string
+            form_id?: string
             user_id?: string | null
             answers?: Record<string, unknown> | null
             payment_status?: string | null
@@ -950,7 +947,10 @@ export default function AdminArrangePage() {
           const answers = (row.answers || {}) as Record<string, unknown>
 
           if (rowId && payload.eventType === 'UPDATE') {
-            const questions = formQuestionsRef.current
+            const formId = row.form_id
+            const questions =
+              (formId && questionsByFormIdRef.current[formId]) ||
+              formQuestionsRef.current
             const patched = mapFormResponseToParticipant(
               {
                 id: rowId,
@@ -961,7 +961,8 @@ export default function AdminArrangePage() {
                 payment_status: row.payment_status,
                 payment_receipt_url: row.payment_receipt_url,
               },
-              questions
+              questions,
+              { userNamesById: userNamesByIdRef.current }
             )
             setParticipants((prev) => {
               const idx = prev.findIndex((p) => p.id === rowId)
@@ -970,6 +971,9 @@ export default function AdminArrangePage() {
                 return prev
               }
               const next = [...prev]
+              if (patched.name === 'Anonymous' && prev[idx].name !== 'Anonymous') {
+                patched.name = prev[idx].name
+              }
               next[idx] = patched
               participantsRef.current = next
               return next
@@ -1103,7 +1107,6 @@ export default function AdminArrangePage() {
           .order('display_order', { ascending: true })
         if (qData) {
           questionsForExtract = qData as CoreFormQuestion[]
-          setFormQuestions(qData as CoreFormQuestion[])
         }
       }
 
@@ -1113,23 +1116,16 @@ export default function AdminArrangePage() {
         setLangTableCounts(seatingConfig.langTableCounts)
       }
 
-      const { data: responsesRaw } = await supabase
-        .from('form_responses')
-        .select('*')
-        .eq('form_id', schedule.form_id)
-
-      const responses = (responsesRaw || []).filter((r) => {
-        const ans = (r.answers || {}) as Record<string, unknown>
-        const ev = typeof ans._event_date === 'string' ? ans._event_date.slice(0, 10) : ''
-        const sel = typeof ans._selected_day === 'string' ? ans._selected_day.trim() : ''
-        if (ev === todayStr) return true
-        if (!ev && sel === currentDay) return true
-        return false
+      const loaded = await loadArrangeParticipantsForSession(supabase, {
+        postingId: foundSession.id,
+        scheduleFormId: schedule.form_id ?? null,
+        todayStr,
+        currentDay,
       })
-
-      const mapped: Participant[] = responses.map((r) =>
-        mapFormResponseToParticipant(r, questionsForExtract)
-      )
+      questionsByFormIdRef.current = loaded.questionsByFormId
+      userNamesByIdRef.current = loaded.userNamesById
+      setFormQuestions(loaded.scheduleQuestions.length ? loaded.scheduleQuestions : questionsForExtract)
+      const mapped = loaded.participants
       setParticipants(mapped)
       seenCheckedInIdsRef.current = new Set(
         mapped.filter((p) => p.checked_in_at).map((p) => p.id)

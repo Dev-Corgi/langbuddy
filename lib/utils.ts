@@ -70,7 +70,7 @@ export function extractParticipantInfoFromAnswers(
     return ""
   }
 
-  const name = pick("name", ["name", "이름"], ["이름", "Name"])
+  const name = pick("name", ["name", "이름", "_participant_name"], ["이름", "Name"])
   const gender = pick("gender", ["gender", "성별"], ["성별", "Gender"])
   const nationality = pick("nationality", ["nationality", "국적", "한국인", "외국인"], ["한국인", "외국인", "국적", "Nationality"])
   const kakaoId = pick("kakao_id", ["kakao_id", "카카오ID", "카카오", "카카오톡", "카카오톡ID"], ["카카오", "Kakao"])

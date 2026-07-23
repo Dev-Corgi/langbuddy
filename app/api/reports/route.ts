@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
-
-const VALID_REASONS = [
-  '폭언/욕설',
-  '성희롱/부적절한 언행',
-  '노쇼/자리이탈',
-  '허위 정보',
-  '기타',
-] as const
+import { VALID_REPORT_REASONS } from '@/lib/report-reasons'
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,7 +37,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'invalid_input' }, { status: 400 })
     }
 
-    if (!VALID_REASONS.includes(reason as (typeof VALID_REASONS)[number])) {
+    if (!VALID_REPORT_REASONS.includes(reason as (typeof VALID_REPORT_REASONS)[number])) {
       return NextResponse.json({ error: 'invalid_reason' }, { status: 400 })
     }
 

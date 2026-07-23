@@ -307,3 +307,89 @@ export function normalizeLangTableCounts(
   }
   return next
 }
+
+function isEmptyAnswer(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true
+  if (Array.isArray(value) && value.length === 0) return true
+  return false
+}
+
+/** UI state의 answers를 DB에서 확정한 target form question UUID로 재매핑 (요일별 form race 방지) */
+export function remapAnswersBySystemKey(
+  sourceQuestions: CanonicalFormQuestion[],
+  targetQuestions: CanonicalFormQuestion[],
+  answers: Record<string, unknown>,
+  userProfile?: {
+    name?: string | null
+    gender?: string | null
+    nationality?: string | null
+    kakao_id?: string | null
+  } | null
+): Record<string, unknown> {
+  const bySystemKey: Record<string, unknown> = {}
+
+  for (const q of sourceQuestions) {
+    if (!q.id || !q.system_key) continue
+    const val = answers[q.id]
+    if (!isEmptyAnswer(val)) bySystemKey[q.system_key] = val
+  }
+
+  const topLevelSystemKeys = ['name', 'gender', 'nationality', 'kakao_id', 'drink', 'language', 'day'] as const
+  for (const key of topLevelSystemKeys) {
+    if (key in bySystemKey) continue
+    const raw = answers[key]
+    if (!isEmptyAnswer(raw)) bySystemKey[key] = raw
+  }
+  if (!bySystemKey.name) {
+    const participantName = answers._participant_name
+    if (!isEmptyAnswer(participantName)) bySystemKey.name = participantName
+  }
+
+  if (userProfile) {
+    if (!bySystemKey.name && userProfile.name) bySystemKey.name = userProfile.name
+    if (!bySystemKey.gender && userProfile.gender) bySystemKey.gender = userProfile.gender
+    if (!bySystemKey.nationality && userProfile.nationality) {
+      bySystemKey.nationality = userProfile.nationality
+    }
+    if (!bySystemKey.kakao_id && userProfile.kakao_id) {
+      bySystemKey.kakao_id = userProfile.kakao_id
+    }
+  }
+
+  const next: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(answers)) {
+    if (key.startsWith('_')) next[key] = value
+  }
+
+  for (const q of targetQuestions) {
+    if (!q.id) continue
+    if (q.system_key && q.system_key in bySystemKey) {
+      next[q.id] = bySystemKey[q.system_key]
+      continue
+    }
+    if (q.id in answers && !isEmptyAnswer(answers[q.id])) {
+      next[q.id] = answers[q.id]
+      continue
+    }
+    for (const sq of sourceQuestions) {
+      if (sq.system_key || !sq.id) continue
+      if (
+        sq.question_text &&
+        q.question_text &&
+        sq.question_text === q.question_text &&
+        sq.id in answers &&
+        !isEmptyAnswer(answers[sq.id])
+      ) {
+        next[q.id] = answers[sq.id]
+        break
+      }
+    }
+  }
+
+  for (const q of targetQuestions) {
+    if (!q.id || q.id in next) continue
+    next[q.id] = q.question_type === 'checkbox' ? [] : ''
+  }
+
+  return next
+}

@@ -21,10 +21,11 @@ import {
 import { ChevronLeft, Loader2, X, MapPin, Wallet, Upload, Info } from "lucide-react"
 import { useLocale } from "@/hooks/use-locale"
 import { i18n } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
+import { cn, extractParticipantInfoFromAnswers } from "@/lib/utils"
 import {
   canonicalizeFormAnswers,
   canonicalizeLegacySelectedLanguage,
+  remapAnswersBySystemKey,
   remapAnswersForLocale,
   type FormDisplayLocale,
 } from '@/lib/form-answer-canonical'
@@ -109,6 +110,9 @@ export default function ApplicationFormPage() {
   /** 반복 모임: 이번 회차(user+form+_event_date) 기존 신청 여부 */
   const [duplicateApplicationPending, setDuplicateApplicationPending] = useState(false)
   const [hasDuplicateApplication, setHasDuplicateApplication] = useState(false)
+  /** 반복 모임: 선택 요일 form 로딩/준비 상태 (race 방지) */
+  const [dayFormLoading, setDayFormLoading] = useState(false)
+  const [dayFormReady, setDayFormReady] = useState(false)
 
   useEffect(() => {
     setAuthChecked(true)
@@ -374,6 +378,8 @@ export default function ApplicationFormPage() {
         setForm(null)
         setQuestions([])
         setAnswers({})
+        setDayFormLoading(false)
+        setDayFormReady(false)
         setLoading(false)
         return
       }
@@ -458,88 +464,82 @@ export default function ApplicationFormPage() {
 
   // Update available languages when selected day changes
   useEffect(() => {
+    let cancelled = false
+
     async function fetchScheduleForDay() {
-      if (!selectedDay || !posting?.id) return
-      
-      if (posting.category === '언어교환') {
+      if (!selectedDay || !posting?.id) {
+        setDayFormLoading(false)
+        setDayFormReady(false)
+        return
+      }
+
+      const isRecurringLeOrStudy =
+        posting.category === '언어교환' || posting.category === '스터디'
+
+      if (isRecurringLeOrStudy) {
+        setDayFormLoading(true)
+        setDayFormReady(false)
+        setForm(null)
+        setQuestions([])
+        setAnswers({})
+
+        const schedulesTable =
+          posting.category === '언어교환'
+            ? 'language_exchange_schedules'
+            : 'study_schedules'
+
         const { data: schedule } = await supabase
-          .from('language_exchange_schedules')
+          .from(schedulesTable)
           .select('*')
           .eq('posting_id', posting.id)
           .eq('day_of_week', selectedDay)
           .single()
-        
-        if (schedule && schedule.form_id) {
-          // 폼 ID 업데이트
+
+        if (cancelled) return
+
+        if (schedule?.form_id) {
           setPosting((prev: any) => ({ ...prev, form_id: schedule.form_id }))
-          
-          // 해당 요일의 폼 다시 로드
+
           const { data: formData } = await supabase
             .from('forms')
             .select('*')
             .eq('id', schedule.form_id)
             .single()
-          
+
+          if (cancelled) return
+
           if (formData) {
-            setForm(formData)
-            
-            // 폼 질문 다시 로드
             const { data: questionData } = await supabase
               .from('form_questions')
               .select('*')
               .eq('form_id', schedule.form_id)
               .order('display_order', { ascending: true })
-            
+
+            if (cancelled) return
+
             if (questionData) {
+              setForm(formData)
               setQuestions(questionData)
-              // 답변 초기화 및 자동 입력
-              const initialAnswers = applyAutoFill(questionData, userData)
-              setAnswers(initialAnswers)
+              setAnswers(applyAutoFill(questionData, userData))
+              setDayFormReady(true)
+            } else {
+              setDayFormReady(false)
             }
+          } else {
+            setDayFormReady(false)
           }
-          
+
           setAvailableLangs([])
+        } else {
+          setDayFormReady(false)
         }
-      } else if (posting.category === '스터디') {
-        const { data: schedule } = await supabase
-          .from('study_schedules')
-          .select('*')
-          .eq('posting_id', posting.id)
-          .eq('day_of_week', selectedDay)
-          .single()
-        
-        if (schedule && schedule.form_id) {
-          // 폼 ID 업데이트
-          setPosting((prev: any) => ({ ...prev, form_id: schedule.form_id }))
-          
-          // 해당 요일의 폼 다시 로드
-          const { data: formData } = await supabase
-            .from('forms')
-            .select('*')
-            .eq('id', schedule.form_id)
-            .single()
-          
-          if (formData) {
-            setForm(formData)
-            
-            // 폼 질문 다시 로드
-            const { data: questionData } = await supabase
-              .from('form_questions')
-              .select('*')
-              .eq('form_id', schedule.form_id)
-              .order('display_order', { ascending: true })
-            
-            if (questionData) {
-              setQuestions(questionData)
-              // 답변 초기화 및 자동 입력
-              const initialAnswers = applyAutoFill(questionData, userData)
-              setAnswers(initialAnswers)
-            }
-          }
-          
-          setAvailableLangs([])
-        }
-      } else if (selectedDay && posting?.recurring_settings?.[selectedDay]) {
+
+        if (!cancelled) setDayFormLoading(false)
+        setSelectedLang('')
+        return
+      }
+
+      if (selectedDay && posting?.recurring_settings?.[selectedDay]) {
         const langs = posting.recurring_settings[selectedDay].languages || []
         const filtered = filterSupportedLanguages(langs)
         setAvailableLangs(filtered.length > 0 ? filtered : [...SUPPORTED_LANGUAGES])
@@ -548,8 +548,11 @@ export default function ApplicationFormPage() {
       }
       setSelectedLang('')
     }
-    
+
     fetchScheduleForDay()
+    return () => {
+      cancelled = true
+    }
   }, [selectedDay, posting?.id, posting?.category, supabase, userData])
 
   // UI locale 전환 시 표시 라벨만 교체 (사용자가 고른 값은 유지)
@@ -619,24 +622,94 @@ export default function ApplicationFormPage() {
     return initialAnswers
   }
 
+  const loadAuthoritativeDayForm = async (
+    day: string
+  ): Promise<{ formId: string; questions: any[] } | null> => {
+    if (!posting?.id) return null
+    const schedulesTable =
+      posting.category === '언어교환' ? 'language_exchange_schedules' : 'study_schedules'
+    const { data: daySchedule, error: scheduleErr } = await supabase
+      .from(schedulesTable)
+      .select('form_id')
+      .eq('posting_id', posting.id)
+      .eq('day_of_week', day)
+      .single()
+
+    if (scheduleErr || !daySchedule?.form_id) {
+      console.error('Authoritative form load (schedule):', scheduleErr)
+      return null
+    }
+
+    const { data: questionData, error: questionErr } = await supabase
+      .from('form_questions')
+      .select('*')
+      .eq('form_id', daySchedule.form_id)
+      .order('display_order', { ascending: true })
+
+    if (questionErr || !questionData?.length) {
+      console.error('Authoritative form load (questions):', questionErr)
+      return null
+    }
+
+    return { formId: daySchedule.form_id, questions: questionData }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
 
+    const isRecurringLeOrStudy =
+      !!posting?.is_recurring &&
+      (posting?.category === '스터디' || posting?.category === '언어교환')
+
     // Validate Meeting specific selections
-    if ((posting?.category === '스터디' || posting?.category === '언어교환') && posting?.is_recurring) {
+    if (isRecurringLeOrStudy) {
       if (!selectedDay) {
         alert(locale === 'en' ? 'Please select a meeting day' : '참여 요일을 선택해주세요')
         setSubmitting(false)
         return
       }
+      if (dayFormLoading || !dayFormReady) {
+        alert(
+          locale === 'en'
+            ? 'The form is still loading. Please wait a moment.'
+            : '폼을 불러오는 중입니다. 잠시 후 다시 시도해주세요.'
+        )
+        setSubmitting(false)
+        return
+      }
     }
 
+    let submitFormId = form?.id || ''
+    let submitQuestions = questions
+
+    if (isRecurringLeOrStudy && selectedDay) {
+      const authoritative = await loadAuthoritativeDayForm(selectedDay)
+      if (!authoritative) {
+        alert(
+          locale === 'en'
+            ? 'Could not load the form for the selected day.'
+            : '선택한 요일의 폼을 불러오지 못했습니다.'
+        )
+        setSubmitting(false)
+        return
+      }
+      submitFormId = authoritative.formId
+      submitQuestions = authoritative.questions
+    }
+
+    const submitAnswers = remapAnswersBySystemKey(
+      questions,
+      submitQuestions,
+      answers,
+      userData
+    )
+
     // Validate required questions (시스템 질문은 항상 필수)
-    for (const q of questions) {
+    for (const q of submitQuestions) {
       const isRequired = q.is_required || q.system_key
       if (isRequired) {
-        const answer = answers[q.id]
+        const answer = submitAnswers[q.id]
         if (!answer || (Array.isArray(answer) && answer.length === 0)) {
           const qText = locale === 'en' && q.question_text_en ? q.question_text_en : q.question_text
           alert(locale === 'en' ? `Please answer: ${qText}` : `필수 질문에 답변해주세요: ${qText}`)
@@ -664,30 +737,6 @@ export default function ApplicationFormPage() {
         finalEventDate = sessionEventDate
       }
     }
-
-    // ─── 핵심 fix: state race를 막기 위해 제출 직전 DB에서 선택 요일의 form_id를 재확인 ───
-    // fetchData(authRefreshTick)와 fetchScheduleForDay 사이의 race 조건으로
-    // form.id가 잘못된 요일의 form_id를 가리킬 수 있어, DB를 직접 읽어 보정한다.
-    let submitFormId = form?.id || ''
-    if (
-      (posting?.category === '언어교환' || posting?.category === '스터디') &&
-      posting?.is_recurring &&
-      selectedDay &&
-      posting?.id
-    ) {
-      const schedulesTable =
-        posting.category === '언어교환' ? 'language_exchange_schedules' : 'study_schedules'
-      const { data: daySchedule } = await supabase
-        .from(schedulesTable)
-        .select('form_id')
-        .eq('posting_id', posting.id)
-        .eq('day_of_week', selectedDay)
-        .single()
-      if (daySchedule?.form_id) {
-        submitFormId = daySchedule.form_id
-      }
-    }
-    // ────────────────────────────────────────────────────────────────────────────────────
 
     if (
       posting?.is_recurring &&
@@ -767,12 +816,13 @@ export default function ApplicationFormPage() {
       leCouponWaived,
     })
 
-    const canonicalAnswers = canonicalizeFormAnswers(questions, {
-      ...answers,
+    const canonicalAnswers = canonicalizeFormAnswers(submitQuestions, {
+      ...submitAnswers,
       ...(selectedLang
         ? { _selected_language: canonicalizeLegacySelectedLanguage(selectedLang) }
         : {}),
     })
+    const participantInfo = extractParticipantInfoFromAnswers(canonicalAnswers, submitQuestions)
 
     const insertPayload: Record<string, unknown> = {
       form_id: submitFormId,
@@ -786,6 +836,10 @@ export default function ApplicationFormPage() {
             : null,
       answers: {
         ...canonicalAnswers,
+        ...(participantInfo.name ? { name: participantInfo.name, _participant_name: participantInfo.name } : {}),
+        ...(participantInfo.gender ? { gender: participantInfo.gender } : {}),
+        ...(participantInfo.nationality ? { nationality: participantInfo.nationality } : {}),
+        ...(participantInfo.language ? { language: participantInfo.language } : {}),
         _selected_day: selectedDay,
         _event_date: finalEventDate,
         _study_bundle_free: bundleWaived,
@@ -919,10 +973,22 @@ export default function ApplicationFormPage() {
   const handlePreSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
+    const isRecurringLeOrStudy =
+      !!posting?.is_recurring &&
+      (posting?.category === '스터디' || posting?.category === '언어교환')
+
     // Validate Meeting specific selections
-    if ((posting?.category === '스터디' || posting?.category === '언어교환') && posting?.is_recurring) {
+    if (isRecurringLeOrStudy) {
       if (!selectedDay) {
         alert(locale === 'en' ? 'Please select a meeting day' : '참여 요일을 선택해주세요')
+        return
+      }
+      if (dayFormLoading || !dayFormReady) {
+        alert(
+          locale === 'en'
+            ? 'The form is still loading. Please wait a moment.'
+            : '폼을 불러오는 중입니다. 잠시 후 다시 시도해주세요.'
+        )
         return
       }
       if (hasDuplicateApplication) {
@@ -1006,6 +1072,12 @@ export default function ApplicationFormPage() {
     (posting?.category === '스터디' || posting?.category === '언어교환') &&
     !selectedDay
 
+  const isRecurringApplyLoadingForm =
+    !!posting?.is_recurring &&
+    (posting?.category === '스터디' || posting?.category === '언어교환') &&
+    !!selectedDay &&
+    (dayFormLoading || !dayFormReady)
+
   // 반복 모임에서 요일 미선택 상태는 정상 — 요일 선택 UI를 보여줘야 한다.
   // selectedDay가 있는데 form이 아직 null이면 fetchScheduleForDay 로딩 중.
   if (!loading && posting && !form && !isRecurringApplyAwaitingDay) {
@@ -1084,6 +1156,9 @@ export default function ApplicationFormPage() {
   const isRecurringApply =
     !!posting?.is_recurring &&
     (posting?.category === '스터디' || posting?.category === '언어교환')
+  const canSubmitApplication =
+    !isRecurringApply ||
+    (!!selectedDay && dayFormReady && !dayFormLoading && questions.length > 0)
   const displayCost = locale === 'en' && posting?.cost_en ? posting.cost_en : posting?.cost
   const studyReceiptWaived = posting?.category === '스터디' && studyBundleFree
   const leCouponWaived =
@@ -1217,8 +1292,17 @@ export default function ApplicationFormPage() {
               </section>
             ) : null}
 
+            {isRecurringApply && selectedDay && isRecurringApplyLoadingForm ? (
+              <div className="flex flex-col items-center justify-center gap-3 rounded-[28px] border border-border bg-muted/30 px-6 py-12 text-center">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm font-bold text-muted-foreground">
+                  {locale === 'en' ? 'Loading form for selected day…' : '선택한 요일의 폼을 불러오는 중…'}
+                </p>
+              </div>
+            ) : null}
+
             {/* 요일 선택 후에만 질문 폼 표시 */}
-            {(!posting?.is_recurring || selectedDay) && questions.map((q, idx) => {
+            {(!posting?.is_recurring || selectedDay) && !isRecurringApplyLoadingForm && questions.map((q, idx) => {
               const qText = locale === 'en' && q.question_text_en ? q.question_text_en : q.question_text
               const qOptions = locale === 'en' && q.options_en ? q.options_en : q.options
               
@@ -1385,6 +1469,7 @@ export default function ApplicationFormPage() {
                 type="submit" 
                 disabled={
                   submitting ||
+                  !canSubmitApplication ||
                   (isRecurringApply &&
                     !!selectedDay &&
                     !!user?.id &&
@@ -1659,6 +1744,7 @@ export default function ApplicationFormPage() {
                   onClick={handleSubmit as any}
                   disabled={
                     submitting ||
+                    !canSubmitApplication ||
                     (!sessionWaived &&
                       (!paymentMethod ||
                         (paymentMethod === 'bank' && !paymentReceiptFile)))

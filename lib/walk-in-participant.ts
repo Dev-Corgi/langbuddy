@@ -71,7 +71,8 @@ export function mapFormResponseToParticipant(
     payment_status?: string | null
     payment_receipt_url?: string | null
   },
-  questions: CoreFormQuestion[] = []
+  questions: CoreFormQuestion[] = [],
+  options?: { userNamesById?: Record<string, string> }
 ): ArrangedParticipant {
   const answers = (row.answers || {}) as Record<string, unknown>
   const info = extractParticipantInfoFromAnswers(answers, questions)
@@ -81,9 +82,15 @@ export function mapFormResponseToParticipant(
     language: String(answers._selected_language || info.language || '-'),
   })
 
+  const nameFromAnswers = info.name || String(answers.name || answers.이름 || answers._participant_name || '')
+  const nameFromUser =
+    row.user_id && options?.userNamesById?.[row.user_id]
+      ? options.userNamesById[row.user_id]
+      : ''
+
   return {
     id: row.id,
-    name: info.name || String(answers.name || answers.이름 || 'Anonymous'),
+    name: nameFromAnswers || nameFromUser || 'Anonymous',
     gender: normalized.gender || '?',
     nationality: normalized.nationality || '?',
     language: normalized.language || '-',

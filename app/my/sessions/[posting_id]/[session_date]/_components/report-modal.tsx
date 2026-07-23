@@ -21,21 +21,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { REPORT_REASONS, type ReportReason } from '@/lib/report-reasons'
 
-export type ReportReason =
-  | '폭언/욕설'
-  | '성희롱/부적절한 언행'
-  | '노쇼/자리이탈'
-  | '허위 정보'
-  | '기타'
-
-const REASONS: { value: ReportReason; labelKo: string; labelEn: string }[] = [
-  { value: '폭언/욕설', labelKo: '폭언 / 욕설', labelEn: 'Verbal abuse / Profanity' },
-  { value: '성희롱/부적절한 언행', labelKo: '성희롱 / 부적절한 언행', labelEn: 'Harassment / Inappropriate behavior' },
-  { value: '노쇼/자리이탈', labelKo: '노쇼 / 자리 이탈', labelEn: 'No-show / Left early' },
-  { value: '허위 정보', labelKo: '허위 정보 (국적, 언어 수준 등)', labelEn: 'False information (nationality, language level, etc.)' },
-  { value: '기타', labelKo: '기타', labelEn: 'Other' },
-]
+export type { ReportReason }
 
 type Props = {
   open: boolean
@@ -150,7 +138,7 @@ export function ReportModal({
                 <SelectValue placeholder={isEn ? 'Select a reason' : '사유를 선택하세요'} />
               </SelectTrigger>
               <SelectContent position="popper" className="z-60">
-                {REASONS.map((r) => (
+                {REPORT_REASONS.map((r) => (
                   <SelectItem key={r.value} value={r.value}>
                     {isEn ? r.labelEn : r.labelKo}
                   </SelectItem>
