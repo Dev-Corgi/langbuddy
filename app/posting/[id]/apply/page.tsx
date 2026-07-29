@@ -40,7 +40,6 @@ import {
 } from '@/lib/session-event-date'
 import { filterSupportedLanguages, SUPPORTED_LANGUAGES } from '@/lib/supported-languages'
 import {
-  couponFlagForMethod,
   paymentMethodFromApplyChoice,
   type ApplyPaymentChoice,
 } from '@/lib/supported-payment-methods'
@@ -94,7 +93,6 @@ export default function ApplicationFormPage() {
   const [paymentMethod, setPaymentMethod] = useState<ApplyPaymentChoice>("")
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentReceiptFile, setPaymentReceiptFile] = useState<File | null>(null)
-  const [useLeFreeCoupon, setUseLeFreeCoupon] = useState(false)
   
   const [selectedDay, setSelectedDay] = useState<string>("")
   const [availableLangs, setAvailableLangs] = useState<string[]>([])
@@ -720,10 +718,7 @@ export default function ApplicationFormPage() {
     }
 
     const bundleWaived = posting?.category === '스터디' && studyBundleFree
-    const leCouponWaived =
-      posting?.category === '언어교환' &&
-      (useLeFreeCoupon || paymentMethod === 'coupon')
-    const feeWaived = bundleWaived || leCouponWaived
+    const feeWaived = bundleWaived
 
     let finalEventDate = sessionEventDate
     if (
@@ -812,9 +807,7 @@ export default function ApplicationFormPage() {
       }
     }
 
-    const canonicalPaymentMethod = paymentMethodFromApplyChoice(paymentMethod, {
-      leCouponWaived,
-    })
+    const canonicalPaymentMethod = paymentMethodFromApplyChoice(paymentMethod)
 
     const canonicalAnswers = canonicalizeFormAnswers(submitQuestions, {
       ...submitAnswers,
@@ -829,7 +822,7 @@ export default function ApplicationFormPage() {
       qr_code: qrCode,
       payment_receipt_url: paymentReceiptUrl,
       payment_status:
-        feeWaived || paymentMethod === 'coupon'
+        feeWaived
           ? null
           : paymentMethod === 'bank'
             ? 'pending'
@@ -843,7 +836,6 @@ export default function ApplicationFormPage() {
         _selected_day: selectedDay,
         _event_date: finalEventDate,
         _study_bundle_free: bundleWaived,
-        _le_free_coupon: couponFlagForMethod(canonicalPaymentMethod),
         _payment_method: canonicalPaymentMethod,
       },
     }
@@ -858,28 +850,19 @@ export default function ApplicationFormPage() {
       .single()
 
     if (error) {
-      const errMsg = error.message || ''
-      if (errMsg.includes('coupon_not_applicable')) {
+      const dup =
+        error.code === '23505' &&
+        posting?.is_recurring &&
+        (posting?.category === '스터디' || posting?.category === '언어교환')
+      if (dup) {
+        setHasDuplicateApplication(true)
         alert(
           locale === 'en'
-            ? 'Coupons can only be used for language exchange sessions.'
-            : '쿠폰은 언어교환 세션 신청에만 사용할 수 있습니다.'
+            ? 'You already have an application for this session. If this is unexpected, please contact the organizer.'
+            : '이번 회차에 이미 신청 내역이 있습니다. 문제가 있다면 운영진에게 문의해 주세요.'
         )
       } else {
-        const dup =
-          error.code === '23505' &&
-          posting?.is_recurring &&
-          (posting?.category === '스터디' || posting?.category === '언어교환')
-        if (dup) {
-          setHasDuplicateApplication(true)
-          alert(
-            locale === 'en'
-              ? 'You already have an application for this session. If this is unexpected, please contact the organizer.'
-              : '이번 회차에 이미 신청 내역이 있습니다. 문제가 있다면 운영진에게 문의해 주세요.'
-          )
-        } else {
-          alert(error.message)
-        }
+        alert(error.message)
       }
     } else {
       // Move receipt to permanent location with response_id
@@ -935,7 +918,7 @@ export default function ApplicationFormPage() {
             qr_code: qrCode,
             payment_method: canonicalPaymentMethod,
             payment_status:
-              feeWaived || paymentMethod === 'coupon'
+              feeWaived
                 ? 'confirmed'
                 : paymentMethod === 'bank'
                   ? 'pending'
@@ -1161,10 +1144,7 @@ export default function ApplicationFormPage() {
     (!!selectedDay && dayFormReady && !dayFormLoading && questions.length > 0)
   const displayCost = locale === 'en' && posting?.cost_en ? posting.cost_en : posting?.cost
   const studyReceiptWaived = posting?.category === '스터디' && studyBundleFree
-  const leCouponWaived =
-    posting?.category === '언어교환' &&
-    (useLeFreeCoupon || paymentMethod === 'coupon')
-  const sessionWaived = studyReceiptWaived || leCouponWaived
+  const sessionWaived = studyReceiptWaived
 
   return (
     <div className="min-h-screen bg-muted overflow-x-hidden">
@@ -1516,17 +1496,6 @@ export default function ApplicationFormPage() {
                         : '무료 (같은 날짜 언어교환 신청 연동)'}
                     </div>
                   </>
-                ) : leCouponWaived ? (
-                  <>
-                    {displayCost ? (
-                      <div className="text-base font-bold text-muted-foreground line-through">
-                        {displayCost}
-                      </div>
-                    ) : null}
-                    <div className="text-xl font-black text-emerald-600">
-                      {locale === 'en' ? 'Free (10-stamp reward)' : '무료 (10회 스탬프 쿠폰)'}
-                    </div>
-                  </>
                 ) : (
                   <div className="text-xl font-black text-primary">
                     {displayCost || (locale === 'en' ? 'Free' : '무료')}
@@ -1540,13 +1509,6 @@ export default function ApplicationFormPage() {
                     : '번들 할인: 입금 영수증 없이 결제 수단만 확인하면 됩니다.'}
                 </p>
               )}
-              {leCouponWaived && (
-                <p className="text-xs font-bold text-emerald-700 pt-1">
-                  {locale === 'en'
-                    ? 'Coupon applied — no payment or receipt needed. Tap Complete below.'
-                    : '쿠폰 적용: 결제 및 영수증 없이 아래에서 신청 완료만 눌러주세요.'}
-                </p>
-              )}
               <CardDescription className="text-muted-foreground font-medium pt-2">
                 {locale === 'en' 
                   ? 'Choose how you would like to pay for the session.' 
@@ -1555,33 +1517,9 @@ export default function ApplicationFormPage() {
             </CardHeader>
             <CardContent className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-8 pt-4 space-y-6 touch-pan-y">
               <div className="grid grid-cols-1 gap-3">
-                {/* 언어교환 쿠폰 사용 옵션 */}
-                {posting?.category === '언어교환' && !studyReceiptWaived && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentMethod('coupon')
-                        setUseLeFreeCoupon(true)
-                      }}
-                      className={cn(
-                        "flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 transition-all group",
-                        paymentMethod === "coupon"
-                          ? "bg-emerald-500 border-emerald-500 text-white shadow-lg scale-[1.02]"
-                          : "bg-emerald-50/50 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                      )}
-                    >
-                      <span className="text-lg font-black">{locale === 'en' ? 'Use Coupon' : '쿠폰사용'}</span>
-                      <span className={cn("text-xs font-medium", paymentMethod === "coupon" ? "text-white/80" : "text-emerald-600")}>
-                        {locale === 'en'
-                          ? 'Bring your physical coupon to the venue'
-                          : '당일 실물 쿠폰 지참 (현장 확인)'}
-                      </span>
-                    </button>
-                  )}
                 <button
                   type="button"
                   onClick={() => {
-                    setUseLeFreeCoupon(false)
                     setPaymentMethod('bank')
                   }}
                   className={cn(
@@ -1599,7 +1537,6 @@ export default function ApplicationFormPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setUseLeFreeCoupon(false)
                     setPaymentMethod('on_site')
                   }}
                   className={cn(
@@ -1615,16 +1552,6 @@ export default function ApplicationFormPage() {
                   </span>
                 </button>
               </div>
-
-              {paymentMethod === "coupon" && (
-                <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 animate-in slide-in-from-top-2 duration-300">
-                  <p className="text-sm text-emerald-700 font-bold leading-relaxed">
-                    {locale === 'en'
-                      ? 'Your physical coupon will be verified at the venue. No payment or receipt needed.'
-                      : '실물 쿠폰은 현장에서 확인합니다. 결제·영수증은 필요 없습니다.'}
-                  </p>
-                </div>
-              )}
 
               {paymentMethod === "bank" && (
                 <div className="p-5 rounded-2xl bg-muted border border-border space-y-4 animate-in slide-in-from-top-2 duration-300">
@@ -1693,13 +1620,9 @@ export default function ApplicationFormPage() {
                     </div>
                   ) : (
                     <p className="text-sm font-bold text-emerald-700 pt-3 border-t border-border/50">
-                      {leCouponWaived
-                        ? locale === 'en'
-                          ? 'No receipt required when using a free coupon.'
-                          : '무료 쿠폰 사용 시 영수증 업로드는 필요하지 않습니다.'
-                        : locale === 'en'
-                          ? 'Receipt upload is not required for this free bundle.'
-                          : '번들 무료 신청 — 영수증 업로드는 필요하지 않습니다.'}
+                      {locale === 'en'
+                        ? 'Receipt upload is not required for this free bundle.'
+                        : '번들 무료 신청 — 영수증 업로드는 필요하지 않습니다.'}
                     </p>
                   )}
 
@@ -1734,7 +1657,6 @@ export default function ApplicationFormPage() {
                   onClick={() => {
                     setShowPaymentModal(false)
                     setPaymentMethod('')
-                    setUseLeFreeCoupon(false)
                   }}
                   className="flex-1 h-14 rounded-2xl border-border text-muted-foreground font-bold hover:bg-muted"
                 >

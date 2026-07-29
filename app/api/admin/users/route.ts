@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     let query = admin
       .from('users')
       .select(
-        'id, name, gender, nationality, kakao_id, onboarding_completed, le_stamp_progress, le_reward_coupons, created_at, updated_at'
+        'id, name, gender, nationality, kakao_id, onboarding_completed, created_at, updated_at'
       )
       .order('updated_at', { ascending: false })
       .limit(200)

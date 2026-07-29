@@ -3,7 +3,6 @@ import { createClient } from '@/lib/supabase-server'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAdminUser } from '@/lib/admin-api-auth'
 import type { AdminUserUpdatePayload } from '@/lib/admin-user-types'
-import { sliderStampToStored } from '@/lib/le-stamp'
 import {
   fetchProfileRoleFlags,
   isTargetSuperAdmin,
@@ -121,19 +120,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       patch.kakao_id = kakaoId
     }
 
-    if (body.le_stamp_progress !== undefined) {
-      const progress = sliderStampToStored(Number(body.le_stamp_progress))
-      patch.le_stamp_progress = progress
-    }
-
-    if (body.le_reward_coupons !== undefined) {
-      const coupons = Number(body.le_reward_coupons)
-      if (!Number.isInteger(coupons) || coupons < 0) {
-        return NextResponse.json({ error: 'invalid_coupons' }, { status: 400 })
-      }
-      patch.le_reward_coupons = coupons
-    }
-
     if (body.onboarding_completed !== undefined) {
       patch.onboarding_completed = Boolean(body.onboarding_completed)
     }
@@ -143,8 +129,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       body.gender !== undefined ||
       body.nationality !== undefined ||
       body.kakao_id !== undefined ||
-      body.le_stamp_progress !== undefined ||
-      body.le_reward_coupons !== undefined ||
       body.onboarding_completed !== undefined
 
     if (!userFieldsTouched && body.is_admin === undefined) {

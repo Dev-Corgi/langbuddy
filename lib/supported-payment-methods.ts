@@ -3,10 +3,16 @@ export const PAYMENT_METHODS = [
   '계좌이체',
   '현장현금',
   '현장계좌',
-  '쿠폰사용',
 ] as const
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
+
+/** 과거 응답(쿠폰 기능 폐지 이전)의 표시 호환용 — 신규 선택지에는 없음 */
+const LEGACY_DISPLAY_ONLY: Record<string, string> = {
+  무료쿠폰: '쿠폰사용',
+  '무료쿠폰(10스탬프)': '쿠폰사용',
+  쿠폰사용: '쿠폰사용',
+}
 
 const LEGACY_ALIASES: Record<string, PaymentMethod> = {
   계좌송금: '계좌이체',
@@ -16,9 +22,6 @@ const LEGACY_ALIASES: Record<string, PaymentMethod> = {
   현장계좌: '현장계좌',
   현장추가: '현장현금',
   테스트더미: '현장현금',
-  무료쿠폰: '쿠폰사용',
-  '무료쿠폰(10스탬프)': '쿠폰사용',
-  쿠폰사용: '쿠폰사용',
 }
 
 export function isSupportedPaymentMethod(value: string): value is PaymentMethod {
@@ -46,10 +49,6 @@ export function isBankTransferMethod(raw: unknown): boolean {
   return normalizePaymentMethod(raw) === '계좌이체'
 }
 
-export function isCouponPaymentMethod(raw: unknown): boolean {
-  return normalizePaymentMethod(raw) === '쿠폰사용'
-}
-
 /** payment_status 초기값 (관리자 수동 변경) */
 export function defaultPaymentStatusForMethod(
   method: PaymentMethod,
@@ -61,18 +60,16 @@ export function defaultPaymentStatusForMethod(
   return null
 }
 
-/** answers._le_free_coupon 플래그 (디지털 쿠폰 차감 없음 — 표시용만) */
-export function couponFlagForMethod(method: PaymentMethod): boolean {
-  return method === '쿠폰사용'
-}
-
 export function formatPaymentMethodLabel(
   raw: unknown,
   paymentStatus?: string | null
 ): string {
   const method = normalizePaymentMethod(raw)
   if (!method) {
-    return typeof raw === 'string' && raw.trim() ? raw.trim() : '—'
+    if (typeof raw === 'string' && raw.trim()) {
+      return LEGACY_DISPLAY_ONLY[raw.trim()] ?? raw.trim()
+    }
+    return '—'
   }
   if (method === '계좌이체') {
     if (paymentStatus === 'confirmed') return '계좌이체 (확인됨)'
@@ -83,13 +80,11 @@ export function formatPaymentMethodLabel(
 }
 
 /** 신청 폼 결제 선택 UI 값 → DB canonical */
-export type ApplyPaymentChoice = 'bank' | 'on_site' | 'coupon' | ''
+export type ApplyPaymentChoice = 'bank' | 'on_site' | ''
 
 export function paymentMethodFromApplyChoice(
-  choice: ApplyPaymentChoice,
-  options?: { leCouponWaived?: boolean }
+  choice: ApplyPaymentChoice
 ): PaymentMethod {
-  if (choice === 'coupon' || options?.leCouponWaived) return '쿠폰사용'
   if (choice === 'bank') return '계좌이체'
   return '현장현금'
 }

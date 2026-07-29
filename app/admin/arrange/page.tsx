@@ -70,7 +70,8 @@ function sortParticipantsByNameAsc(list: ArrangedParticipant[]): ArrangedPartici
 }
 import {
   loadSeatingLiveState,
-  persistSeatingLive,
+  persistParticipantAssignment,
+  persistRoundSeating,
   type SeatingConfigPayload,
 } from '@/lib/seating-live-sync'
 import {
@@ -592,16 +593,14 @@ export default function AdminArrangePage() {
   const questionsByFormIdRef = useRef<Record<string, CoreFormQuestion[]>>({})
   const userNamesByIdRef = useRef<Record<string, string>>({})
   const participantsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const seatingPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const suppressParticipantRefreshRef = useRef(false)
   const suppressParticipantRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const readyForPersistRef = useRef(false)
-  const applyingRemoteSeatingRef = useRef(false)
-  const suppressRemoteReloadRef = useRef(false)
-  const pendingPersistAfterRemoteRef = useRef(false)
-  const seatingPersistInFlightRef = useRef(false)
-  const seatingPersistPendingRef = useRef(false)
-  const persistFailedAtRef = useRef(0)
+  /** 라운드별 "마지막으로 persist를 스케줄한" rounds 배열 스냅샷 (참조 비교로 변경 감지) */
+  const prevRoundsSnapshotRef = useRef<RoundData[]>([])
+  const roundPersistTimerRef = useRef<Record<number, ReturnType<typeof setTimeout> | null>>({})
+  const roundPersistInFlightRef = useRef<Record<number, boolean>>({})
+  const roundPersistPendingRef = useRef<Record<number, boolean>>({})
   const participantsRef = useRef<Participant[]>([])
   const roundsRef = useRef<RoundData[]>([])
   const langTableCountsRef = useRef<Record<string, number>>({})
@@ -716,16 +715,7 @@ export default function AdminArrangePage() {
     }, 350)
   }, [supabase])
 
-  const finishApplyingRemoteSeating = useCallback(() => {
-    applyingRemoteSeatingRef.current = false
-    if (pendingPersistAfterRemoteRef.current) {
-      pendingPersistAfterRemoteRef.current = false
-      scheduleSeatingPersistRef.current?.()
-    }
-  }, [])
-
   const markLocalSeatingEdit = useCallback(() => {
-    suppressRemoteReloadRef.current = true
     suppressParticipantRefreshRef.current = true
     if (suppressParticipantRefreshTimerRef.current) {
       clearTimeout(suppressParticipantRefreshTimerRef.current)
@@ -736,150 +726,117 @@ export default function AdminArrangePage() {
     }, 1200)
   }, [])
 
-  const scheduleSeatingPersistRef = useRef<(() => void) | null>(null)
-
-  const reloadSeatingFromServer = useCallback(async () => {
-    const s = sessionRef.current
-    if (!s?.id) return
-    if (activeDragIdRef.current) return
-    if (suppressRemoteReloadRef.current) return
-    if (persistFailedAtRef.current !== 0) return
-
-    const todayStr = todayYYYYMMDDSeoul()
-    const currentParticipants = participantsRef.current
-    const checkedIds = new Set(
-      currentParticipants.filter((p) => p.checked_in_at).map((p) => p.id)
-    )
-
-    const { data: postingRow } = await supabase
-      .from('postings')
-      .select('seating_config')
-      .eq('id', s.id)
-      .maybeSingle()
-
-    const seatingConfig = (postingRow?.seating_config || s.seating_config || null) as SeatingConfigPayload | null
-    const { rounds: loadedRounds, langTableCounts: loadedCounts } = await loadSeatingLiveState(
-      supabase,
-      s.id,
-      todayStr,
-      currentParticipants,
-      seatingConfig,
-      checkedIds
-    )
-
-    applyingRemoteSeatingRef.current = true
-    setRounds(loadedRounds)
-    if (seatingConfig?.langTableCounts) {
-      setLangTableCounts(seatingConfig.langTableCounts)
-    } else if (Object.keys(loadedCounts).length > 0) {
-      setLangTableCounts(loadedCounts)
-    }
-    requestAnimationFrame(() => {
-      finishApplyingRemoteSeating()
-    })
-  }, [supabase, finishApplyingRemoteSeating])
-
-  const runSeatingPersist = useCallback(async () => {
+  /** 라운드 단위 replace — 테이블 추가/삭제/순서변경/자동배치 등 구조적 변경 전용 */
+  const runRoundPersist = useCallback(async (round: number) => {
     const s = sessionRef.current
     if (!s?.id) return
 
-    if (seatingPersistInFlightRef.current) {
-      seatingPersistPendingRef.current = true
+    if (roundPersistInFlightRef.current[round]) {
+      roundPersistPendingRef.current[round] = true
       return
     }
 
-    seatingPersistInFlightRef.current = true
+    const roundData = roundsRef.current.find((r) => r.round === round)
+    if (!roundData) return
+
+    roundPersistInFlightRef.current[round] = true
     const todayStr = todayYYYYMMDDSeoul()
-    const currentParticipants = participantsRef.current
     const checkedIds = new Set(
-      currentParticipants.filter((p) => p.checked_in_at).map((p) => p.id)
+      participantsRef.current.filter((p) => p.checked_in_at).map((p) => p.id)
     )
 
     setSeatingSyncing(true)
-    suppressRemoteReloadRef.current = true
     try {
-      await persistSeatingLive({
+      await persistRoundSeating({
         postingId: s.id,
         sessionDate: todayStr,
-        rounds: roundsRef.current,
+        round,
+        tableLanguages: roundData.tableLanguages ?? {},
+        tableOrder: roundData.tableOrder ?? null,
         langTableCounts: langTableCountsRef.current,
+        assignments: roundData.assignments,
         checkedParticipantIds: checkedIds,
       })
-      persistFailedAtRef.current = 0
-      setTimeout(() => {
-        if (!seatingPersistInFlightRef.current && persistFailedAtRef.current === 0) {
-          suppressRemoteReloadRef.current = false
-        }
-      }, 800)
     } catch (err) {
-      persistFailedAtRef.current = Date.now()
-      console.error('[arrange] seating persist:', err)
-      const msg =
-        err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string'
-          ? (err as { message: string }).message
-          : '동기화에 실패했습니다.'
-      toast.error(msg.length < 200 ? `동기화 실패: ${msg}` : `동기화 실패: ${msg.slice(0, 180)}…`)
-      seatingPersistPendingRef.current = true
+      console.error(`[arrange] round ${round} persist:`, err)
+      const msg = err instanceof Error ? err.message : '동기화에 실패했습니다.'
+      toast.error(
+        msg.length < 160 ? `${round}라운드 저장 실패: ${msg}` : `${round}라운드 저장 실패: ${msg.slice(0, 150)}…`,
+        { id: `round-persist-fail-${round}` }
+      )
+      roundPersistPendingRef.current[round] = true
     } finally {
       setSeatingSyncing(false)
-      seatingPersistInFlightRef.current = false
-      if (seatingPersistPendingRef.current) {
-        seatingPersistPendingRef.current = false
-        if (seatingPersistTimerRef.current) {
-          clearTimeout(seatingPersistTimerRef.current)
+      roundPersistInFlightRef.current[round] = false
+      if (roundPersistPendingRef.current[round]) {
+        roundPersistPendingRef.current[round] = false
+        if (roundPersistTimerRef.current[round]) {
+          clearTimeout(roundPersistTimerRef.current[round]!)
         }
-        seatingPersistTimerRef.current = setTimeout(() => {
-          seatingPersistTimerRef.current = null
-          scheduleSeatingPersistRef.current?.()
+        roundPersistTimerRef.current[round] = setTimeout(() => {
+          roundPersistTimerRef.current[round] = null
+          void runRoundPersist(round)
         }, 1500)
       }
     }
   }, [])
 
-  const scheduleSeatingPersist = useCallback(() => {
-    if (!readyForPersistRef.current) return
-    if (applyingRemoteSeatingRef.current) {
-      pendingPersistAfterRemoteRef.current = true
-      return
-    }
-    markLocalSeatingEdit()
-    if (seatingPersistTimerRef.current) {
-      clearTimeout(seatingPersistTimerRef.current)
-    }
-    seatingPersistTimerRef.current = setTimeout(() => {
-      seatingPersistTimerRef.current = null
-      void runSeatingPersist()
-    }, 300)
-  }, [runSeatingPersist, markLocalSeatingEdit])
+  const scheduleRoundPersist = useCallback(
+    (round: number) => {
+      if (!readyForPersistRef.current) return
+      if (roundPersistTimerRef.current[round]) {
+        clearTimeout(roundPersistTimerRef.current[round]!)
+      }
+      roundPersistTimerRef.current[round] = setTimeout(() => {
+        roundPersistTimerRef.current[round] = null
+        void runRoundPersist(round)
+      }, 300)
+    },
+    [runRoundPersist]
+  )
 
-  scheduleSeatingPersistRef.current = scheduleSeatingPersist
+  /** 드래그로 참가자 1명을 옮길 때: 단건 upsert. 실패 시에만 라운드 단위 재시도로 폴백. */
+  const persistParticipantMove = useCallback(
+    (round: number, participantId: string, tableLabel: string | null) => {
+      const s = sessionRef.current
+      if (!s?.id) return
+      const todayStr = todayYYYYMMDDSeoul()
+      void persistParticipantAssignment({
+        postingId: s.id,
+        sessionDate: todayStr,
+        round,
+        participantId,
+        tableLabel,
+      }).catch((err) => {
+        console.error('[arrange] participant assign persist failed:', err)
+        const p = participantsRef.current.find((x) => x.id === participantId)
+        toast.error(`${p?.name || '참가자'}님 배치 저장에 실패했습니다. 자동으로 재시도합니다.`, {
+          id: `assign-fail-${participantId}`,
+        })
+        scheduleRoundPersist(round)
+      })
+    },
+    [scheduleRoundPersist]
+  )
 
-  const flushSeatingPersistSoon = useCallback(() => {
-    if (!readyForPersistRef.current) return
-    markLocalSeatingEdit()
-    if (seatingPersistTimerRef.current) {
-      clearTimeout(seatingPersistTimerRef.current)
-    }
-    seatingPersistTimerRef.current = setTimeout(() => {
-      seatingPersistTimerRef.current = null
-      void runSeatingPersist()
-    }, 50)
-  }, [markLocalSeatingEdit, runSeatingPersist])
-
+  // rounds 상태가 바뀔 때마다 "실제로 바뀐 라운드"만 골라 라운드 단위로 persist 예약.
+  // (참조 비교: 안 바뀐 라운드는 setRounds에서도 같은 객체 참조를 유지하는 불변 업데이트 패턴을 씀)
   useEffect(() => {
     if (!readyForPersistRef.current || !session?.id) return
-    if (applyingRemoteSeatingRef.current) {
-      pendingPersistAfterRemoteRef.current = true
-      return
-    }
-    scheduleSeatingPersist()
-  }, [rounds, langTableCounts, session?.id, scheduleSeatingPersist])
+    const prev = prevRoundsSnapshotRef.current
+    rounds.forEach((r, idx) => {
+      if (prev[idx] !== r) {
+        scheduleRoundPersist(r.round)
+      }
+    })
+    prevRoundsSnapshotRef.current = rounds
+  }, [rounds, session?.id, scheduleRoundPersist])
 
   useEffect(() => {
     return () => {
-      if (seatingPersistTimerRef.current) {
-        clearTimeout(seatingPersistTimerRef.current)
-      }
+      Object.values(roundPersistTimerRef.current).forEach((t) => {
+        if (t) clearTimeout(t)
+      })
       if (suppressParticipantRefreshTimerRef.current) {
         clearTimeout(suppressParticipantRefreshTimerRef.current)
       }
@@ -1014,9 +971,38 @@ export default function AdminArrangePage() {
     showCheckinModalForResponse,
   ])
 
+  // seating_assignments/postings 변경을 전체 reload가 아니라 "머지"로 반영.
+  // 참가자 단건 upsert·라운드 단위 replace 어느 쪽이 서버에 반영되든, 결과로 오는
+  // INSERT/UPDATE/DELETE 이벤트를 그대로 로컬 상태에 병합하면 되므로 타이밍 문제(suppress
+  // 타이머로 원격 반영을 막았다 재개하는 방식)가 구조적으로 필요 없어짐.
   useEffect(() => {
     const postingId = session?.id
     if (!postingId) return
+
+    // 이 병합으로 만들어진 라운드는 "이미 서버와 일치"하는 상태이므로,
+    // 곧바로 되돌려 persist(echo)하지 않도록 prevRoundsSnapshotRef를 함께 갱신해 둔다.
+    const mergeAssignment = (round: number, participantId: string, tableLabel: string | null) => {
+      setRounds((prev) => {
+        const idx = prev.findIndex((r) => r.round === round)
+        if (idx === -1) return prev
+        const current = prev[idx].assignments
+        const nextAssignments = setParticipantTableAssignment(current, participantId, tableLabel)
+        const unchanged =
+          current.length === nextAssignments.length &&
+          current.every(
+            (a, i) =>
+              a.participant_id === nextAssignments[i]?.participant_id &&
+              a.table_label === nextAssignments[i]?.table_label
+          )
+        if (unchanged) return prev
+        const next = [...prev]
+        next[idx] = { ...prev[idx], assignments: nextAssignments }
+        const snap = [...prevRoundsSnapshotRef.current]
+        snap[idx] = next[idx]
+        prevRoundsSnapshotRef.current = snap
+        return next
+      })
+    }
 
     const channel = supabase
       .channel(`seating-live-${postingId}`)
@@ -1028,9 +1014,71 @@ export default function AdminArrangePage() {
           table: 'seating_assignments',
           filter: `posting_id=eq.${postingId}`,
         },
-        () => {
-          if (suppressRemoteReloadRef.current) return
-          void reloadSeatingFromServer()
+        (payload) => {
+          const todayStr = todayYYYYMMDDSeoul()
+          if (payload.eventType === 'DELETE') {
+            const old = payload.old as {
+              round?: number
+              participant_id?: string
+              session_date?: string | null
+            }
+            if (
+              old?.round != null &&
+              old.participant_id &&
+              (old.session_date === todayStr || old.session_date == null)
+            ) {
+              mergeAssignment(old.round, old.participant_id, null)
+            }
+            return
+          }
+          const row = payload.new as {
+            round?: number
+            participant_id?: string | null
+            table_label?: string | null
+            session_date?: string | null
+          }
+          if (
+            row?.round != null &&
+            row.participant_id &&
+            row.table_label &&
+            (row.session_date === todayStr || row.session_date == null)
+          ) {
+            mergeAssignment(row.round, row.participant_id, row.table_label)
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'postings',
+          filter: `id=eq.${postingId}`,
+        },
+        (payload) => {
+          const row = payload.new as { seating_config?: SeatingConfigPayload | null }
+          const cfg = row?.seating_config
+          if (!cfg) return
+          if (cfg.langTableCounts) setLangTableCounts(cfg.langTableCounts)
+          if (cfg.tableLanguagesByRound || cfg.tableOrderByRound) {
+            setRounds((prev) => {
+              const next = prev.map((r, idx) => {
+                const lang = cfg.tableLanguagesByRound?.[String(r.round)]
+                const order = cfg.tableOrderByRound?.[String(r.round)]
+                if (!lang && !order) return r
+                const merged = {
+                  ...r,
+                  tableLanguages: lang ?? r.tableLanguages,
+                  tableOrder: order ?? r.tableOrder,
+                }
+                const snap = [...prevRoundsSnapshotRef.current]
+                snap[idx] = merged
+                prevRoundsSnapshotRef.current = snap
+                return merged
+              })
+              return next
+            })
+          }
         }
       )
       .subscribe()
@@ -1038,7 +1086,7 @@ export default function AdminArrangePage() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [supabase, session?.id, reloadSeatingFromServer])
+  }, [supabase, session?.id])
 
   const fetchData = async () => {
     readyForPersistRef.current = false
@@ -1156,15 +1204,12 @@ export default function AdminArrangePage() {
         checkedIds
       )
       if (loadedRounds.some((r) => r.assignments.length > 0)) {
-        applyingRemoteSeatingRef.current = true
         setRounds(loadedRounds)
-        requestAnimationFrame(() => {
-          finishApplyingRemoteSeating()
-          readyForPersistRef.current = true
-        })
+        prevRoundsSnapshotRef.current = loadedRounds
       } else {
-        readyForPersistRef.current = true
+        prevRoundsSnapshotRef.current = roundsRef.current
       }
+      readyForPersistRef.current = true
 
       setLoading(false)
     } catch (err) {
@@ -1640,7 +1685,6 @@ export default function AdminArrangePage() {
 
       const { error: responseErr } = await supabase.rpc('admin_delete_form_response', {
         p_response_id: p.id,
-        p_refund_coupon: true,
       })
       if (responseErr) throw responseErr
 
@@ -1673,11 +1717,11 @@ export default function AdminArrangePage() {
         return
       }
 
-      if (seatingPersistTimerRef.current) {
-        clearTimeout(seatingPersistTimerRef.current)
-        seatingPersistTimerRef.current = null
-        await runSeatingPersist()
+      if (roundPersistTimerRef.current[roundNum]) {
+        clearTimeout(roundPersistTimerRef.current[roundNum]!)
+        roundPersistTimerRef.current[roundNum] = null
       }
+      await runRoundPersist(roundNum)
 
       const attendees = participantsRef.current.filter((p) => p.checked_in_at)
       setNotifyingRound(roundNum)
@@ -1739,7 +1783,7 @@ export default function AdminArrangePage() {
         setNotifyingRound(null)
       }
     },
-    [runSeatingPersist, session]
+    [runRoundPersist, session]
   )
 
   // --- DnD Handlers ---
@@ -1851,7 +1895,6 @@ export default function AdminArrangePage() {
         roundsRef.current = next
         return next
       })
-      scheduleSeatingPersist()
 
       try {
         const res = await fetch('/api/admin/manual-uncheckin', {
@@ -1874,12 +1917,11 @@ export default function AdminArrangePage() {
         })
         setRounds(prevRounds)
         roundsRef.current = prevRounds
-        scheduleSeatingPersist()
         toast.error('체크인 해제에 실패했습니다.')
         throw new Error('uncheckin_failed')
       }
     },
-    [markLocalSeatingEdit, scheduleSeatingPersist]
+    [markLocalSeatingEdit]
   )
 
   const applyRoundAssignmentUpdate = useCallback(
@@ -1895,6 +1937,11 @@ export default function AdminArrangePage() {
           assignments: updater(currentAssignments),
         }
         roundsRef.current = newRounds
+        // 이 변경은 commitAssignment가 별도로 단건 upsert를 이미 호출하므로,
+        // 라운드 단위 generic effect가 같은 내용을 중복으로 다시 저장(echo)하지 않도록 표시.
+        const snap = [...prevRoundsSnapshotRef.current]
+        snap[roundIdx] = newRounds[roundIdx]
+        prevRoundsSnapshotRef.current = snap
         return newRounds
       })
     },
@@ -1935,7 +1982,6 @@ export default function AdminArrangePage() {
           roundsRef.current = next
           return next
         })
-        flushSeatingPersistSoon()
         return
       }
 
@@ -1944,12 +1990,14 @@ export default function AdminArrangePage() {
       const activeParticipant = participantsRef.current.find((p) => p.id === activeId)
       if (!activeParticipant) return
 
-      let assignmentChanged = false
+      // 참가자 1명을 옮길 때마다 그 참가자·그 라운드 행 1건만 즉시 upsert.
+      // 다른 참가자·다른 라운드 데이터를 절대 건드리지 않으므로, 다른 관리자가
+      // 동시에 다른 참가자를 옮겨도 서로 덮어쓸 일이 없다.
       const commitAssignment = (targetRound: number, tableLabel: string | null) => {
-        assignmentChanged = true
         applyRoundAssignmentUpdate(targetRound, (currentAssignments) =>
           setParticipantTableAssignment(currentAssignments, activeId, tableLabel)
         )
+        persistParticipantMove(targetRound, activeId, tableLabel)
       }
 
       const overContainerRound =
@@ -2016,7 +2064,6 @@ export default function AdminArrangePage() {
 
     if (isOverUnassigned && !assignTableLabel) {
       commitAssignment(targetRound, null)
-      flushSeatingPersistSoon()
       return
     }
 
@@ -2070,10 +2117,9 @@ export default function AdminArrangePage() {
         commitAssignment(targetRound, null)
       }
     }
-
-    if (assignmentChanged) {
-      flushSeatingPersistSoon()
-    }
+    } catch (err) {
+      console.error('[arrange] onDragEnd:', err)
+      toast.error('배치 처리 중 오류가 발생했습니다. 새로고침 후 다시 시도해 주세요.')
     } finally {
       activeDragIdRef.current = null
     }

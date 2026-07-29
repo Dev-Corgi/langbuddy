@@ -117,6 +117,11 @@ export async function loadSeatingLiveState(
   return { rounds, langTableCounts }
 }
 
+/**
+ * @deprecated 세션 전체(1~3라운드)를 매번 통째로 replace하는 구버전 방식.
+ * 드래그 한 번마다 반복 호출되면 다른 참가자/라운드의 변경을 덮어쓸 위험이 있어
+ * persistParticipantAssignment / persistRoundSeating으로 대체됨.
+ */
 export async function persistSeatingLive(params: {
   postingId: string
   sessionDate: string
@@ -142,5 +147,53 @@ export async function persistSeatingLive(params: {
     const body = (await res.json().catch(() => ({}))) as { error?: string }
     const err = new Error(body.error || 'persist_failed') as Error & { message: string }
     throw err
+  }
+}
+
+/** 드래그로 참가자 1명을 옮길 때: 그 참가자의 그 라운드 행 1건만 upsert/delete. */
+export async function persistParticipantAssignment(params: {
+  postingId: string
+  sessionDate: string
+  round: number
+  participantId: string
+  tableLabel: string | null
+}): Promise<void> {
+  const res = await fetch('/api/admin/seating-live/assign-participant', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(body.error || 'assign_failed')
+  }
+}
+
+/** 테이블 추가/삭제/순서변경/자동배치 등 "라운드 단위" 구조 변경: 해당 라운드 하나만 replace. */
+export async function persistRoundSeating(params: {
+  postingId: string
+  sessionDate: string
+  round: number
+  tableLanguages: Record<string, string>
+  tableOrder?: string[] | null
+  langTableCounts?: Record<string, number> | null
+  assignments: Assignment[]
+  checkedParticipantIds: Set<string>
+}): Promise<void> {
+  const { checkedParticipantIds, ...rest } = params
+
+  const res = await fetch('/api/admin/seating-live/replace-round', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...rest,
+      checkedParticipantIds: [...checkedParticipantIds],
+    }),
+  })
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(body.error || 'persist_failed')
   }
 }

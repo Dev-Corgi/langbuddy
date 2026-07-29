@@ -176,7 +176,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const nextAnswers = {
       ...prevAnswers,
       _payment_method: '계좌이체',
-      _le_free_coupon: false,
     }
 
     const payment_status =

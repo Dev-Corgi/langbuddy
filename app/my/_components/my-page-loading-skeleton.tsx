@@ -1,6 +1,5 @@
 import { MainNav } from '@/app/_components/main-nav'
 import { MyPageHeaderSkeleton } from './my-page-header-skeleton'
-import { StampRewardsCardSkeleton } from './stamp-rewards-card-skeleton'
 import { ScheduleCalendarCardSkeleton } from './schedule-calendar-card-skeleton'
 import { ApplicationsListCardSkeleton } from './applications-list-card-skeleton'
 import { SeatingHistoryCardSkeleton } from './seating-history-card-skeleton'
@@ -11,10 +10,7 @@ export function MyPageLoadingSkeleton() {
       <MainNav />
       <main className="mx-auto max-w-5xl space-y-8 px-4 py-8 md:px-6 md:py-12">
         <MyPageHeaderSkeleton />
-        <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
-          <StampRewardsCardSkeleton />
-          <ScheduleCalendarCardSkeleton />
-        </div>
+        <ScheduleCalendarCardSkeleton />
         <ApplicationsListCardSkeleton />
         <SeatingHistoryCardSkeleton />
       </main>

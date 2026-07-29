@@ -7,7 +7,6 @@ import { useLocale } from '@/hooks/use-locale'
 import { i18n } from '@/lib/i18n'
 import { useMyPageData } from '../_hooks/use-my-page-data'
 import { MyPageHeader } from './my-page-header'
-import { StampRewardsCard } from './stamp-rewards-card'
 import { ScheduleCalendarCard } from './schedule-calendar-card'
 import { ApplicationsListCard } from './applications-list-card'
 import { SeatingHistoryCard } from './seating-history-card'
@@ -23,8 +22,6 @@ export function MyPageShell() {
     useMyPageData(isEn)
 
   const greetingName = userRow?.name || user?.email?.split('@')[0] || ''
-  const stampSlots = 10
-  const stampFill = Math.min(stampSlots, Number(userRow?.le_stamp_progress ?? 0))
 
   const weekLabels = isEn
     ? (['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const)
@@ -49,22 +46,14 @@ export function MyPageShell() {
       <main className="mx-auto max-w-5xl space-y-8 px-4 py-8 md:px-6 md:py-12">
         <MyPageHeader title={t.title} greeting={t.greeting} displayName={greetingName} />
 
-        <div className="grid gap-6 lg:grid-cols-2 lg:gap-8 lg:items-stretch">
-          <StampRewardsCard
-            title={t.stampTitle}
-            hint={t.stampHint}
-            stampSlots={stampSlots}
-            filled={stampFill}
-          />
-          <ScheduleCalendarCard
-            title={t.calendarTitle}
-            prevLabel={t.prevMonth}
-            nextLabel={t.nextMonth}
-            weekLabels={[...weekLabels]}
-            markedDates={markedDates}
-            isEn={isEn}
-          />
-        </div>
+        <ScheduleCalendarCard
+          title={t.calendarTitle}
+          prevLabel={t.prevMonth}
+          nextLabel={t.nextMonth}
+          weekLabels={[...weekLabels]}
+          markedDates={markedDates}
+          isEn={isEn}
+        />
 
         <ApplicationsListCard
           title={t.applicationsTitle}

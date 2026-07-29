@@ -9,7 +9,6 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import type { AdminCheckinModalPayload } from '@/lib/admin-checkin-display'
-import { StampProgressEditor } from '@/components/admin/stamp-progress-editor'
 
 export type QrScanResultSheetPayload = AdminCheckinModalPayload
 
@@ -62,9 +61,6 @@ export function QrScanResultSheet({ open, onOpenChange, payload }: Props) {
               <InfoRow label="이름" value={payload.name} />
               <InfoRow label="한국인/외국인" value={payload.nationalityLabel} />
               <InfoRow label="결제 수단" value={payload.paymentMethod} />
-              {payload.sessionUsedCoupon ? (
-                <InfoRow label="이번 신청" value="쿠폰사용 (실물 확인)" />
-              ) : null}
               <InfoRow label="선택 음료" value={payload.drink} />
               {payload.showTable === false && (
                 <InfoRow label="배치된 자리" value="—" />
@@ -72,17 +68,6 @@ export function QrScanResultSheet({ open, onOpenChange, payload }: Props) {
             </div>
           )}
 
-          {payload?.stampEditable && payload.userId ? (
-            <StampProgressEditor
-              userId={payload.userId}
-              initialSlider={payload.stampSlider}
-              resetKey={`${payload.userId}-${payload.stampSlider}`}
-            />
-          ) : payload ? (
-            <p className="text-xs font-medium text-muted-foreground text-center py-2">
-              비회원(현장 추가) — 스탬프 없음
-            </p>
-          ) : null}
         </div>
 
         <DialogFooter className="p-5 pt-2 border-t bg-background shrink-0 sm:justify-stretch">

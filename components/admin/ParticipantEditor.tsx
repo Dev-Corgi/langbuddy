@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { StampProgressEditor, type StampProgressEditorHandle } from '@/components/admin/stamp-progress-editor'
 import { PaymentMethodFields } from '@/components/admin/payment-method-fields'
 import { SUPPORTED_LANGUAGES } from '@/lib/supported-languages'
 import {
@@ -76,8 +75,6 @@ export function ParticipantEditor({
   const [pendingReceiptPreview, setPendingReceiptPreview] = useState<string | null>(null)
   const [flushing, setFlushing] = useState(false)
   const [checkinBusy, setCheckinBusy] = useState(false)
-  const [stampDirty, setStampDirty] = useState(false)
-  const stampEditorRef = useRef<StampProgressEditorHandle>(null)
   const pendingPreviewRef = useRef<string | null>(null)
 
   const savedFieldsRef = useRef<SavedFields>({
@@ -106,7 +103,6 @@ export function ParticipantEditor({
     setReceiptUrl(participant.paymentReceiptUrl ?? null)
     setPaymentStatus(participant.paymentStatus ?? null)
     clearPendingReceiptPreview()
-    setStampDirty(false)
     savedFieldsRef.current = {
       name: participant.name,
       gender: participant.gender,
@@ -153,12 +149,8 @@ export function ParticipantEditor({
 
   const hasPendingChanges = useCallback(() => {
     const patch = buildPatch()
-    return (
-      hasFieldChanges(patch) ||
-      pendingReceiptFile != null ||
-      stampDirty
-    )
-  }, [buildPatch, hasFieldChanges, pendingReceiptFile, stampDirty])
+    return hasFieldChanges(patch) || pendingReceiptFile != null
+  }, [buildPatch, hasFieldChanges, pendingReceiptFile])
 
   const persistFieldsIfChanged = useCallback(
     async (patch: Participant): Promise<boolean> => {
@@ -199,10 +191,7 @@ export function ParticipantEditor({
       patch.paymentStatus = updated.paymentStatus ?? 'pending'
     }
 
-    const fieldsOk = await persistFieldsIfChanged(patch)
-    if (!fieldsOk) return false
-
-    return (await stampEditorRef.current?.flushPendingSave()) ?? true
+    return persistFieldsIfChanged(patch)
   }, [
     buildPatch,
     clearPendingReceiptPreview,
@@ -336,8 +325,7 @@ export function ParticipantEditor({
 
   const busy = flushing || checkinBusy || isDeleting
   const checkedIn = Boolean(participant.checked_in_at)
-  const dirty =
-    hasFieldChanges(buildPatch()) || pendingReceiptFile != null || stampDirty
+  const dirty = hasFieldChanges(buildPatch()) || pendingReceiptFile != null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -486,21 +474,6 @@ export function ParticipantEditor({
                 )}
                 체크인
               </Button>
-            )}
-
-            {participant.userId ? (
-              <StampProgressEditor
-                ref={stampEditorRef}
-                userId={participant.userId}
-                resetKey={participant.id}
-                disabled={busy}
-                autoSave={false}
-                onDirtyChange={setStampDirty}
-              />
-            ) : (
-              <p className="text-xs font-medium text-muted-foreground text-center py-1">
-                비회원(현장 추가) — 스탬프 없음
-              </p>
             )}
 
             {onDelete ? (

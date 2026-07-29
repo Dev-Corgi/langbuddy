@@ -3,7 +3,6 @@ import {
   type CoreFormQuestion,
 } from '@/lib/utils'
 import { normalizeNationality } from '@/lib/form-answer-canonical'
-import { isCouponApplication, storedStampToSlider } from '@/lib/le-stamp'
 import { formatPaymentMethodLabel as formatCanonicalPaymentMethodLabel } from '@/lib/supported-payment-methods'
 import {
   fetchSeatingRowsForToday,
@@ -21,10 +20,6 @@ export type AdminCheckinModalPayload = {
   /** 자리배치 화면 등에서만 표시 */
   showTable: boolean
   userId: string | null
-  /** DB 0~9 → 모달 슬라이더 초기값 */
-  stampSlider: number | null
-  sessionUsedCoupon: boolean
-  stampEditable: boolean
 }
 
 export function normalizeNationalityLabel(raw: string): string {
@@ -57,7 +52,6 @@ export function buildCheckinModalPayloadFromResponse(
   table: { label: string | null; undecided: boolean },
   options?: {
     showTable?: boolean
-    stampProgress?: number | null
   }
 ): AdminCheckinModalPayload {
   const answers = (row.answers || {}) as Record<string, unknown>
@@ -68,7 +62,6 @@ export function buildCheckinModalPayloadFromResponse(
     info.nationality || ans.nationality || ans.국적 || '—'
   const drink = info.drink || ans.drink || ans.음료 || '—'
   const userId = row.user_id ?? null
-  const stampProgress = options?.stampProgress ?? null
 
   return {
     name,
@@ -79,12 +72,6 @@ export function buildCheckinModalPayloadFromResponse(
     tableLabel: table.label,
     showTable: options?.showTable ?? true,
     userId,
-    stampSlider:
-      userId != null && stampProgress != null
-        ? storedStampToSlider(stampProgress)
-        : null,
-    sessionUsedCoupon: isCouponApplication(answers),
-    stampEditable: userId != null,
   }
 }
 
@@ -98,20 +85,7 @@ export async function buildLangCheckinModalPayload(
   const rows = await fetchSeatingRowsForToday(supabase, postingId, todayYmdSeoul)
   const table = tableLabelForParticipantFromDb(rows, row.id)
 
-  let stampProgress: number | null = null
-  if (row.user_id) {
-    const { data: userRow } = await supabase
-      .from('users')
-      .select('le_stamp_progress')
-      .eq('id', row.user_id)
-      .maybeSingle()
-    if (userRow) {
-      stampProgress = Number(userRow.le_stamp_progress ?? 0)
-    }
-  }
-
   return buildCheckinModalPayloadFromResponse(row, questions, table, {
     showTable: true,
-    stampProgress,
   })
 }

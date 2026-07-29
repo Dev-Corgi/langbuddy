@@ -38,8 +38,8 @@ export function SeatingHistoryCard({
         <CardDescription>
           {sessions.length > 0
             ? isEn
-              ? 'Language exchange sessions from the last 30 days. Click a session to see your tablemates.'
-              : '최근 30일간 참여한 언어교환 목록입니다. 세션을 클릭하면 같은 테이블 참가자를 확인할 수 있어요.'
+              ? 'Language exchange sessions from the last 2 months. Click a session to see your tablemates.'
+              : '최근 2개월간 참여한 언어교환 목록입니다. 세션을 클릭하면 같은 테이블 참가자를 확인할 수 있어요.'
             : isEn
               ? 'No saved seating yet.'
               : '저장된 배치가 없습니다.'}

@@ -42,22 +42,60 @@ export default async function SessionDetailPage({
     .select('id')
     .eq('user_id', user.id)
 
-  if (!myResponses?.length) {
-    redirect('/my')
-  }
-
-  const myResponseIds = myResponses.map((r) => r.id)
+  const myResponseIds = (myResponses || []).map((r) => r.id)
 
   // 사용자가 이 세션에 배치되어 있는지 확인
-  const { data: myAssignments } = await admin
-    .from('seating_assignments')
-    .select('participant_id, round, table_label')
-    .eq('posting_id', posting_id)
-    .eq('session_date', session_date)
-    .in('participant_id', myResponseIds)
+  const { data: myAssignments } = myResponseIds.length
+    ? await admin
+        .from('seating_assignments')
+        .select('participant_id, round, table_label')
+        .eq('posting_id', posting_id)
+        .eq('session_date', session_date)
+        .in('participant_id', myResponseIds)
+    : { data: null }
 
+  // 매주 일요일 초기화로 이 세션의 실시간 데이터가 이미 삭제된 경우,
+  // 삭제 직전에 남겨둔 스냅샷(le_participation_archive)으로 대체 표시.
+  // (아카이브 경로는 원본 form_responses가 이미 삭제된 상태라 신고 기능은 비활성화됨)
   if (!myAssignments?.length) {
-    redirect('/my')
+    const { data: archiveRows } = await admin
+      .from('le_participation_archive')
+      .select('id, response_id, round, table_label, mates')
+      .eq('user_id', user.id)
+      .eq('posting_id', posting_id)
+      .eq('session_date', session_date)
+      .order('round', { ascending: true })
+
+    if (!archiveRows?.length) {
+      redirect('/my')
+    }
+
+    const archivedRounds: SessionRound[] = archiveRows.map((row) => ({
+      round: row.round as number,
+      tableLabel: String(row.table_label),
+      mates: ((row.mates as Array<{
+        name?: string
+        nationality?: string
+        language?: string
+        gender?: string
+      }> | null) || []).map((m, idx) => ({
+        responseId: `archive-${row.id}-${idx}`,
+        name: m.name || '(이름 없음)',
+        nationality: m.nationality || '',
+        language: m.language || '',
+        gender: m.gender || '',
+      })),
+    }))
+
+    return (
+      <SessionDetailShell
+        postingId={posting_id}
+        sessionDate={session_date}
+        rounds={archivedRounds}
+        myResponseIdByRound={{}}
+        reportedSet={[]}
+      />
+    )
   }
 
   // 사용자의 라운드별 (round → table_label) 맵

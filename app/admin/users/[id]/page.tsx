@@ -34,7 +34,6 @@ export default function AdminUserDetailPage() {
   const [gender, setGender] = useState<'남' | '여'>('남')
   const [nationality, setNationality] = useState<'한국인' | '외국인'>('한국인')
   const [kakaoId, setKakaoId] = useState('')
-  const [stampProgress, setStampProgress] = useState(0)
   const [onboardingCompleted, setOnboardingCompleted] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
 
@@ -43,7 +42,6 @@ export default function AdminUserDetailPage() {
     setGender((u.gender === '여' ? '여' : '남') as '남' | '여')
     setNationality((u.nationality === '외국인' ? '외국인' : '한국인') as '한국인' | '외국인')
     setKakaoId(u.kakao_id ?? '')
-    setStampProgress(Number(u.le_stamp_progress ?? 0))
     setOnboardingCompleted(!!u.onboarding_completed)
     setIsAdmin(!!u.is_admin)
   }, [])
@@ -86,7 +84,6 @@ export default function AdminUserDetailPage() {
           gender,
           nationality,
           kakao_id: kakaoId.trim(),
-          le_stamp_progress: stampProgress,
           onboarding_completed: onboardingCompleted,
           is_admin: isAdmin,
         }),
@@ -143,9 +140,6 @@ export default function AdminUserDetailPage() {
       : isEn
         ? 'Member'
         : '일반 회원'
-
-  const stampSlots = 10
-  const stampFill = Math.min(stampSlots, Number(user.le_stamp_progress ?? 0))
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6 pb-24">
@@ -293,55 +287,6 @@ export default function AdminUserDetailPage() {
                 : '슈퍼 관리자 권한은 여기서 변경할 수 없습니다.'}
             </p>
           ) : null}
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-[24px] border-none shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg font-black">
-            {isEn ? 'Language exchange stamps' : '언어교환 스탬프'}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {editing ? (
-            <div className="space-y-2">
-              <Label className="font-bold">
-                {isEn ? 'Stamp count (0–9, 10→0 at venue)' : '스탬프 (0–9)'}
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                max={9}
-                value={stampProgress}
-                onChange={(e) => setStampProgress(Math.min(9, Math.max(0, Number(e.target.value) || 0)))}
-                className="h-12 rounded-xl"
-              />
-            </div>
-          ) : (
-            <div>
-              <p className="text-sm font-bold text-muted-foreground mb-3">
-                {isEn ? 'Progress toward physical coupon (10 stamps)' : '실물 쿠폰까지 (10개)'}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {Array.from({ length: stampSlots }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      'size-8 rounded-full border-2 flex items-center justify-center text-xs font-black',
-                      i < stampFill
-                        ? 'bg-primary border-primary text-primary-foreground'
-                        : 'border-border text-muted-foreground'
-                    )}
-                  >
-                    {i + 1}
-                  </div>
-                ))}
-              </div>
-              <p className="text-sm font-bold mt-3 text-foreground">
-                {stampFill}/10 {isEn ? 'stamps' : '개'}
-              </p>
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>

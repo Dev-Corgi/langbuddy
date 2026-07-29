@@ -193,7 +193,6 @@ export async function POST(request: NextRequest) {
 
     const { error: delErr } = await admin.rpc('admin_delete_form_response', {
       p_response_id: responseId,
-      p_refund_coupon: true,
     })
 
     if (delErr) {

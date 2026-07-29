@@ -4,7 +4,6 @@ import {
   type CanonicalFormQuestion,
 } from '@/lib/form-answer-canonical'
 import {
-  couponFlagForMethod,
   defaultPaymentStatusForMethod,
   isSupportedPaymentMethod,
   type PaymentMethod,
@@ -67,7 +66,6 @@ export function mergeParticipantFieldPatchIntoAnswers(
 
   if (fields.paymentMethod && isSupportedPaymentMethod(fields.paymentMethod)) {
     next._payment_method = fields.paymentMethod
-    next._le_free_coupon = couponFlagForMethod(fields.paymentMethod)
     const hasReceipt = Boolean(options?.hasReceipt)
     if (fields.paymentMethod === '계좌이체') {
       if (options?.previousPaymentStatus === 'confirmed' && hasReceipt) {

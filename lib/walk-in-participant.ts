@@ -3,7 +3,7 @@ import {
   type CoreFormQuestion,
 } from '@/lib/utils'
 import { normalizeLanguage, normalizeParticipantFields } from '@/lib/form-answer-canonical'
-import { normalizePaymentMethod, couponFlagForMethod, type PaymentMethod } from '@/lib/supported-payment-methods'
+import { normalizePaymentMethod, type PaymentMethod } from '@/lib/supported-payment-methods'
 
 export const WALK_IN_SOURCE = 'admin_manual' as const
 
@@ -34,7 +34,6 @@ export function buildWalkInAnswers(input: WalkInParticipantInput): Record<string
     _selected_day: input.selectedDay,
     _selected_language: languageKo,
     _payment_method: paymentMethod,
-    _le_free_coupon: couponFlagForMethod(paymentMethod),
     name,
     gender: input.gender,
     nationality: input.nationality,

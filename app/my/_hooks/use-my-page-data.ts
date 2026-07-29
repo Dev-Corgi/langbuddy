@@ -17,8 +17,6 @@ export function useMyPageData(isEn: boolean) {
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
   const [userRow, setUserRow] = useState<{
     name?: string
-    le_stamp_progress?: number
-    le_reward_coupons?: number
   } | null>(null)
   const [showAuth, setShowAuth] = useState(false)
   const [applications, setApplications] = useState<ApplicationRow[]>([])
@@ -46,7 +44,7 @@ export function useMyPageData(isEn: boolean) {
 
     const { data: profile } = await supabase
       .from('users')
-      .select('name, le_stamp_progress, le_reward_coupons')
+      .select('name')
       .eq('id', u.id)
       .single()
     setUserRow(profile || {})
@@ -124,116 +122,135 @@ export function useMyPageData(isEn: boolean) {
 
     const leResponses = (responses || []).filter((r) => leFormIds.has(r.form_id as string))
     const myParticipantIds = leResponses.map((r) => r.id)
-    if (myParticipantIds.length === 0) {
-      setSeatingHistory([])
-      setReady(true)
-      return
+
+    // 실시간(이번 주) 자리배치 — 매주 일요일 초기화되므로 지난 주 이전 기록은 여기 없음.
+    const history: SeatingMemory[] = []
+    if (myParticipantIds.length > 0) {
+      const { data: myAssignments } = await supabase
+        .from('seating_assignments')
+        .select('*')
+        .in('participant_id', myParticipantIds)
+
+      if (myAssignments?.length) {
+        const resById = Object.fromEntries(leResponses.map((r) => [r.id, r])) as Record<
+          string,
+          { answers?: Record<string, unknown> }
+        >
+
+        // Batch-fetch ALL seating assignments for the same postings+sessions at once
+        // to avoid N+1 queries per assignment row.
+        const myParticipantIdSet = new Set(myParticipantIds)
+        const uniquePostingIds = [...new Set(myAssignments.map((a) => a.posting_id as string))]
+        const uniqueSessionDates = [
+          ...new Set(myAssignments.map((a) => a.session_date as string | null)),
+        ].filter((d): d is string => !!d)
+
+        // One query: all assignments for these postings (may include other sessions, filtered locally)
+        let allSessionAssignmentsQuery = supabase
+          .from('seating_assignments')
+          .select('participant_id, posting_id, round, table_label, session_date')
+          .in('posting_id', uniquePostingIds)
+        if (uniqueSessionDates.length > 0) {
+          allSessionAssignmentsQuery = allSessionAssignmentsQuery.in('session_date', uniqueSessionDates)
+        }
+        const { data: allSessionAssignments } = await allSessionAssignmentsQuery
+
+        // Build a lookup: `posting_id|session_date|round|table_label` → participant_id[]
+        const tableParticipants = new Map<string, string[]>()
+        for (const row of allSessionAssignments || []) {
+          const tableKey = `${row.posting_id}|${row.session_date ?? ''}|${row.round}|${row.table_label}`
+          const existing = tableParticipants.get(tableKey)
+          if (existing) {
+            existing.push(row.participant_id as string)
+          } else {
+            tableParticipants.set(tableKey, [row.participant_id as string])
+          }
+        }
+
+        // Collect ALL unique mate participant_ids across all assignments in one pass
+        const allMateIds = new Set<string>()
+        for (const a of myAssignments) {
+          const tableKey = `${a.posting_id}|${a.session_date ?? ''}|${a.round}|${a.table_label}`
+          const pids = tableParticipants.get(tableKey) || []
+          for (const pid of pids) {
+            if (!myParticipantIdSet.has(pid)) allMateIds.add(pid)
+          }
+        }
+
+        // One batch fetch for all mate form_responses
+        const mateAnswersById: Record<string, Record<string, unknown>> = {}
+        if (allMateIds.size > 0) {
+          const { data: matesRows } = await supabase
+            .from('form_responses')
+            .select('id, answers')
+            .in('id', [...allMateIds])
+          for (const row of matesRows || []) {
+            mateAnswersById[row.id as string] = (row.answers || {}) as Record<string, unknown>
+          }
+        }
+
+        const seen = new Set<string>()
+
+        for (const a of myAssignments) {
+          const fr = resById[a.participant_id as string]
+          const ev =
+            (a.session_date as string) ||
+            (typeof fr?.answers?._event_date === 'string'
+              ? String(fr.answers._event_date).slice(0, 10)
+              : null) ||
+            todayYYYYMMDDSeoul()
+          const dayKo = typeof fr?.answers?._selected_day === 'string' ? String(fr.answers._selected_day) : ''
+          const key = `${a.posting_id}|${ev}|${a.round}|${a.table_label}|${a.participant_id}`
+          if (seen.has(key)) continue
+          seen.add(key)
+
+          const tableKey = `${a.posting_id}|${a.session_date ?? ''}|${a.round}|${a.table_label}`
+          const mateIds = (tableParticipants.get(tableKey) || [])
+            .filter((pid) => !myParticipantIdSet.has(pid))
+
+          const mateNames = mateIds.map((pid) => {
+            const ans = mateAnswersById[pid]
+            if (!ans) return '?'
+            return extractParticipantInfoFromAnswers(ans, []).name || '?'
+          })
+
+          history.push({
+            key,
+            posting_id: a.posting_id as string,
+            session_date: (a.session_date as string) || ev,
+            round: a.round as number,
+            table_label: String(a.table_label),
+            dayLabel: dayKo,
+            mateNames,
+          })
+        }
+      }
     }
 
-    const { data: myAssignments } = await supabase
-      .from('seating_assignments')
-      .select('*')
-      .in('participant_id', myParticipantIds)
+    // 지난 주 이전 기록 — 매주 초기화 전에 스냅샷으로 보관된 아카이브 (최대 2개월)
+    const { data: archivedRows } = await supabase
+      .from('le_participation_archive')
+      .select('response_id, posting_id, session_date, round, table_label, day_label, mates')
+      .eq('user_id', u.id)
 
-    if (!myAssignments?.length) {
+    for (const a of archivedRows || []) {
+      const key = `archive|${a.response_id}|${a.round}`
+      history.push({
+        key,
+        posting_id: a.posting_id as string,
+        session_date: a.session_date as string | null,
+        round: a.round as number,
+        table_label: String(a.table_label),
+        dayLabel: (a.day_label as string) || '',
+        mateNames: ((a.mates as Array<{ name?: string }> | null) || []).map((m) => m.name || '?'),
+      })
+    }
+
+    if (history.length === 0) {
       setSeatingHistory([])
       setSeatingSessions([])
       setReady(true)
       return
-    }
-
-    const resById = Object.fromEntries(leResponses.map((r) => [r.id, r])) as Record<
-      string,
-      { answers?: Record<string, unknown> }
-    >
-
-    // Batch-fetch ALL seating assignments for the same postings+sessions at once
-    // to avoid N+1 queries per assignment row.
-    const myParticipantIdSet = new Set(myParticipantIds)
-    const uniquePostingIds = [...new Set(myAssignments.map((a) => a.posting_id as string))]
-    const uniqueSessionDates = [
-      ...new Set(myAssignments.map((a) => a.session_date as string | null)),
-    ].filter((d): d is string => !!d)
-
-    // One query: all assignments for these postings (may include other sessions, filtered locally)
-    let allSessionAssignmentsQuery = supabase
-      .from('seating_assignments')
-      .select('participant_id, posting_id, round, table_label, session_date')
-      .in('posting_id', uniquePostingIds)
-    if (uniqueSessionDates.length > 0) {
-      allSessionAssignmentsQuery = allSessionAssignmentsQuery.in('session_date', uniqueSessionDates)
-    }
-    const { data: allSessionAssignments } = await allSessionAssignmentsQuery
-
-    // Build a lookup: `posting_id|session_date|round|table_label` → participant_id[]
-    const tableParticipants = new Map<string, string[]>()
-    for (const row of allSessionAssignments || []) {
-      const tableKey = `${row.posting_id}|${row.session_date ?? ''}|${row.round}|${row.table_label}`
-      const existing = tableParticipants.get(tableKey)
-      if (existing) {
-        existing.push(row.participant_id as string)
-      } else {
-        tableParticipants.set(tableKey, [row.participant_id as string])
-      }
-    }
-
-    // Collect ALL unique mate participant_ids across all assignments in one pass
-    const allMateIds = new Set<string>()
-    for (const a of myAssignments) {
-      const tableKey = `${a.posting_id}|${a.session_date ?? ''}|${a.round}|${a.table_label}`
-      const pids = tableParticipants.get(tableKey) || []
-      for (const pid of pids) {
-        if (!myParticipantIdSet.has(pid)) allMateIds.add(pid)
-      }
-    }
-
-    // One batch fetch for all mate form_responses
-    const mateAnswersById: Record<string, Record<string, unknown>> = {}
-    if (allMateIds.size > 0) {
-      const { data: matesRows } = await supabase
-        .from('form_responses')
-        .select('id, answers')
-        .in('id', [...allMateIds])
-      for (const row of matesRows || []) {
-        mateAnswersById[row.id as string] = (row.answers || {}) as Record<string, unknown>
-      }
-    }
-
-    const history: SeatingMemory[] = []
-    const seen = new Set<string>()
-
-    for (const a of myAssignments) {
-      const fr = resById[a.participant_id as string]
-      const ev =
-        (a.session_date as string) ||
-        (typeof fr?.answers?._event_date === 'string'
-          ? String(fr.answers._event_date).slice(0, 10)
-          : null) ||
-        todayYYYYMMDDSeoul()
-      const dayKo = typeof fr?.answers?._selected_day === 'string' ? String(fr.answers._selected_day) : ''
-      const key = `${a.posting_id}|${ev}|${a.round}|${a.table_label}|${a.participant_id}`
-      if (seen.has(key)) continue
-      seen.add(key)
-
-      const tableKey = `${a.posting_id}|${a.session_date ?? ''}|${a.round}|${a.table_label}`
-      const mateIds = (tableParticipants.get(tableKey) || [])
-        .filter((pid) => !myParticipantIdSet.has(pid))
-
-      const mateNames = mateIds.map((pid) => {
-        const ans = mateAnswersById[pid]
-        if (!ans) return '?'
-        return extractParticipantInfoFromAnswers(ans, []).name || '?'
-      })
-
-      history.push({
-        key,
-        posting_id: a.posting_id as string,
-        session_date: (a.session_date as string) || ev,
-        round: a.round as number,
-        table_label: String(a.table_label),
-        dayLabel: dayKo,
-        mateNames,
-      })
     }
 
     history.sort((x, y) => {
@@ -244,10 +261,11 @@ export function useMyPageData(isEn: boolean) {
 
     setSeatingHistory(history)
 
-    // 최근 30일 세션 그룹핑
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-    const cutoff = thirtyDaysAgo.toISOString().slice(0, 10)
+    // 최근 2개월(60일) 세션 그룹핑 — 언어교환 응답은 매주 초기화되지만
+    // le_participation_archive 스냅샷으로 최대 2개월까지 보관됨
+    const twoMonthsAgo = new Date()
+    twoMonthsAgo.setDate(twoMonthsAgo.getDate() - 60)
+    const cutoff = twoMonthsAgo.toISOString().slice(0, 10)
 
     const sessionMap = new Map<string, SeatingSession>()
     for (const h of history) {

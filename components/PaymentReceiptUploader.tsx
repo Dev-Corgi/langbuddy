@@ -17,7 +17,18 @@ interface PaymentReceiptUploaderProps {
 }
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/jpg']
+// 아이폰 카메라로 찍은 사진은 image/heic, 일부 안드로이드 편집 앱은 image/webp로 저장되는 경우가 많아
+// 스크린샷(png/jpeg)만 허용하면 "업로드가 안 된다"는 문의가 다수 발생함. 확장자 기반 accept도 일부
+// 모바일 브라우저에서 갤러리 필터링 오류를 일으켜 image/*로 완화.
+const ALLOWED_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/jpg',
+  'image/heic',
+  'image/heif',
+  'image/webp',
+]
+const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp']
 
 export function PaymentReceiptUploader({ 
   onUploadComplete, 
@@ -29,14 +40,23 @@ export function PaymentReceiptUploader({
 }: PaymentReceiptUploaderProps) {
   const isEn = locale === 'en'
   const [preview, setPreview] = useState<string | null>(existingUrl || null)
+  const [previewBroken, setPreviewBroken] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const validateFile = (file: File): boolean => {
-    if (!ALLOWED_TYPES.includes(file.type)) {
+    // 일부 브라우저/OS(특히 iOS의 HEIC)는 file.type을 빈 문자열로 보고하는 경우가 있어
+    // 확장자로도 한 번 더 확인한다.
+    const ext = file.name.split('.').pop()?.toLowerCase() || ''
+    const typeOk = file.type ? ALLOWED_TYPES.includes(file.type) : ALLOWED_EXTENSIONS.includes(ext)
+    const extOk = ALLOWED_EXTENSIONS.includes(ext)
+
+    if (!typeOk && !extOk) {
       toast.error(
-        isEn ? 'Only JPG or PNG images are allowed.' : 'JPG 또는 PNG 형식의 이미지만 업로드 가능합니다.'
+        isEn
+          ? 'Only JPG, PNG, HEIC, or WEBP images are allowed.'
+          : 'JPG, PNG, HEIC, WEBP 형식의 이미지만 업로드 가능합니다.'
       )
       return false
     }
@@ -53,8 +73,9 @@ export function PaymentReceiptUploader({
     setIsUploading(true)
     
     try {
-      // 로컬 미리보기 생성
+      // 로컬 미리보기 생성 (HEIC 등 일부 포맷은 브라우저에 따라 렌더링되지 않을 수 있음)
       const localPreview = URL.createObjectURL(file)
+      setPreviewBroken(false)
       setPreview(localPreview)
       
       // 파일 객체를 부모 컴포넌트에 전달
@@ -98,6 +119,7 @@ export function PaymentReceiptUploader({
 
   const handleRemove = () => {
     setPreview(null)
+    setPreviewBroken(false)
     if (inputRef.current) inputRef.current.value = ''
     onRemove?.()
   }
@@ -113,7 +135,7 @@ export function PaymentReceiptUploader({
       <input
         ref={inputRef}
         type="file"
-        accept=".jpg,.jpeg,.png"
+        accept="image/*,.heic,.heif"
         onChange={handleChange}
         className="hidden"
         disabled={disabled || isUploading}
@@ -154,7 +176,7 @@ export function PaymentReceiptUploader({
                 </p>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                {isEn ? 'JPG, PNG (max 5MB)' : 'JPG, PNG (최대 5MB)'}
+                {isEn ? 'JPG, PNG, HEIC, WEBP (max 5MB)' : 'JPG, PNG, HEIC, WEBP (최대 5MB)'}
               </p>
             </div>
           )}
@@ -162,12 +184,22 @@ export function PaymentReceiptUploader({
       ) : (
         <div className="relative rounded-2xl overflow-hidden border border-border bg-muted/30">
           <div className="relative aspect-video">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img 
-              src={preview} 
-              alt="Payment receipt" 
-              className="w-full h-full object-contain"
-            />
+            {previewBroken ? (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                <ImageIcon className="w-10 h-10" />
+                <p className="text-xs font-medium">
+                  {isEn ? 'File selected (preview unavailable)' : '파일이 선택되었습니다 (미리보기 불가)'}
+                </p>
+              </div>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={preview}
+                alt="Payment receipt"
+                className="w-full h-full object-contain"
+                onError={() => setPreviewBroken(true)}
+              />
+            )}
           </div>
           {!disabled && (
             <Button
