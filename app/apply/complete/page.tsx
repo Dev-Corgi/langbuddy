@@ -108,25 +108,16 @@ export default function ApplicationCompletePage() {
         return
       }
 
-      let recurringKind: 'language' | 'study' | null = null
+      let recurringKind: 'language' | null = null
       if (response.form_id) {
-        const [{ data: leRow }, { data: stRow }] = await Promise.all([
-          supabase
-            .from('language_exchange_schedules')
-            .select('form_id')
-            .eq('form_id', response.form_id)
-            .eq('is_active', true)
-            .limit(1)
-            .maybeSingle(),
-          supabase
-            .from('study_schedules')
-            .select('form_id')
-            .eq('form_id', response.form_id)
-            .eq('is_active', true)
-            .limit(1)
-            .maybeSingle(),
-        ])
-        recurringKind = leRow ? 'language' : stRow ? 'study' : null
+        const { data: leRow } = await supabase
+          .from('language_exchange_schedules')
+          .select('form_id')
+          .eq('form_id', response.form_id)
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle()
+        recurringKind = leRow ? 'language' : null
       }
 
       setData({ ...response, _recurring_kind: recurringKind })
@@ -189,7 +180,7 @@ export default function ApplicationCompletePage() {
             data.answers?._event_date,
             data.created_at as string
           )
-          const kind = data._recurring_kind as 'language' | 'study' | null | undefined
+          const kind = data._recurring_kind as 'language' | null | undefined
           const builtAuto =
             kind && sessionYmdAuto.length >= 10
               ? buildRecurringSessionDisplayTitles(displayDayAuto, sessionYmdAuto, kind)
@@ -480,7 +471,7 @@ export default function ApplicationCompletePage() {
     sessionYmd && sessionYmd.length >= 10
       ? formatSessionDateLabel(sessionYmd, locale === 'en' ? 'en' : 'ko')
       : ''
-  const recurringKind = data?._recurring_kind as 'language' | 'study' | null | undefined
+  const recurringKind = data?._recurring_kind as 'language' | null | undefined
   const builtSessionTitles =
     recurringKind && sessionYmd.length >= 10
       ? buildRecurringSessionDisplayTitles(

@@ -55,14 +55,10 @@ export async function POST(request: NextRequest) {
       .from('language_exchange_schedules')
       .select('*', { count: 'exact', head: true })
       .eq('form_id', formId)
-    const { count: studyCount } = await admin
-      .from('study_schedules')
-      .select('*', { count: 'exact', head: true })
-      .eq('form_id', formId)
 
-    if (!langCount && !studyCount) {
+    if (!langCount) {
       return NextResponse.json(
-        { error: 'only_language_or_study_forms' },
+        { error: 'only_language_exchange_forms' },
         { status: 403 }
       )
     }
@@ -70,10 +66,9 @@ export async function POST(request: NextRequest) {
     const answers = (row.answers || {}) as Record<string, unknown>
     const selectedDay =
       typeof answers._selected_day === 'string' ? answers._selected_day.trim() : ''
-    const kind = langCount ? 'language' : 'study'
     let eventTitleEn = 'LangBuddy'
     if (selectedDay) {
-      eventTitleEn = buildAutoRecurringFormTitles(selectedDay, kind).title_en
+      eventTitleEn = buildAutoRecurringFormTitles(selectedDay, 'language').title_en
     } else {
       const { data: formMeta } = await admin
         .from('forms')

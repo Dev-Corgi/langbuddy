@@ -37,8 +37,26 @@ export function formatAnswerDisplay(raw: unknown): string {
   return String(raw)
 }
 
+// Questions that are noise for admins reviewing responses (long notice/agreement
+// checkboxes, open-ended icebreaker prompts, etc). Matched by substring so this
+// still works across cloned/recurring forms that get new question ids each week.
+const HIDDEN_QUESTION_TEXT_MATCHES: string[] = [
+  '노쇼 및 30분 이상 지각',
+  'no-show or late by more than',
+  '이야기해보고 싶은 주제',
+  'topics or questions would you like to discuss',
+]
+
+export function isQuestionHiddenFromAdmin(q: FormQuestionRecord): boolean {
+  const ko = q.question_text || ''
+  const en = (q.question_text_en || '').toLowerCase()
+  return HIDDEN_QUESTION_TEXT_MATCHES.some(
+    (needle) => ko.includes(needle) || en.includes(needle.toLowerCase())
+  )
+}
+
 export function getCustomFormQuestions(questions: FormQuestionRecord[]): FormQuestionRecord[] {
-  return questions.filter((q) => !q.system_key)
+  return questions.filter((q) => !q.system_key && !isQuestionHiddenFromAdmin(q))
 }
 
 export function buildResponseTableRows(
@@ -81,7 +99,16 @@ export function buildResponseTableRows(
   })
 }
 
+// Short admin-facing labels for system-keyed questions, which otherwise show
+// their full (often long) applicant-facing question text as a label.
+const SYSTEM_KEY_LABELS: Partial<Record<string, { ko: string; en: string }>> = {
+  language: { ko: '언어', en: 'Language' },
+  drink: { ko: '음료', en: 'Drink' },
+}
+
 export function getQuestionLabel(q: FormQuestionRecord, locale: 'ko' | 'en'): string {
+  const override = q.system_key ? SYSTEM_KEY_LABELS[q.system_key] : undefined
+  if (override) return locale === 'en' ? override.en : override.ko
   if (locale === 'en' && q.question_text_en) return q.question_text_en
   return q.question_text || q.question_text_en || '—'
 }

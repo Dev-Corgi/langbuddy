@@ -49,18 +49,15 @@ export function useMyPageData(isEn: boolean) {
       .single()
     setUserRow(profile || {})
 
-    const [{ data: leSched }, { data: stSched }, { data: postingRows }] = await Promise.all([
+    const [{ data: leSched }, { data: postingRows }] = await Promise.all([
       supabase.from('language_exchange_schedules').select('form_id, posting_id').eq('is_active', true),
-      supabase.from('study_schedules').select('form_id, posting_id').eq('is_active', true),
       supabase.from('postings').select('id, form_id, category, title, title_en').eq('status', 'active'),
     ])
 
     const leFormIds = new Set((leSched || []).map((r) => r.form_id).filter(Boolean) as string[])
-    const stFormIds = new Set((stSched || []).map((r) => r.form_id).filter(Boolean) as string[])
 
     function categoryForForm(fid: string): AppCategory {
       if (leFormIds.has(fid)) return '언어교환'
-      if (stFormIds.has(fid)) return '스터디'
       return '번개'
     }
 
@@ -82,8 +79,7 @@ export function useMyPageData(isEn: boolean) {
       const eventDate = resolveApplicationSessionYmd(ans._selected_day, ans._event_date, r.created_at as string)
       marks.add(eventDate)
 
-      const recurringKind =
-        cat === '언어교환' ? ('language' as const) : cat === '스터디' ? ('study' as const) : null
+      const recurringKind = cat === '언어교환' ? ('language' as const) : null
       const builtTitles =
         recurringKind && eventDate.length >= 10
           ? buildRecurringSessionDisplayTitles(ans._selected_day, eventDate, recurringKind)
@@ -98,7 +94,6 @@ export function useMyPageData(isEn: boolean) {
 
       let meetupHref: string | undefined
       if (cat === '언어교환') meetupHref = '/posting/language'
-      else if (cat === '스터디') meetupHref = '/posting/study'
       else {
         const hit = (postingRows || []).find((p) => p.form_id === fid && p.category === '번개')
         if (hit?.id) meetupHref = `/posting/${hit.id}`

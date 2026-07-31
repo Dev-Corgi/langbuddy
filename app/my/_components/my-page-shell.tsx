@@ -62,7 +62,6 @@ export function MyPageShell() {
           applications={applications}
           labels={{
             categoryLe: t.categoryLe,
-            categoryStudy: t.categoryStudy,
             categoryMeetup: t.categoryMeetup,
           }}
           locale={locale}

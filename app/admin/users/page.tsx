@@ -11,6 +11,29 @@ import { Badge } from '@/components/ui/badge'
 import { Loader2, Search, ChevronRight, User } from 'lucide-react'
 import { useLocale } from '@/hooks/use-locale'
 import { cn } from '@/lib/utils'
+import { getAdminRoleLabel, type AdminUserRole } from '@/lib/admin-user-role'
+
+function RoleBadge({ role, isEn }: { role: AdminUserRole; isEn: boolean }) {
+  if (role === 'member') return null
+  const label = getAdminRoleLabel(role, isEn)
+  if (role === 'superadmin') {
+    return (
+      <Badge className="rounded-lg font-bold bg-primary/15 text-primary border-0">{label}</Badge>
+    )
+  }
+  if (role === 'staff') {
+    return (
+      <Badge className="rounded-lg font-bold bg-amber-500/15 text-amber-700 border-0 dark:text-amber-400">
+        {label}
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="secondary" className="rounded-lg font-bold">
+      {label}
+    </Badge>
+  )
+}
 
 function UsersListContent() {
   const locale = useLocale()
@@ -97,15 +120,7 @@ function UsersListContent() {
                       <p className="font-black text-foreground truncate">
                         {u.name || (isEn ? 'Unnamed' : '이름 없음')}
                       </p>
-                      {u.is_superadmin ? (
-                        <Badge className="rounded-lg font-bold bg-primary/15 text-primary border-0">
-                          {isEn ? 'Super admin' : '슈퍼 관리자'}
-                        </Badge>
-                      ) : u.is_admin ? (
-                        <Badge variant="secondary" className="rounded-lg font-bold">
-                          {isEn ? 'Admin' : '관리자'}
-                        </Badge>
-                      ) : null}
+                      <RoleBadge role={u.role ?? 'member'} isEn={isEn} />
                       {u.onboarding_completed ? (
                         <Badge className="rounded-lg font-bold">{isEn ? 'Onboarded' : '온보딩 완료'}</Badge>
                       ) : (

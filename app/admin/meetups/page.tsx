@@ -112,21 +112,18 @@ function MeetupsManagementContent() {
               {locale === 'en' ? 'Dashboard' : '대시보드'}
             </Link>
             <h1 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">
-              {categoryFilter === '스터디' ? (locale === 'en' ? 'Study Management' : '스터디 관리') :
-               categoryFilter === '언어교환' ? (locale === 'en' ? 'Language Exchange Management' : '언어교환 관리') :
+              {categoryFilter === '언어교환' ? (locale === 'en' ? 'Language Exchange Management' : '언어교환 관리') :
                (locale === 'en' ? 'Social Meetups' : '번개 관리')}
             </h1>
             <p className="text-muted-foreground font-medium text-sm md:text-base">
-              {categoryFilter === '스터디' ? (locale === 'en' ? 'Manage recurring language studies.' : '정기적인 언어 스터디를 관리하세요.') :
-               categoryFilter === '언어교환' ? (locale === 'en' ? 'Manage language exchange sessions.' : '언어교환 세션을 관리하세요.') :
+              {categoryFilter === '언어교환' ? (locale === 'en' ? 'Manage language exchange sessions.' : '언어교환 세션을 관리하세요.') :
                (locale === 'en' ? 'Manage one-time social meetups.' : '일회성 번개 모임을 관리하세요.')}
             </p>
           </div>
           <Button asChild className="bg-primary hover:bg-secondary rounded-2xl h-12 px-6 font-black flex items-center justify-center gap-2 shadow-lg shadow-primary/20 w-full md:w-auto transition-all active:scale-[0.98]">
             <Link href={`/admin/postings/new?category=${categoryFilter}`}>
               <PlusCircle className="w-5 h-5" />
-              {categoryFilter === '스터디' ? (locale === 'en' ? 'New Study' : '새 스터디 등록') :
-               categoryFilter === '언어교환' ? (locale === 'en' ? 'New Language Exchange' : '새 언어교환 등록') :
+              {categoryFilter === '언어교환' ? (locale === 'en' ? 'New Language Exchange' : '새 언어교환 등록') :
                (locale === 'en' ? 'New Meetup' : '새 번개 등록')}
             </Link>
           </Button>
@@ -137,8 +134,7 @@ function MeetupsManagementContent() {
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input 
-              placeholder={categoryFilter === '스터디' ? (locale === 'en' ? 'Search studies...' : '스터디 검색...') :
-                           categoryFilter === '언어교환' ? (locale === 'en' ? 'Search exchange sessions...' : '언어교환 검색...') :
+              placeholder={categoryFilter === '언어교환' ? (locale === 'en' ? 'Search exchange sessions...' : '언어교환 검색...') :
                            (locale === 'en' ? 'Search meetups...' : '번개 검색...')}
               className="pl-12 h-12 rounded-2xl border-border bg-card focus:ring-primary transition-all"
             />
@@ -160,14 +156,12 @@ function MeetupsManagementContent() {
             <Card className="border-dashed border-2 border-border bg-transparent rounded-[32px]">
               <CardContent className="py-20 text-center space-y-4">
                 <p className="font-bold text-muted-foreground">
-                  {categoryFilter === '스터디' ? (locale === 'en' ? 'No studies registered.' : '등록된 스터디가 없습니다.') :
-                   categoryFilter === '언어교환' ? (locale === 'en' ? 'No language exchange sessions registered.' : '등록된 언어교환이 없습니다.') :
+                  {categoryFilter === '언어교환' ? (locale === 'en' ? 'No language exchange sessions registered.' : '등록된 언어교환이 없습니다.') :
                    (locale === 'en' ? 'No meetups registered.' : '등록된 번개가 없습니다.')}
                 </p>
                 <Button asChild variant="outline" className="rounded-xl font-black">
                   <Link href={`/admin/postings/new?category=${categoryFilter}`}>
-                    {categoryFilter === '스터디' ? (locale === 'en' ? 'Create first study' : '첫 스터디 등록하기') :
-                     categoryFilter === '언어교환' ? (locale === 'en' ? 'Create first session' : '첫 언어교환 등록하기') :
+                    {categoryFilter === '언어교환' ? (locale === 'en' ? 'Create first session' : '첫 언어교환 등록하기') :
                      (locale === 'en' ? 'Create first meetup' : '첫 번개 등록하기')}
                   </Link>
                 </Button>
@@ -223,8 +217,7 @@ function MeetupsManagementContent() {
                         <div className="flex items-center gap-2 pt-1 text-primary animate-pulse">
                           <AlertCircle className="w-4 h-4 shrink-0" />
                           <p className="text-xs md:text-sm font-black italic">
-                            {categoryFilter === '스터디' ? (locale === 'en' ? 'This study is outdated' : '만료된 스터디입니다') :
-                             categoryFilter === '언어교환' ? (locale === 'en' ? 'This session is outdated' : '만료된 언어교환입니다') :
+                            {categoryFilter === '언어교환' ? (locale === 'en' ? 'This session is outdated' : '만료된 언어교환입니다') :
                              (locale === 'en' ? 'This event is outdated' : '만료된 번개입니다')}
                           </p>
                         </div>

@@ -8,7 +8,6 @@ const METADATA_ANSWER_KEYS = new Set([
   '_selected_day',
   '_payment_method',
   '_le_free_coupon',
-  '_study_bundle_free',
 ])
 
 export function remapFormResponseAnswers(
@@ -31,7 +30,7 @@ export async function cloneFormWithQuestionMap(
   supabase: SupabaseClient,
   sourceFormId: string,
   dayKo: string,
-  kind: 'language' | 'study'
+  kind: 'language' = 'language'
 ): Promise<{ newFormId: string; questionIdMap: QuestionIdMap }> {
   const { data: sourceForm, error: formErr } = await supabase
     .from('forms')

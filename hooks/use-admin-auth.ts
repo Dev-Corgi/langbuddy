@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { hasAdminPanelAccess, isSuperAdminUser } from '@/lib/admin-access'
+import { hasAdminPanelAccess, isSuperAdminUser, getAdminHomePath } from '@/lib/admin-access'
 
 type AdminAuthState = {
   ready: boolean
@@ -35,7 +35,7 @@ export function useAdminAuth(options?: { requireSuper?: boolean }): AdminAuthSta
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('is_superadmin, is_admin')
+        .select('is_superadmin, is_admin, is_staff')
         .eq('id', user.id)
         .maybeSingle()
 
@@ -47,7 +47,7 @@ export function useAdminAuth(options?: { requireSuper?: boolean }): AdminAuthSta
       const superAdmin = isSuperAdminUser(user.email, profile)
 
       if (requireSuper && !superAdmin) {
-        router.push('/admin/dashboard')
+        router.push(getAdminHomePath(user.email, profile))
         return
       }
 

@@ -21,13 +21,6 @@ const ITEMS: ImageButtonItem[] = [
     imageSrc: "/imagebuttons/exchange.jpg",
   },
   {
-    title: "동아리 정기 스터디",
-    subtitle: "Regular Study",
-    meta: "체계적인 커리큘럼으로 함께 성장하는 스터디",
-    href: "/posting/study",
-    imageSrc: "/imagebuttons/study.jpg",
-  },
-  {
     title: "소모임 / 번개",
     subtitle: "Lightning Gathering",
     meta: "가볍게 즐기는 일상 속 특별한 만남",

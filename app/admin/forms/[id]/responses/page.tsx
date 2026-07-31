@@ -337,7 +337,7 @@ export default function FormResponsesPage() {
 
                       <Separator className="md:col-span-2 my-2 opacity-50" />
 
-                      {/* Special Study Fields */}
+                      {/* Recurring session fields */}
                       {res.answers?._selected_day && (
                         <div className="space-y-2 p-4 rounded-2xl bg-accent border border-border">
                           <p className="text-xs font-black text-muted-foreground uppercase tracking-wider">

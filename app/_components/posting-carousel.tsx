@@ -47,11 +47,10 @@ export function PostingCarousel() {
 
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
-      // 1순위: 카테고리 (언어교환 > 스터디 > 번개)
+      // 1순위: 카테고리 (언어교환 > 번개)
       const categoryPriority = (item: any) => {
         if (item.category === '언어교환') return 0
-        if (item.category === '스터디') return 1
-        return 2 // 번개
+        return 1 // 번개
       }
       
       const catA = categoryPriority(a)

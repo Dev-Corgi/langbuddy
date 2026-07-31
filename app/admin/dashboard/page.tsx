@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { 
-  BookOpen,
   Languages,
   Zap,
   Instagram, 
@@ -93,10 +92,6 @@ export default function AdminDashboardPage() {
         statsQuery = statsQuery.eq('created_by', user.id)
       }
 
-      const { count: studyCount } = await (userProfile?.is_superadmin 
-        ? supabase.from('postings').select('*', { count: 'exact', head: true }).eq('category', '스터디')
-        : Promise.resolve({ count: 0 }))
-
       const { count: languageCount } = await (userProfile?.is_superadmin 
         ? supabase.from('postings').select('*', { count: 'exact', head: true }).eq('category', '언어교환')
         : Promise.resolve({ count: 0 }))
@@ -133,13 +128,6 @@ export default function AdminDashboardPage() {
       
       if (userProfile?.is_superadmin) {
         statsItems.push(
-          { 
-            label: locale === 'en' ? 'Study' : '스터디', 
-            value: (studyCount || 0).toString(), 
-            icon: BookOpen, 
-            color: 'text-primary',
-            href: '/admin/study'
-          },
           { 
             label: locale === 'en' ? 'Language' : '언어교환', 
             value: (languageCount || 0).toString(), 
@@ -333,7 +321,6 @@ export default function AdminDashboardPage() {
               <div className="divide-y divide-zinc-100">
                 {recentPostings?.map((post) => (
                   <Link key={post.id} href={
-                    post.category === '스터디' ? '/admin/study' :
                     post.category === '언어교환' ? '/admin/language' : `/admin/postings/${post.id}`
                   }>
                     <div className="p-4 md:p-5 flex items-center justify-between hover:bg-muted transition-colors">
@@ -370,14 +357,9 @@ export default function AdminDashboardPage() {
             {locale === 'en' ? 'Social' : '번개'}
           </Link>
           {isSuperAdmin && (
-            <>
-              <Link href="/admin/study" className="text-sm font-bold text-primary hover:underline">
-                {locale === 'en' ? 'Study' : '스터디'}
-              </Link>
-              <Link href="/admin/language" className="text-sm font-bold text-primary hover:underline">
-                {locale === 'en' ? 'Language' : '언어교환'}
-              </Link>
-            </>
+            <Link href="/admin/language" className="text-sm font-bold text-primary hover:underline">
+              {locale === 'en' ? 'Language' : '언어교환'}
+            </Link>
           )}
         </div>
       </div>

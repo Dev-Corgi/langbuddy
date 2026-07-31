@@ -7,7 +7,6 @@ export const i18n = {
   ko: {
     nav: {
       home: "홈",
-      study: "스터디",
       language: "언어교환",
       social: "소모임 / 번개",
       login: "로그인",
@@ -98,7 +97,6 @@ export const i18n = {
       table: "테이블",
       with: "함께한 분들",
       categoryLe: "언어교환",
-      categoryStudy: "스터디",
       categoryMeetup: "번개",
       prevMonth: "이전",
       nextMonth: "다음",
@@ -108,7 +106,6 @@ export const i18n = {
   en: {
     nav: {
       home: "Home",
-      study: "Study",
       language: "Language",
       social: "Social / Meetup",
       login: "Login",
@@ -199,7 +196,6 @@ export const i18n = {
       table: "Table",
       with: "Tablemates",
       categoryLe: "Language exchange",
-      categoryStudy: "Study",
       categoryMeetup: "Meetup",
       prevMonth: "Prev",
       nextMonth: "Next",

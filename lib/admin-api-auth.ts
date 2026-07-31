@@ -12,7 +12,7 @@ export async function getAdminUser(
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('is_superadmin, is_admin')
+    .select('is_superadmin, is_admin, is_staff')
     .eq('id', user.id)
     .maybeSingle()
 
@@ -31,7 +31,7 @@ export async function getPanelUser(
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('is_superadmin, is_admin')
+    .select('is_superadmin, is_admin, is_staff')
     .eq('id', user.id)
     .maybeSingle()
 

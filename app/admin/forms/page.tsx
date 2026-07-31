@@ -45,7 +45,7 @@ export default function AdminFormsPage() {
 
   async function deleteForm(id: string, formTitle: string) {
     // Prevent deletion of permanent forms
-    // const permanentForms = ['제2외국어 스터디', '언어교환 세션', 'Second Language Study', 'Language Exchange Session']
+    // const permanentForms = ['언어교환 세션', 'Language Exchange Session']
     // if (permanentForms.some(name => formTitle.includes(name))) {
     //   alert(locale === 'en' ? 'This is a permanent form and cannot be deleted.' : '이 폼은 고정 폼으로 삭제할 수 없습니다.')
     //   return
@@ -109,7 +109,7 @@ export default function AdminFormsPage() {
                             {locale === 'en' ? 'Inactive' : '비활성'}
                           </Badge>
                         )}
-                        {/* {['제2외국어 스터디', '언어교환 세션', 'Second Language Study', 'Language Exchange Session'].some(name => form.title.includes(name)) && (
+                        {/* {['언어교환 세션', 'Language Exchange Session'].some(name => form.title.includes(name)) && (
                           <Badge variant="outline" className="rounded-lg border-primary text-primary font-black text-[10px] md:text-[11px] px-2 py-0.5">
                             {locale === 'en' ? 'PERMANENT' : '고정'}
                           </Badge>

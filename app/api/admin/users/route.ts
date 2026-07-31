@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAdminUser } from '@/lib/admin-api-auth'
 import { fetchProfileRoleFlagsMap } from '@/lib/admin-user-roles'
+import { resolveAdminUserRole } from '@/lib/admin-user-role'
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,8 +41,13 @@ export async function GET(request: NextRequest) {
     )
 
     const users = rows.map((row) => {
-      const flags = roleMap.get(row.id) ?? { is_admin: false, is_superadmin: false }
-      return { ...row, ...flags }
+      const flags = roleMap.get(row.id) ?? {
+        is_admin: false,
+        is_superadmin: false,
+        is_staff: false,
+      }
+      const role = resolveAdminUserRole(null, flags)
+      return { ...row, role, ...flags }
     })
 
     return NextResponse.json({ users })

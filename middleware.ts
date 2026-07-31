@@ -1,6 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { hasAdminPanelAccess } from '@/lib/admin-access'
+import {
+  getAdminHomePath,
+  hasAdminPanelAccess,
+  isClubLeaderAllowedPath,
+  isClubLeaderUser,
+} from '@/lib/admin-access'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -65,12 +70,14 @@ export async function middleware(request: NextRequest) {
       if (session?.user) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('is_superadmin, is_admin')
+          .select('is_superadmin, is_admin, is_staff')
           .eq('id', session.user.id)
           .maybeSingle()
 
         if (hasAdminPanelAccess(session.user.email, profile)) {
-          return NextResponse.redirect(new URL('/admin', request.url))
+          return NextResponse.redirect(
+            new URL(getAdminHomePath(session.user.email, profile), request.url)
+          )
         }
       }
       return response
@@ -82,7 +89,7 @@ export async function middleware(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('is_superadmin, is_admin')
+      .select('is_superadmin, is_admin, is_staff')
       .eq('id', session.user.id)
       .maybeSingle()
 
@@ -90,6 +97,14 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(
         new URL('/admin/login?error=no_access', request.url)
       )
+    }
+
+    // 소모임장: 번개 관리·설정(+ posting 편집)만 허용
+    if (
+      isClubLeaderUser(session.user.email, profile) &&
+      !isClubLeaderAllowedPath(request.nextUrl.pathname)
+    ) {
+      return NextResponse.redirect(new URL('/admin/meetups', request.url))
     }
   }
 

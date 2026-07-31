@@ -202,25 +202,16 @@ export async function POST(request: NextRequest) {
     // Note: This requires the user to be a friend of your Kakao Channel
     console.log('📨 [Kakao QR API] Preparing Kakao message...')
 
-    let recurringKind: 'language' | 'study' | null = null
+    let recurringKind: 'language' | null = null
     if (responseRow.form_id) {
-      const [{ data: leRow }, { data: stRow }] = await Promise.all([
-        supabase
-          .from('language_exchange_schedules')
-          .select('form_id')
-          .eq('form_id', responseRow.form_id as string)
-          .eq('is_active', true)
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from('study_schedules')
-          .select('form_id')
-          .eq('form_id', responseRow.form_id as string)
-          .eq('is_active', true)
-          .limit(1)
-          .maybeSingle(),
-      ])
-      recurringKind = leRow ? 'language' : stRow ? 'study' : null
+      const { data: leRow } = await supabase
+        .from('language_exchange_schedules')
+        .select('form_id')
+        .eq('form_id', responseRow.form_id as string)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle()
+      recurringKind = leRow ? 'language' : null
     }
 
     const answers = (responseRow.answers || {}) as Record<string, unknown>

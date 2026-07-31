@@ -81,7 +81,7 @@ function KoreanSections() {
             선택적 프로필·연락처 등 서비스 이용 과정에서 이용자가 직접 제공하는 정보
           </li>
           <li>
-            <strong>서비스 이용 기록:</strong> 언어 교환·스터디 등 모임 참가 이력
+            <strong>서비스 이용 기록:</strong> 언어 교환 등 모임 참가 이력
           </li>
           <li>
             <strong>자동 수집:</strong> 접속 로그·기기 정보·서비스 이용 기록·쿠키 등
@@ -91,7 +91,7 @@ function KoreanSections() {
       <Section title="3. 처리 목적">
         <ul className="list-disc pl-5 space-y-2">
           <li>회원 식별, 가입·탈퇴 관리, 부정 이용 방지</li>
-          <li>언어 교환·스터디 등 모임 운영, 신청·참석 관련 안내 및 고객 지원</li>
+          <li>언어 교환 등 모임 운영, 신청·참석 관련 안내 및 고객 지원</li>
           <li>서비스 제공·개선, 통계·분석(식별 불가 또는 최소 데이터 기준 준수)</li>
           <li>법령상 의무 이행 및 분쟁 대응</li>
         </ul>
@@ -173,11 +173,11 @@ function EnglishSections() {
           </li>
           <li>
             <strong>Applications & community use:</strong> information you submit in
-            forms, optional profile/contact details when using meetups or study features.
+            forms, optional profile/contact details when using meetups.
           </li>
           <li>
-            <strong>Participation history:</strong> records of language exchange and
-            study meetups you have attended.
+            <strong>Participation history:</strong> records of language exchange
+            meetups you have attended.
           </li>
           <li>
             <strong>Automatic data:</strong> device and log data, service usage metrics,
@@ -188,7 +188,7 @@ function EnglishSections() {
       <Section title="3. How We Use Information">
         <ul className="list-disc pl-5 space-y-2">
           <li>To create and maintain accounts and prevent misuse.</li>
-          <li>To operate language-exchange and study activities, communicate about events, and support users.</li>
+          <li>To operate language-exchange activities, communicate about events, and support users.</li>
           <li>To improve the service (using aggregated or minimized data where possible).</li>
           <li>To comply with legal obligations and respond to disputes.</li>
         </ul>

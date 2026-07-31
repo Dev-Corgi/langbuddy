@@ -129,7 +129,7 @@ export function dateAnchorFromIsoYmdSeoul(isoYmd: string): Date | null {
 export function buildRecurringSessionDisplayTitles(
   selectedDayKo: unknown,
   sessionIsoYmd: string,
-  kind: 'language' | 'study'
+  kind: 'language' = 'language'
 ): { title: string; title_en: string } | null {
   const day = typeof selectedDayKo === 'string' ? selectedDayKo.trim() : ''
   const ymd = sessionIsoYmd.slice(0, 10)
@@ -152,7 +152,7 @@ export function buildRecurringSessionDisplayTitles(
  */
 export function buildAutoRecurringFormTitles(
   dayKo: string,
-  kind: 'language' | 'study',
+  kind: 'language' = 'language',
   from: Date = new Date()
 ): { title: string; title_en: string } {
   const ymd = isoDateForKoreanWeekdayInSunWeekSeoul(dayKo.trim(), from)
@@ -167,8 +167,8 @@ export function buildAutoRecurringFormTitles(
   }).format(inst)
   const wdKo = koreanWeekdayLetterFromYmdSeoul(ymd) || dayKo.trim()
   const md = `${m}/${d}`
-  const typeEn = kind === 'language' ? 'Language Exchange' : 'Study'
-  const typeKo = kind === 'language' ? '언어교환' : '스터디'
+  const typeEn = 'Language Exchange'
+  const typeKo = '언어교환'
   return {
     title: `${md}(${wdKo}) - ${typeKo}`,
     title_en: `${md}(${wdEn}) - ${typeEn}`,

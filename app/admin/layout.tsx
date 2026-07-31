@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { 
   LayoutDashboard, 
-  BookOpen,
   Languages,
   Zap,
   Instagram, 
@@ -26,7 +25,7 @@ import { createClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/hooks/use-locale'
 import { i18n } from '@/lib/i18n'
-import { isSuperAdminUser } from '@/lib/admin-access'
+import { resolveAdminUserRole } from '@/lib/admin-user-role'
 
 export default function AdminLayout({
   children,
@@ -34,7 +33,7 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const [panelRole, setPanelRole] = useState<'superadmin' | 'admin' | 'staff' | 'member'>('member')
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
@@ -45,7 +44,7 @@ export default function AdminLayout({
       try {
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select('is_superadmin, is_admin')
+          .select('is_superadmin, is_admin, is_staff')
           .eq('id', userId)
           .maybeSingle()
 
@@ -54,7 +53,8 @@ export default function AdminLayout({
           return
         }
 
-        setIsSuperAdmin(isSuperAdminUser(email, profile))
+        const role = resolveAdminUserRole(email, profile)
+        setPanelRole(role === 'member' ? 'member' : role)
       } catch (err) {
         console.error('AdminLayout: Unexpected error:', err)
       }
@@ -75,7 +75,7 @@ export default function AdminLayout({
       if (session?.user) {
         fetchProfile(session.user.id, session.user.email)
       } else {
-        setIsSuperAdmin(false)
+        setPanelRole('member')
       }
     })
 
@@ -101,22 +101,37 @@ export default function AdminLayout({
     window.dispatchEvent(new Event('localeChange'));
   };
 
+  const isSuperAdmin = panelRole === 'superadmin'
+  const isStaff = panelRole === 'staff'
+  const isAdmin = panelRole === 'admin'
+  const adminHomeHref =
+    panelRole === 'admin' ? '/admin/meetups' : '/admin/dashboard'
+
   const menuItems = [
-    { href: '/admin/dashboard', label: locale === 'en' ? 'Dashboard' : '대시보드', icon: LayoutDashboard },
+    ...(isSuperAdmin || isStaff
+      ? [{ href: '/admin/dashboard', label: locale === 'en' ? 'Dashboard' : '대시보드', icon: LayoutDashboard }]
+      : []),
     ...(isSuperAdmin ? [
       { href: '/admin/users', label: locale === 'en' ? 'Users' : '유저 관리', icon: Users },
       { href: '/admin/arrange', label: locale === 'en' ? 'Seating' : '자리 배치', icon: LayoutGrid },
       { href: '/admin/qr-scanner', label: locale === 'en' ? 'QR check-in' : 'QR 체크인', icon: QrCode },
-      { href: '/admin/study', label: locale === 'en' ? 'Study' : '스터디 관리', icon: BookOpen },
       { href: '/admin/language', label: locale === 'en' ? 'Language' : '언어교환 관리', icon: Languages },
     ] : []),
-    { href: '/admin/meetups', label: locale === 'en' ? 'Social' : '번개 관리', icon: Zap },
+    ...(isStaff ? [
+      { href: '/admin/arrange', label: locale === 'en' ? 'Seating' : '자리 배치', icon: LayoutGrid },
+      { href: '/admin/qr-scanner', label: locale === 'en' ? 'QR check-in' : 'QR 체크인', icon: QrCode },
+    ] : []),
+    ...(isSuperAdmin || isAdmin ? [
+      { href: '/admin/meetups', label: locale === 'en' ? 'Social' : '번개 관리', icon: Zap },
+    ] : []),
     ...(isSuperAdmin ? [
       { href: '/admin/instagram', label: locale === 'en' ? 'Instagram' : '인스타 연동', icon: Instagram },
       { href: '/admin/export', label: locale === 'en' ? 'Export Poster' : '포스터 내보내기', icon: Share2 },
       { href: '/admin/reports', label: locale === 'en' ? 'Reports' : '신고 관리', icon: Flag },
     ] : []),
-    { href: '/admin/settings', label: locale === 'en' ? 'Settings' : '설정', icon: Settings },
+    ...(isSuperAdmin || isStaff || isAdmin
+      ? [{ href: '/admin/settings', label: locale === 'en' ? 'Settings' : '설정', icon: Settings }]
+      : []),
   ]
 
   if (pathname === '/admin/login') {
@@ -127,7 +142,7 @@ export default function AdminLayout({
     <div className="min-h-screen bg-muted flex flex-col md:flex-row">
       {/* Mobile Header */}
       <header className="md:hidden h-14 bg-card border-b border-border flex items-center justify-between px-5 sticky top-0 z-50">
-        <Link href="/admin/dashboard" className="shrink-0">
+        <Link href={adminHomeHref} className="shrink-0">
           <div className="flex flex-col leading-none">
             <span className="text-[12px] font-black text-primary">LangBuddy</span>
             <span className="text-[14px] font-black text-black">Admin Panel</span>

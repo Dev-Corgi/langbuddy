@@ -19,7 +19,6 @@ type Props = {
   applications: ApplicationRow[]
   labels: {
     categoryLe: string
-    categoryStudy: string
     categoryMeetup: string
   }
   locale: Locale
@@ -27,13 +26,11 @@ type Props = {
 
 function categoryVariant(cat: ApplicationRow['category']): 'default' | 'secondary' | 'outline' {
   if (cat === '언어교환') return 'default'
-  if (cat === '스터디') return 'secondary'
   return 'outline'
 }
 
 function categoryLabel(cat: ApplicationRow['category'], t: Props['labels']) {
   if (cat === '언어교환') return t.categoryLe
-  if (cat === '스터디') return t.categoryStudy
   return t.categoryMeetup
 }
 

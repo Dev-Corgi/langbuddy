@@ -7,12 +7,11 @@ import {
 } from '@/lib/session-event-date'
 import {
   loadLangQrSessionForDay,
-  loadStudyQrSessionForDay,
   loadTodayQrSessions,
   type TodayQrSessionInfo,
 } from '@/lib/admin-qr-sessions'
 
-export type QrScanMode = 'study' | 'lang'
+export type QrScanMode = 'lang'
 
 export type QrValidationIssue =
   | 'not_found'
@@ -48,17 +47,14 @@ function classifyResponseFormId(
   formId: string,
   sessions: TodayQrSessionInfo
 ): QrScanMode | 'unknown' {
-  if (sessions.study?.formId === formId) return 'study'
   if (sessions.lang?.formId === formId) return 'lang'
   return 'unknown'
 }
 
 function classifyResponseFormIdForTarget(
   formId: string,
-  langFormId: string | null,
-  studyFormId: string | null
+  langFormId: string | null
 ): QrScanMode | 'unknown' {
-  if (studyFormId && studyFormId === formId) return 'study'
   if (langFormId && langFormId === formId) return 'lang'
   return 'unknown'
 }
@@ -152,23 +148,6 @@ export async function validateQrCode(
         response: base,
       }
     }
-    if (options.scanMode === 'study' && kind === 'lang') {
-      return {
-        ok: false,
-        issue: 'wrong_mode',
-        message: '잘못된 QR 코드입니다. (언어교환 QR — 스터디 모드)',
-        response: base,
-      }
-    }
-    if (options.scanMode === 'lang' && kind === 'study') {
-      return {
-        ok: false,
-        issue: 'wrong_mode',
-        message: '잘못된 QR 코드입니다. (스터디 QR — 언어교환 모드)',
-        response: base,
-      }
-    }
-
     const todayStr = todayYYYYMMDDSeoul()
     const currentDay = koreanWeekdayLetterSeoul()
     if (!formResponseMatchesTodaySession(answers, todayStr, currentDay)) {
@@ -193,39 +172,15 @@ export async function validateQrCode(
     }
   }
 
-  const [langSession, studySession] = await Promise.all([
-    loadLangQrSessionForDay(supabase, targetDayKo),
-    loadStudyQrSessionForDay(supabase, targetDayKo),
-  ])
+  const langSession = await loadLangQrSessionForDay(supabase, targetDayKo)
 
-  const kind = classifyResponseFormIdForTarget(
-    row.form_id,
-    langSession?.formId ?? null,
-    studySession?.formId ?? null
-  )
+  const kind = classifyResponseFormIdForTarget(row.form_id, langSession?.formId ?? null)
 
   if (kind === 'unknown') {
     return {
       ok: false,
       issue: 'unknown_form',
-      message: `유효하지 않은 QR 코드입니다. (${targetDayKo}요일 언어교환·스터디 폼과 불일치)`,
-      response: base,
-    }
-  }
-
-  if (options.scanMode === 'study' && kind === 'lang') {
-    return {
-      ok: false,
-      issue: 'wrong_mode',
-      message: '잘못된 QR 코드입니다. (언어교환 QR — 스터디 모드)',
-      response: base,
-    }
-  }
-  if (options.scanMode === 'lang' && kind === 'study') {
-    return {
-      ok: false,
-      issue: 'wrong_mode',
-      message: '잘못된 QR 코드입니다. (스터디 QR — 언어교환 모드)',
+      message: `유효하지 않은 QR 코드입니다. (${targetDayKo}요일 언어교환 폼과 불일치)`,
       response: base,
     }
   }

@@ -7,7 +7,6 @@ import {
 } from '@/lib/arrange-stage'
 
 export type TodayQrSessionInfo = {
-  study: { postingId: string; formId: string } | null
   lang: { postingId: string; formId: string } | null
 }
 
@@ -15,27 +14,6 @@ export async function loadTodayQrSessions(
   supabase: SupabaseClient
 ): Promise<TodayQrSessionInfo> {
   const currentDay = koreanWeekdayLetterSeoul()
-
-  const { data: studyMaster } = await supabase
-    .from('postings')
-    .select('id')
-    .eq('category', '스터디')
-    .is('day_of_week', null)
-    .maybeSingle()
-
-  let study: TodayQrSessionInfo['study'] = null
-  if (studyMaster?.id) {
-    const { data: ss } = await supabase
-      .from('study_schedules')
-      .select('form_id')
-      .eq('posting_id', studyMaster.id)
-      .eq('day_of_week', currentDay)
-      .eq('is_active', true)
-      .maybeSingle()
-    if (ss?.form_id) {
-      study = { postingId: studyMaster.id, formId: ss.form_id }
-    }
-  }
 
   let lang: TodayQrSessionInfo['lang'] = null
   const { data: langRows } = await supabase
@@ -61,7 +39,7 @@ export async function loadTodayQrSessions(
     }
   }
 
-  return { study, lang }
+  return { lang }
 }
 
 /** 디버그·QR 시트: 요일별 언어교환 form (is_active 무관) */
@@ -90,31 +68,6 @@ export async function loadLangQrSessionForDay(
 
   if (!ls?.form_id) return null
   return { postingId: langMaster.id, formId: ls.form_id }
-}
-
-/** 디버그·QR 시트: 요일별 스터디 form (is_active 무관) */
-export async function loadStudyQrSessionForDay(
-  supabase: SupabaseClient,
-  dayKo: string
-): Promise<{ postingId: string; formId: string } | null> {
-  const { data: studyMaster } = await supabase
-    .from('postings')
-    .select('id')
-    .eq('category', '스터디')
-    .is('day_of_week', null)
-    .maybeSingle()
-
-  if (!studyMaster?.id) return null
-
-  const { data: ss } = await supabase
-    .from('study_schedules')
-    .select('form_id')
-    .eq('posting_id', studyMaster.id)
-    .eq('day_of_week', dayKo)
-    .maybeSingle()
-
-  if (!ss?.form_id) return null
-  return { postingId: studyMaster.id, formId: ss.form_id }
 }
 
 export type SeatingAssignmentRow = {

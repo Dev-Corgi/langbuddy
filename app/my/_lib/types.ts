@@ -1,4 +1,4 @@
-export type AppCategory = '언어교환' | '스터디' | '번개'
+export type AppCategory = '언어교환' | '번개'
 
 export type ApplicationRow = {
   id: string

@@ -43,6 +43,7 @@ import {
   paymentMethodFromApplyChoice,
   type ApplyPaymentChoice,
 } from '@/lib/supported-payment-methods'
+import { canAccessStaffOps } from '@/lib/admin-access'
 
 // Basic Radio Group Implementation
 function RadioGroup({ value, onValueChange, children, className }: any) {
@@ -104,7 +105,8 @@ export default function ApplicationFormPage() {
   const [authChecked, setAuthChecked] = useState(false)
   const [authRefreshTick, setAuthRefreshTick] = useState(0)
   const [showApplyAuthGate, setShowApplyAuthGate] = useState(false)
-  const [studyBundleFree, setStudyBundleFree] = useState(false)
+  /** 스탭(또는 슈퍼 관리자): 언어교환 신청 시 결제 없이 바로 무료 신청 */
+  const [staffFreeApply, setStaffFreeApply] = useState(false)
   /** 반복 모임: 이번 회차(user+form+_event_date) 기존 신청 여부 */
   const [duplicateApplicationPending, setDuplicateApplicationPending] = useState(false)
   const [hasDuplicateApplication, setHasDuplicateApplication] = useState(false)
@@ -124,14 +126,14 @@ export default function ApplicationFormPage() {
   }, [supabase])
 
   useEffect(() => {
-    if (posting?.category !== '스터디' && posting?.category !== '언어교환') return
+    if (posting?.category !== '언어교환') return
     if (!posting?.is_recurring) return
     const t = setInterval(() => setAvailabilityClock((c) => c + 1), 60_000)
     return () => clearInterval(t)
   }, [posting?.category, posting?.is_recurring])
 
   const selectableMeetingDays = useMemo((): string[] | undefined => {
-    if (posting?.category !== '스터디' && posting?.category !== '언어교환') return undefined
+    if (posting?.category !== '언어교환') return undefined
     if (!posting?.is_recurring) return undefined
     const raw = posting.recurring_days as string[] | undefined
     if (!raw?.length) return []
@@ -148,7 +150,7 @@ export default function ApplicationFormPage() {
   const sessionEventDate = useMemo(() => {
     if (!selectedDay) return ''
     try {
-      if ((posting?.category === '스터디' || posting?.category === '언어교환') && posting?.is_recurring) {
+      if (posting?.category === '언어교환' && posting?.is_recurring) {
         return isoDateForKoreanWeekdayInSunWeekSeoul(selectedDay)
       }
       return nextSessionIsoDateForKoreanWeekday(selectedDay)
@@ -160,10 +162,9 @@ export default function ApplicationFormPage() {
   /** DB의 forms.title은 저장 시점에 고정될 수 있음 — 표시는 매주 서울 주차 기준으로 계산 */
   const recurringAutoFormTitles = useMemo(() => {
     if (!posting?.is_recurring) return null
-    if (posting.category !== '스터디' && posting.category !== '언어교환') return null
+    if (posting.category !== '언어교환') return null
     if (!selectedDay) return null
-    const kind = posting.category === '언어교환' ? 'language' : 'study'
-    return buildAutoRecurringFormTitles(selectedDay, kind)
+    return buildAutoRecurringFormTitles(selectedDay, 'language')
   }, [posting?.is_recurring, posting?.category, selectedDay])
 
   useEffect(() => {
@@ -172,7 +173,7 @@ export default function ApplicationFormPage() {
     async function checkDuplicate() {
       if (
         !posting?.is_recurring ||
-        (posting.category !== '스터디' && posting.category !== '언어교환')
+        posting.category !== '언어교환'
       ) {
         setHasDuplicateApplication(false)
         setDuplicateApplicationPending(false)
@@ -217,45 +218,6 @@ export default function ApplicationFormPage() {
   ])
 
   useEffect(() => {
-    async function checkBundle() {
-      if (posting?.category !== '스터디' || !user?.id || !sessionEventDate) {
-        setStudyBundleFree(false)
-        return
-      }
-      const { data: langMasterRows } = await supabase
-        .from('postings')
-        .select('id')
-        .eq('category', '언어교환')
-        .is('day_of_week', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-      const langMaster = langMasterRows?.[0]
-      if (!langMaster?.id) {
-        setStudyBundleFree(false)
-        return
-      }
-      const { data: leSched } = await supabase
-        .from('language_exchange_schedules')
-        .select('form_id')
-        .eq('posting_id', langMaster.id)
-      const formIds = (leSched || []).map((s) => s.form_id).filter(Boolean) as string[]
-      if (!formIds.length) {
-        setStudyBundleFree(false)
-        return
-      }
-      const { data: rows } = await supabase
-        .from('form_responses')
-        .select('id, answers')
-        .in('form_id', formIds)
-        .eq('user_id', user.id)
-        .limit(50)
-      const hit = rows?.some((r) => (r.answers as Record<string, unknown>)?._event_date === sessionEventDate)
-      setStudyBundleFree(!!hit)
-    }
-    checkBundle()
-  }, [posting?.category, posting?.id, user?.id, sessionEventDate, supabase])
-
-  useEffect(() => {
     if (!authChecked) return
 
     let cancelled = false
@@ -276,14 +238,22 @@ export default function ApplicationFormPage() {
         if (cancelled) return
         setUserData(userInfo)
         currentUserInfo = userInfo
+
+        const { data: profileFlags } = await supabase
+          .from('profiles')
+          .select('is_staff, is_superadmin, is_admin')
+          .eq('id', authUser.id)
+          .maybeSingle()
+        if (cancelled) return
+        setStaffFreeApply(canAccessStaffOps(authUser.email, profileFlags))
+      } else {
+        setStaffFreeApply(false)
       }
       
       // 1. Fetch posting to get form_id
       let query = supabase.from('postings').select('*')
       
-      if (id === 'study') {
-        query = query.eq('category', '스터디').is('day_of_week', null).order('created_at', { ascending: false }).limit(1)
-      } else if (id === 'language') {
+      if (id === 'language') {
         query = query.eq('category', '언어교환').is('day_of_week', null).order('created_at', { ascending: false }).limit(1)
       } else {
         query = query.eq('id', id)
@@ -302,24 +272,10 @@ export default function ApplicationFormPage() {
         return
       }
       
-      // 언어교환 또는 스터디의 경우 스케줄 가져오기
+      // 언어교환의 경우 스케줄 가져오기
       if (postingData.category === '언어교환') {
         const { data: schedules } = await supabase
           .from('language_exchange_schedules')
-          .select('*')
-          .eq('posting_id', postingData.id)
-          .eq('is_active', true)
-          .order('day_of_week')
-        
-        if (schedules && schedules.length > 0) {
-          postingData.recurring_days = schedules.map(s => s.day_of_week)
-          postingData.is_recurring = true
-          // 첫 번째 스케줄의 form_id 사용 (fetchScheduleForDay가 선택 요일 기준으로 덮어씀)
-          postingData.form_id = schedules[0].form_id
-        }
-      } else if (postingData.category === '스터디') {
-        const { data: schedules } = await supabase
-          .from('study_schedules')
           .select('*')
           .eq('posting_id', postingData.id)
           .eq('is_active', true)
@@ -342,7 +298,7 @@ export default function ApplicationFormPage() {
       if (cancelled) return
 
       if (
-        (postingData.category === '언어교환' || postingData.category === '스터디') &&
+        postingData.category === '언어교환' &&
         !authUser
       ) {
         setPosting(postingData)
@@ -356,9 +312,8 @@ export default function ApplicationFormPage() {
       setShowApplyAuthGate(false)
       setLoading(true)
 
-      // Category check - Study and Language Exchange always allowed to use form
+      // Category check - Language Exchange always allowed to use form
       const isCustomFormAllowed = postingData.apply_type === 'form' ||
-                                 postingData.category === '스터디' ||
                                  postingData.category === '언어교환'
 
       if (!isCustomFormAllowed) {
@@ -368,11 +323,11 @@ export default function ApplicationFormPage() {
 
       setPosting(postingData)
 
-      // 반복 모임(언어교환/스터디)의 form은 fetchScheduleForDay가 단독으로 관리한다.
+      // 반복 모임(언어교환)의 form은 fetchScheduleForDay가 단독으로 관리한다.
       // fetchData가 첫 번째 스케줄 form을 세팅하면 fetchScheduleForDay와 race가 생기므로
       // 여기서는 form을 건드리지 않는다. 사용자가 요일을 선택하면 fetchScheduleForDay가 로드한다.
       if (postingData.is_recurring &&
-          (postingData.category === '언어교환' || postingData.category === '스터디')) {
+          postingData.category === '언어교환') {
         setForm(null)
         setQuestions([])
         setAnswers({})
@@ -471,23 +426,17 @@ export default function ApplicationFormPage() {
         return
       }
 
-      const isRecurringLeOrStudy =
-        posting.category === '언어교환' || posting.category === '스터디'
+      const isRecurringLe = posting.category === '언어교환'
 
-      if (isRecurringLeOrStudy) {
+      if (isRecurringLe) {
         setDayFormLoading(true)
         setDayFormReady(false)
         setForm(null)
         setQuestions([])
         setAnswers({})
 
-        const schedulesTable =
-          posting.category === '언어교환'
-            ? 'language_exchange_schedules'
-            : 'study_schedules'
-
         const { data: schedule } = await supabase
-          .from(schedulesTable)
+          .from('language_exchange_schedules')
           .select('*')
           .eq('posting_id', posting.id)
           .eq('day_of_week', selectedDay)
@@ -624,10 +573,8 @@ export default function ApplicationFormPage() {
     day: string
   ): Promise<{ formId: string; questions: any[] } | null> => {
     if (!posting?.id) return null
-    const schedulesTable =
-      posting.category === '언어교환' ? 'language_exchange_schedules' : 'study_schedules'
     const { data: daySchedule, error: scheduleErr } = await supabase
-      .from(schedulesTable)
+      .from('language_exchange_schedules')
       .select('form_id')
       .eq('posting_id', posting.id)
       .eq('day_of_week', day)
@@ -656,12 +603,12 @@ export default function ApplicationFormPage() {
     e.preventDefault()
     setSubmitting(true)
 
-    const isRecurringLeOrStudy =
+    const isRecurringLe =
       !!posting?.is_recurring &&
-      (posting?.category === '스터디' || posting?.category === '언어교환')
+      posting?.category === '언어교환'
 
     // Validate Meeting specific selections
-    if (isRecurringLeOrStudy) {
+    if (isRecurringLe) {
       if (!selectedDay) {
         alert(locale === 'en' ? 'Please select a meeting day' : '참여 요일을 선택해주세요')
         setSubmitting(false)
@@ -681,7 +628,7 @@ export default function ApplicationFormPage() {
     let submitFormId = form?.id || ''
     let submitQuestions = questions
 
-    if (isRecurringLeOrStudy && selectedDay) {
+    if (isRecurringLe && selectedDay) {
       const authoritative = await loadAuthoritativeDayForm(selectedDay)
       if (!authoritative) {
         alert(
@@ -717,12 +664,9 @@ export default function ApplicationFormPage() {
       }
     }
 
-    const bundleWaived = posting?.category === '스터디' && studyBundleFree
-    const feeWaived = bundleWaived
-
     let finalEventDate = sessionEventDate
     if (
-      (posting?.category === '스터디' || posting?.category === '언어교환') &&
+      posting?.category === '언어교환' &&
       posting?.is_recurring &&
       selectedDay
     ) {
@@ -735,7 +679,7 @@ export default function ApplicationFormPage() {
 
     if (
       posting?.is_recurring &&
-      (posting?.category === '스터디' || posting?.category === '언어교환') &&
+      posting?.category === '언어교환' &&
       user?.id &&
       submitFormId &&
       finalEventDate.length >= 10
@@ -761,9 +705,10 @@ export default function ApplicationFormPage() {
       }
     }
 
-    const needsReceipt = paymentMethod === 'bank' && !feeWaived
+    const isStaffFreeApply = staffFreeApply && posting?.category === '언어교환'
+    const needsReceipt = paymentMethod === 'bank' && !isStaffFreeApply
 
-    // Validate payment receipt for bank transfer (스터디+당일 언어교환 번들이면 생략)
+    // Validate payment receipt for bank transfer
     if (needsReceipt && !paymentReceiptFile) {
       alert(locale === 'en' ? 'Please upload payment receipt' : '입금 영수증 사진을 업로드해주세요')
       setSubmitting(false)
@@ -807,7 +752,9 @@ export default function ApplicationFormPage() {
       }
     }
 
-    const canonicalPaymentMethod = paymentMethodFromApplyChoice(paymentMethod)
+    const canonicalPaymentMethod = isStaffFreeApply
+      ? '스탭무료'
+      : paymentMethodFromApplyChoice(paymentMethod)
 
     const canonicalAnswers = canonicalizeFormAnswers(submitQuestions, {
       ...submitAnswers,
@@ -821,12 +768,7 @@ export default function ApplicationFormPage() {
       form_id: submitFormId,
       qr_code: qrCode,
       payment_receipt_url: paymentReceiptUrl,
-      payment_status:
-        feeWaived
-          ? null
-          : paymentMethod === 'bank'
-            ? 'pending'
-            : null,
+      payment_status: paymentMethod === 'bank' ? 'pending' : null,
       answers: {
         ...canonicalAnswers,
         ...(participantInfo.name ? { name: participantInfo.name, _participant_name: participantInfo.name } : {}),
@@ -835,7 +777,6 @@ export default function ApplicationFormPage() {
         ...(participantInfo.language ? { language: participantInfo.language } : {}),
         _selected_day: selectedDay,
         _event_date: finalEventDate,
-        _study_bundle_free: bundleWaived,
         _payment_method: canonicalPaymentMethod,
       },
     }
@@ -853,7 +794,7 @@ export default function ApplicationFormPage() {
       const dup =
         error.code === '23505' &&
         posting?.is_recurring &&
-        (posting?.category === '스터디' || posting?.category === '언어교환')
+        posting?.category === '언어교환'
       if (dup) {
         setHasDuplicateApplication(true)
         alert(
@@ -904,12 +845,9 @@ export default function ApplicationFormPage() {
           // Prepare data for webhook
           const webhookFormTitle =
             posting?.is_recurring &&
-            (posting?.category === '언어교환' || posting?.category === '스터디') &&
+            posting?.category === '언어교환' &&
             selectedDay
-              ? buildAutoRecurringFormTitles(
-                  selectedDay,
-                  posting.category === '언어교환' ? 'language' : 'study'
-                ).title
+              ? buildAutoRecurringFormTitles(selectedDay, 'language').title
               : form.title
 
           const webhookData = {
@@ -917,12 +855,7 @@ export default function ApplicationFormPage() {
             submitted_at: new Date(responseData.created_at).toLocaleString(),
             qr_code: qrCode,
             payment_method: canonicalPaymentMethod,
-            payment_status:
-              feeWaived
-                ? 'confirmed'
-                : paymentMethod === 'bank'
-                  ? 'pending'
-                  : 'confirmed',
+            payment_status: paymentMethod === 'bank' ? 'pending' : 'confirmed',
             responses: [
               ...questions.map(q => ({
                 question: q.question_text,
@@ -956,12 +889,12 @@ export default function ApplicationFormPage() {
   const handlePreSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
-    const isRecurringLeOrStudy =
+    const isRecurringLe =
       !!posting?.is_recurring &&
-      (posting?.category === '스터디' || posting?.category === '언어교환')
+      posting?.category === '언어교환'
 
     // Validate Meeting specific selections
-    if (isRecurringLeOrStudy) {
+    if (isRecurringLe) {
       if (!selectedDay) {
         alert(locale === 'en' ? 'Please select a meeting day' : '참여 요일을 선택해주세요')
         return
@@ -1001,8 +934,11 @@ export default function ApplicationFormPage() {
     }
 
     const hasBankAccount = !!posting?.bank_account;
+    const isStaffFreeApply = staffFreeApply && posting?.category === '언어교환'
 
-    if (posting?.category === '스터디' || posting?.category === '언어교환' || hasBankAccount) {
+    if (isStaffFreeApply) {
+      handleSubmit(e)
+    } else if (posting?.category === '언어교환' || hasBankAccount) {
       setShowPaymentModal(true)
     } else {
       handleSubmit(e)
@@ -1052,12 +988,12 @@ export default function ApplicationFormPage() {
 
   const isRecurringApplyAwaitingDay =
     !!posting?.is_recurring &&
-    (posting?.category === '스터디' || posting?.category === '언어교환') &&
+    posting?.category === '언어교환' &&
     !selectedDay
 
   const isRecurringApplyLoadingForm =
     !!posting?.is_recurring &&
-    (posting?.category === '스터디' || posting?.category === '언어교환') &&
+    posting?.category === '언어교환' &&
     !!selectedDay &&
     (dayFormLoading || !dayFormReady)
 
@@ -1138,13 +1074,12 @@ export default function ApplicationFormPage() {
   const displayTitle = locale === 'en' && posting?.title_en ? posting.title_en : posting?.title
   const isRecurringApply =
     !!posting?.is_recurring &&
-    (posting?.category === '스터디' || posting?.category === '언어교환')
+    posting?.category === '언어교환'
+  const isStaffFreeApply = staffFreeApply && posting?.category === '언어교환'
   const canSubmitApplication =
     !isRecurringApply ||
     (!!selectedDay && dayFormReady && !dayFormLoading && questions.length > 0)
   const displayCost = locale === 'en' && posting?.cost_en ? posting.cost_en : posting?.cost
-  const studyReceiptWaived = posting?.category === '스터디' && studyBundleFree
-  const sessionWaived = studyReceiptWaived
 
   return (
     <div className="min-h-screen bg-muted overflow-x-hidden">
@@ -1179,8 +1114,8 @@ export default function ApplicationFormPage() {
           </header>
 
           <form onSubmit={handlePreSubmit} className="space-y-8">
-            {/* 스터디 및 언어교환 요일/언어 선택 */}
-            {(posting?.category === '스터디' || posting?.category === '언어교환') && posting?.is_recurring && (
+            {/* 언어교환 요일/언어 선택 */}
+            {posting?.category === '언어교환' && posting?.is_recurring && (
               <Card className="border-primary/20 shadow-lg rounded-[32px] overflow-hidden bg-surface/10">
                 <CardContent className="p-8 space-y-8">
                   <div className="space-y-4">
@@ -1444,6 +1379,14 @@ export default function ApplicationFormPage() {
               )
             })}
 
+            {isStaffFreeApply && (
+              <p className="text-center text-sm font-black text-emerald-600">
+                {locale === 'en'
+                  ? '✨ Staff account — free application, no payment needed.'
+                  : '✨ 스탭 계정 — 결제 없이 무료로 신청됩니다.'}
+              </p>
+            )}
+
             <div className="pt-6">
               <Button 
                 type="submit" 
@@ -1462,6 +1405,8 @@ export default function ApplicationFormPage() {
                     <Loader2 className="w-6 h-6 animate-spin mr-3" />
                     {locale === 'en' ? 'Submitting...' : '제출 중...'}
                   </>
+                ) : isStaffFreeApply ? (
+                  locale === 'en' ? 'Apply for Free' : '무료로 신청하기'
                 ) : (
                   locale === 'en' ? 'Submit Application' : '참여 신청하기'
                 )}
@@ -1483,32 +1428,10 @@ export default function ApplicationFormPage() {
                 {locale === 'en' ? 'Payment Method' : '결제 방식 선택'}
               </CardTitle>
               <div className="mt-2 space-y-1">
-                {studyReceiptWaived ? (
-                  <>
-                    {displayCost ? (
-                      <div className="text-base font-bold text-muted-foreground line-through">
-                        {displayCost}
-                      </div>
-                    ) : null}
-                    <div className="text-xl font-black text-emerald-600">
-                      {locale === 'en'
-                        ? 'Free (language exchange same date)'
-                        : '무료 (같은 날짜 언어교환 신청 연동)'}
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-xl font-black text-primary">
-                    {displayCost || (locale === 'en' ? 'Free' : '무료')}
-                  </div>
-                )}
+                <div className="text-xl font-black text-primary">
+                  {displayCost || (locale === 'en' ? 'Free' : '무료')}
+                </div>
               </div>
-              {studyReceiptWaived && (
-                <p className="text-xs font-bold text-emerald-700 pt-1">
-                  {locale === 'en'
-                    ? 'No receipt required for this bundle. Confirm payment method below.'
-                    : '번들 할인: 입금 영수증 없이 결제 수단만 확인하면 됩니다.'}
-                </p>
-              )}
               <CardDescription className="text-muted-foreground font-medium pt-2">
                 {locale === 'en' 
                   ? 'Choose how you would like to pay for the session.' 
@@ -1594,48 +1517,36 @@ export default function ApplicationFormPage() {
                     </p>
                   )}
 
-                  {!sessionWaived ? (
-                    <div className="space-y-3 pt-3 border-t border-border/50">
-                      <div className="flex items-center gap-2">
-                        <Upload className="w-4 h-4 text-primary shrink-0" />
-                        <span className="text-sm font-bold text-foreground">
-                          {locale === 'en' ? 'Upload Payment Receipt' : '입금 영수증 업로드'}
-                        </span>
-                        <span className="text-xs text-destructive font-bold">*</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {locale === 'en' 
-                          ? 'Please upload a photo of your bank transfer receipt.' 
-                          : '입금 완료 후 영수증 사진을 업로드해주세요.'}
-                      </p>
-                      <PaymentReceiptUploader
-                        locale={locale}
-                        onFileSelect={(file) => {
-                          setPaymentReceiptFile(file)
-                        }}
-                        onRemove={() => {
-                          setPaymentReceiptFile(null)
-                        }}
-                      />
+                  <div className="space-y-3 pt-3 border-t border-border/50">
+                    <div className="flex items-center gap-2">
+                      <Upload className="w-4 h-4 text-primary shrink-0" />
+                      <span className="text-sm font-bold text-foreground">
+                        {locale === 'en' ? 'Upload Payment Receipt' : '입금 영수증 업로드'}
+                      </span>
+                      <span className="text-xs text-destructive font-bold">*</span>
                     </div>
-                  ) : (
-                    <p className="text-sm font-bold text-emerald-700 pt-3 border-t border-border/50">
-                      {locale === 'en'
-                        ? 'Receipt upload is not required for this free bundle.'
-                        : '번들 무료 신청 — 영수증 업로드는 필요하지 않습니다.'}
+                    <p className="text-xs text-muted-foreground">
+                      {locale === 'en' 
+                        ? 'Please upload a photo of your bank transfer receipt.' 
+                        : '입금 완료 후 영수증 사진을 업로드해주세요.'}
                     </p>
-                  )}
+                    <PaymentReceiptUploader
+                      locale={locale}
+                      onFileSelect={(file) => {
+                        setPaymentReceiptFile(file)
+                      }}
+                      onRemove={() => {
+                        setPaymentReceiptFile(null)
+                      }}
+                    />
+                  </div>
 
                   <p className="text-[11px] text-muted-foreground font-medium leading-tight flex items-start gap-1">
                     <span className="text-amber-500 shrink-0">*</span>
                     <span>
-                      {sessionWaived
-                        ? locale === 'en'
-                          ? 'Complete below to finish your application.'
-                          : '아래에서 신청을 완료해 주세요.'
-                        : locale === 'en' 
-                          ? 'Your QR code will be sent via KakaoTalk or email right after you apply.' 
-                          : '신청 직후 카카오톡 또는 이메일로 QR 코드가 발송됩니다.'}
+                      {locale === 'en' 
+                        ? 'Your QR code will be sent via KakaoTalk or email right after you apply.' 
+                        : '신청 직후 카카오톡 또는 이메일로 QR 코드가 발송됩니다.'}
                     </span>
                   </p>
                 </div>
@@ -1667,9 +1578,8 @@ export default function ApplicationFormPage() {
                   disabled={
                     submitting ||
                     !canSubmitApplication ||
-                    (!sessionWaived &&
-                      (!paymentMethod ||
-                        (paymentMethod === 'bank' && !paymentReceiptFile)))
+                    !paymentMethod ||
+                    (paymentMethod === 'bank' && !paymentReceiptFile)
                   }
                   className="flex-2 h-14 rounded-2xl bg-primary hover:bg-secondary text-lg font-black shadow-lg shadow-primary/20 disabled:opacity-50"
                 >

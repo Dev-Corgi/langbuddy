@@ -105,8 +105,8 @@ export function ResponseResetSettings({ formId }: ResponseResetSettingsProps) {
         </CardTitle>
         <CardDescription className="font-medium leading-relaxed">
           {locale === 'en'
-            ? 'Language exchange and study forms are cleared automatically every Sunday at 00:00 (Seoul). Only applications and seating rows are removed — form questions and schedules stay.'
-            : '언어교환·스터디에 연결된 폼은 매주 일요일 0시(서울)에 신청 응답과 자리 배치 기록이 자동으로 비워집니다. 질문지와 스케줄 연결은 그대로 유지됩니다.'}
+            ? 'Language exchange forms are cleared automatically every Sunday at 00:00 (Seoul). Only applications and seating rows are removed — form questions and schedules stay.'
+            : '언어교환에 연결된 폼은 매주 일요일 0시(서울)에 신청 응답과 자리 배치 기록이 자동으로 비워집니다. 질문지와 스케줄 연결은 그대로 유지됩니다.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

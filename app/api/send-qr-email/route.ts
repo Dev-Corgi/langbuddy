@@ -130,25 +130,16 @@ export async function POST(request: NextRequest) {
 
     const answers = (row.answers || {}) as Record<string, unknown>
 
-    let recurringKind: 'language' | 'study' | null = null
+    let recurringKind: 'language' | null = null
     if (row.form_id) {
-      const [{ data: leRow }, { data: stRow }] = await Promise.all([
-        admin
-          .from('language_exchange_schedules')
-          .select('form_id')
-          .eq('form_id', row.form_id as string)
-          .eq('is_active', true)
-          .limit(1)
-          .maybeSingle(),
-        admin
-          .from('study_schedules')
-          .select('form_id')
-          .eq('form_id', row.form_id as string)
-          .eq('is_active', true)
-          .limit(1)
-          .maybeSingle(),
-      ])
-      recurringKind = leRow ? ('language' as const) : stRow ? ('study' as const) : null
+      const { data: leRow } = await admin
+        .from('language_exchange_schedules')
+        .select('form_id')
+        .eq('form_id', row.form_id as string)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle()
+      recurringKind = leRow ? ('language' as const) : null
     }
 
     const sessionYmd = resolveApplicationSessionYmd(

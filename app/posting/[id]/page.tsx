@@ -39,9 +39,7 @@ export default function PostingDetailPage() {
     async function fetchData() {
       let query = supabase.from('postings').select('*')
       
-      if (id === 'study') {
-        query = query.eq('category', '스터디').is('day_of_week', null).order('created_at', { ascending: false }).limit(1)
-      } else if (id === 'language') {
+      if (id === 'language') {
         query = query.eq('category', '언어교환').is('day_of_week', null).order('created_at', { ascending: false }).limit(1)
       } else {
         query = query.eq('id', id)
@@ -50,22 +48,10 @@ export default function PostingDetailPage() {
       const { data: result, error } = await query.single()
       
       if (result) {
-        // 언어교환 또는 스터디의 경우 활성화된 스케줄 가져오기
+        // 언어교환의 경우 활성화된 스케줄 가져오기
         if (result.category === '언어교환') {
           const { data: schedules } = await supabase
             .from('language_exchange_schedules')
-            .select('*')
-            .eq('posting_id', result.id)
-            .eq('is_active', true)
-            .order('day_of_week')
-          
-          if (schedules && schedules.length > 0) {
-            result.recurring_days = schedules.map(s => s.day_of_week)
-            result.is_recurring = true
-          }
-        } else if (result.category === '스터디') {
-          const { data: schedules } = await supabase
-            .from('study_schedules')
             .select('*')
             .eq('posting_id', result.id)
             .eq('is_active', true)
@@ -165,8 +151,8 @@ export default function PostingDetailPage() {
   }
 
   const handleApply = () => {
-    // Study and Language Exchange categories always use the custom form
-    if (data?.category === '스터디' || data?.category === '언어교환') {
+    // Language Exchange category always uses the custom form
+    if (data?.category === '언어교환') {
       router.push(`/posting/${id}/apply`)
       return
     }
@@ -191,8 +177,7 @@ export default function PostingDetailPage() {
       : (data?.rich_content || data?.description_ko || data?.description || '');
 
   const isLanguageExchange = data?.category === '언어교환';
-  const isStudy = data?.category === '스터디';
-  const isRecurringEvent = isLanguageExchange || isStudy;
+  const isRecurringEvent = isLanguageExchange;
   
   const displayDate = data?.is_recurring 
     ? (locale === 'en' 
@@ -208,7 +193,6 @@ export default function PostingDetailPage() {
     ? (locale === 'en' ? 'See application form' : '신청폼 참고')
     : displayLocation;
 
-  const isStudyOrLanguage = data?.category === '스터디' || data?.category === '언어교환';
   const hasRecurringSettings = data?.is_recurring && data?.recurring_settings;
 
   return (
@@ -246,7 +230,7 @@ export default function PostingDetailPage() {
                   </div>
                 </div>
 
-                {isStudyOrLanguage && hasRecurringSettings && (
+                {isLanguageExchange && hasRecurringSettings && (
                   <div className="mt-6 p-6 rounded-[24px] bg-surface/20 border border-surface/50 space-y-4">
                     <h3 className="font-black text-secondary-foreground flex items-center gap-2">
                       <Info className="w-4 h-4" />

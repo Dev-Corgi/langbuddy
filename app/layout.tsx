@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LangBuddy - 글로벌 언어교환 & 스터디 커뮤니티",
-  description: "외국인 친구들과 함께 즐기는 언어교환, 스터디, 번개 모임을 LangBuddy에서 만나보세요.",
+  title: "LangBuddy - 글로벌 언어교환 커뮤니티",
+  description: "외국인 친구들과 함께 즐기는 언어교환, 번개 모임을 LangBuddy에서 만나보세요.",
 };
 
 export default function RootLayout({

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { isSuperAdminEmail } from '@/lib/super-admin'
+import { canAccessStaffOps } from '@/lib/admin-access'
 import QrScanner from 'qr-scanner'
 import { toast } from 'sonner'
 import { QrCode, Loader2, SwitchCamera, Bug } from 'lucide-react'
@@ -43,10 +43,10 @@ export default function AdminQrScannerPage() {
       }
       const { data: profile } = await supabase
         .from('profiles')
-        .select('is_superadmin')
+        .select('is_superadmin, is_staff')
         .eq('id', user.id)
         .single()
-      if (!profile?.is_superadmin && !isSuperAdminEmail(user.email)) {
+      if (!canAccessStaffOps(user.email, profile)) {
         window.location.href = '/admin/dashboard'
         return
       }

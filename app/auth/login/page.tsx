@@ -128,8 +128,8 @@ function LoginPageContent() {
           </CardTitle>
           <CardDescription className="text-muted-foreground font-medium text-base">
             {locale === 'en' 
-              ? 'Sign in to join language exchanges and study groups' 
-              : '언어교환과 스터디에 참여하려면 로그인하세요'}
+              ? 'Sign in to join language exchanges' 
+              : '언어교환에 참여하려면 로그인하세요'}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-8 space-y-4">
@@ -213,8 +213,8 @@ function LoginPageContent() {
             {nextPath.includes('/apply') && (
               <p className="text-xs text-muted-foreground mt-2">
                 {locale === 'en'
-                  ? 'Applying for study / language exchange requires sign-in.'
-                  : '스터디·언어교환 신청은 로그인 후 진행할 수 있습니다.'}
+                  ? 'Applying for language exchange requires sign-in.'
+                  : '언어교환 신청은 로그인 후 진행할 수 있습니다.'}
               </p>
             )}
           </div>

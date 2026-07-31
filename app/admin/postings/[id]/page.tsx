@@ -51,7 +51,7 @@ export default function EditPostingPage() {
 
   const [formData, setFormData] = useState({
     id: '',
-    category: '스터디',
+    category: '번개',
     title: '',
     title_en: '',
     subtitle: '',

@@ -4,13 +4,29 @@ import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAdminUser } from '@/lib/admin-api-auth'
 import type { AdminUserUpdatePayload } from '@/lib/admin-user-types'
 import {
-  fetchProfileRoleFlags,
   isTargetSuperAdmin,
-  setProfileIsAdmin,
+  resolveUserRole,
+  setProfileRole,
 } from '@/lib/admin-user-roles'
-import { isSuperAdminUser } from '@/lib/admin-access'
+import { isValidAdminUserRole } from '@/lib/admin-user-role'
 
 type RouteContext = { params: Promise<{ id: string }> }
+
+function serializeUser(
+  userRow: Record<string, unknown>,
+  email: string | null,
+  flags: { is_admin: boolean; is_superadmin: boolean; is_staff: boolean },
+  role: ReturnType<typeof import('@/lib/admin-user-role').resolveAdminUserRole>
+) {
+  return {
+    ...userRow,
+    email,
+    role,
+    is_admin: flags.is_admin,
+    is_staff: flags.is_staff,
+    is_superadmin: role === 'superadmin',
+  }
+}
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
@@ -37,17 +53,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
 
-    const { data: authData } = await admin.auth.admin.getUserById(id)
-    const roleFlags = await fetchProfileRoleFlags(admin, id)
-    const email = authData?.user?.email ?? null
+    const { role, flags, email } = await resolveUserRole(admin, id)
 
     return NextResponse.json({
-      user: {
-        ...userRow,
-        email,
-        is_admin: roleFlags.is_admin,
-        is_superadmin: isSuperAdminUser(email, roleFlags),
-      },
+      user: serializeUser(userRow, email, flags, role),
     })
   } catch (err) {
     console.error('[admin/users/[id]] unexpected GET:', err)
@@ -67,7 +76,20 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const body = (await request.json()) as AdminUserUpdatePayload
     const admin = createSupabaseAdmin()
 
-    if (body.is_admin !== undefined) {
+    const roleToSet =
+      body.role !== undefined
+        ? body.role
+        : body.is_admin !== undefined
+          ? body.is_admin
+            ? 'admin'
+            : 'member'
+          : undefined
+
+    if (roleToSet !== undefined) {
+      if (!isValidAdminUserRole(roleToSet)) {
+        return NextResponse.json({ error: 'invalid_role' }, { status: 400 })
+      }
+
       const targetIsSuper = await isTargetSuperAdmin(admin, id)
       if (targetIsSuper) {
         return NextResponse.json(
@@ -76,14 +98,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         )
       }
 
-      const { error: profileError } = await setProfileIsAdmin(
-        admin,
-        id,
-        Boolean(body.is_admin)
-      )
+      const { error: profileError } = await setProfileRole(admin, id, roleToSet)
 
       if (profileError) {
-        console.error('[admin/users/[id]] profile is_admin update error:', profileError)
+        console.error('[admin/users/[id]] profile role update error:', profileError)
         return NextResponse.json({ error: profileError }, { status: 500 })
       }
     }
@@ -131,7 +149,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       body.kakao_id !== undefined ||
       body.onboarding_completed !== undefined
 
-    if (!userFieldsTouched && body.is_admin === undefined) {
+    if (!userFieldsTouched && roleToSet === undefined) {
       return NextResponse.json({ error: 'no_fields' }, { status: 400 })
     }
 
@@ -166,17 +184,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       data = existing
     }
 
-    const { data: authData } = await admin.auth.admin.getUserById(id)
-    const roleFlags = await fetchProfileRoleFlags(admin, id)
-    const email = authData?.user?.email ?? null
+    const { role, flags, email } = await resolveUserRole(admin, id)
 
     return NextResponse.json({
-      user: {
-        ...data,
-        email,
-        is_admin: roleFlags.is_admin,
-        is_superadmin: isSuperAdminUser(email, roleFlags),
-      },
+      user: serializeUser(data, email, flags, role),
     })
   } catch (err) {
     console.error('[admin/users/[id]] unexpected PATCH:', err)
