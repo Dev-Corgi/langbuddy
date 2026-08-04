@@ -28,9 +28,8 @@ export type { ReportReason }
 type Props = {
   open: boolean
   onClose: () => void
-  reportedResponseId: string
+  reportedUserId: string
   reportedName: string
-  reporterResponseId: string
   postingId: string
   sessionDate: string
   round: number
@@ -41,9 +40,8 @@ type Props = {
 export function ReportModal({
   open,
   onClose,
-  reportedResponseId,
+  reportedUserId,
   reportedName,
-  reporterResponseId,
   postingId,
   sessionDate,
   round,
@@ -82,8 +80,8 @@ export function ReportModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          reportedResponseId,
-          reporterResponseId,
+          reportedUserId,
+          reportedName,
           postingId,
           sessionDate,
           round,

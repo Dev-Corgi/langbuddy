@@ -15,36 +15,33 @@ type Props = {
   postingId: string
   sessionDate: string
   rounds: SessionRound[]
-  myResponseIdByRound: Record<number, string>
-  reportedSet: string[] // `${round}|${reported_response_id}`
+  reportedSet: string[] // `${round}|${reported_user_id}`
 }
 
 export function SessionDetailShell({
   postingId,
   sessionDate,
   rounds,
-  myResponseIdByRound,
   reportedSet,
 }: Props) {
   const locale = useLocale()
   const isEn = locale === 'en'
 
   const [reportTarget, setReportTarget] = useState<{
-    responseId: string
+    userId: string
     name: string
     round: number
-    reporterResponseId: string
   } | null>(null)
   const [extraReported, setExtraReported] = useState<string[]>([])
 
   const reportedSetObj = new Set([...reportedSet, ...extraReported])
 
-  const handleReport = (mate: SessionParticipant, round: number, reporterResponseId: string) => {
+  const handleReport = (mate: SessionParticipant, round: number) => {
+    if (!mate.userId) return
     setReportTarget({
-      responseId: mate.responseId,
+      userId: mate.userId,
       name: mate.name,
       round,
-      reporterResponseId,
     })
   }
 
@@ -76,7 +73,6 @@ export function SessionDetailShell({
         ) : (
           <div className="space-y-6">
             {rounds.map((r, idx) => {
-              const reporterResponseId = myResponseIdByRound[r.round]
               return (
                 <div key={r.round}>
                   {idx > 0 && <Separator className="mb-6" />}
@@ -100,7 +96,8 @@ export function SessionDetailShell({
                     ) : (
                       <div className="space-y-2">
                         {r.mates.map((mate) => {
-                          const alreadyReported = reportedSetObj.has(`${r.round}|${mate.responseId}`)
+                          const alreadyReported = !!mate.userId && reportedSetObj.has(`${r.round}|${mate.userId}`)
+                          const canReport = !!mate.userId
                           return (
                             <div
                               key={mate.responseId}
@@ -129,8 +126,15 @@ export function SessionDetailShell({
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                disabled={alreadyReported || !reporterResponseId}
-                                onClick={() => handleReport(mate, r.round, reporterResponseId)}
+                                disabled={alreadyReported || !canReport}
+                                title={
+                                  !canReport && !alreadyReported
+                                    ? isEn
+                                      ? 'This participant cannot be identified for reporting (older archived record).'
+                                      : '신고 대상을 식별할 수 없는 오래된 기록입니다.'
+                                    : undefined
+                                }
+                                onClick={() => handleReport(mate, r.round)}
                                 className={
                                   alreadyReported
                                     ? 'text-muted-foreground cursor-default text-xs'
@@ -159,9 +163,8 @@ export function SessionDetailShell({
         <ReportModal
           open={!!reportTarget}
           onClose={() => setReportTarget(null)}
-          reportedResponseId={reportTarget.responseId}
+          reportedUserId={reportTarget.userId}
           reportedName={reportTarget.name}
-          reporterResponseId={reportTarget.reporterResponseId}
           postingId={postingId}
           sessionDate={sessionDate}
           round={reportTarget.round}
@@ -169,7 +172,7 @@ export function SessionDetailShell({
           onSuccess={() => {
             setExtraReported((prev) => [
               ...prev,
-              `${reportTarget.round}|${reportTarget.responseId}`,
+              `${reportTarget.round}|${reportTarget.userId}`,
             ])
             setReportTarget(null)
           }}

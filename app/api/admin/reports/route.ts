@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAdminUser } from '@/lib/admin-api-auth'
-import { extractParticipantInfoFromAnswers } from '@/lib/utils'
 
 const PAGE_SIZE = 30
 
@@ -34,6 +33,9 @@ export async function GET(request: NextRequest) {
         status,
         admin_note,
         posting_id,
+        reporter_user_id,
+        reported_user_id,
+        reported_name,
         reporter_response_id,
         reported_response_id,
         postings!inner(title)
@@ -54,29 +56,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'fetch_failed' }, { status: 500 })
     }
 
-    // reporter / reported form_responses 이름 조회
-    const responseIds = Array.from(
+    // 신고자/신고 대상 이름 조회. user_id는 form_responses가 주간 초기화로
+    // 삭제돼도 안정적으로 유지되므로 users 테이블에서 조회한다.
+    // (신고 대상 이름은 신고 시점 스냅샷인 reported_name을 우선 사용)
+    const userIds = Array.from(
       new Set(
-        (reportRows || []).flatMap((r) => [
-          String(r.reporter_response_id),
-          String(r.reported_response_id),
-        ])
+        (reportRows || []).flatMap((r) => [r.reporter_user_id, r.reported_user_id].filter(Boolean))
       )
-    )
+    ) as string[]
 
-    let nameMap = new Map<string, string>()
-    if (responseIds.length > 0) {
-      const { data: frRows } = await admin
-        .from('form_responses')
-        .select('id, answers')
-        .in('id', responseIds)
-
-      for (const fr of frRows || []) {
-        const info = extractParticipantInfoFromAnswers(
-          (fr.answers || {}) as Record<string, unknown>,
-          []
-        )
-        nameMap.set(fr.id, info.name || '(이름 없음)')
+    const userNameMap = new Map<string, string>()
+    if (userIds.length > 0) {
+      const { data: userRows } = await admin.from('users').select('id, name').in('id', userIds)
+      for (const u of userRows || []) {
+        if (u.name) userNameMap.set(u.id, u.name)
       }
     }
 
@@ -91,8 +84,11 @@ export async function GET(request: NextRequest) {
       admin_note: r.admin_note,
       posting_id: r.posting_id,
       posting_title: (r.postings as unknown as { title?: string })?.title || '',
-      reporter_name: nameMap.get(String(r.reporter_response_id)) || '(알 수 없음)',
-      reported_name: nameMap.get(String(r.reported_response_id)) || '(알 수 없음)',
+      reporter_name: userNameMap.get(r.reporter_user_id) || '(알 수 없음)',
+      reported_name:
+        r.reported_name ||
+        (r.reported_user_id ? userNameMap.get(r.reported_user_id) : undefined) ||
+        '(알 수 없음)',
       reporter_response_id: r.reporter_response_id,
       reported_response_id: r.reported_response_id,
     }))

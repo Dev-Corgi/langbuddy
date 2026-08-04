@@ -119,7 +119,14 @@ export default function ApplicationFormPage() {
   }, [])
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      // TOKEN_REFRESHED / INITIAL_SESSION fire on the *same* logged-in user —
+      // e.g. right after the tab regains focus (Supabase checks/refreshes the
+      // session on visibilitychange). That happens every time a user briefly
+      // leaves to their banking app for a bank transfer and comes back. Only
+      // reload the page's data on an actual identity change (sign in/out),
+      // otherwise we'd wipe out everything the user already typed in the form.
+      if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') return
       setAuthRefreshTick((t) => t + 1)
     })
     return () => subscription.unsubscribe()
