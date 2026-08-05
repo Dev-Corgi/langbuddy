@@ -44,6 +44,11 @@ import {
   type ApplyPaymentChoice,
 } from '@/lib/supported-payment-methods'
 import { canAccessStaffOps } from '@/lib/admin-access'
+import { buildSchedulesByDay, type LeScheduleInfo } from '@/lib/language-exchange-schedule'
+import { LanguageExchangeScheduleInfo } from '@/components/language-exchange-schedule-info'
+
+/** 디버깅용 임시 기능 — 스탭 무료 신청. 재활성화 시 true로 변경 */
+const STAFF_FREE_APPLY_ENABLED = true
 
 // Basic Radio Group Implementation
 function RadioGroup({ value, onValueChange, children, className }: any) {
@@ -113,6 +118,8 @@ export default function ApplicationFormPage() {
   /** 반복 모임: 선택 요일 form 로딩/준비 상태 (race 방지) */
   const [dayFormLoading, setDayFormLoading] = useState(false)
   const [dayFormReady, setDayFormReady] = useState(false)
+  /** 요일별 시간·장소 (language_exchange_schedules) */
+  const [schedulesByDay, setSchedulesByDay] = useState<Record<string, LeScheduleInfo>>({})
 
   useEffect(() => {
     setAuthChecked(true)
@@ -246,13 +253,17 @@ export default function ApplicationFormPage() {
         setUserData(userInfo)
         currentUserInfo = userInfo
 
-        const { data: profileFlags } = await supabase
-          .from('profiles')
-          .select('is_staff, is_superadmin, is_admin')
-          .eq('id', authUser.id)
-          .maybeSingle()
-        if (cancelled) return
-        setStaffFreeApply(canAccessStaffOps(authUser.email, profileFlags))
+        if (STAFF_FREE_APPLY_ENABLED) {
+          const { data: profileFlags } = await supabase
+            .from('profiles')
+            .select('is_staff, is_superadmin, is_admin')
+            .eq('id', authUser.id)
+            .maybeSingle()
+          if (cancelled) return
+          setStaffFreeApply(canAccessStaffOps(authUser.email, profileFlags))
+        } else {
+          setStaffFreeApply(false)
+        }
       } else {
         setStaffFreeApply(false)
       }
@@ -291,8 +302,11 @@ export default function ApplicationFormPage() {
         if (schedules && schedules.length > 0) {
           postingData.recurring_days = schedules.map(s => s.day_of_week)
           postingData.is_recurring = true
-          // 첫 번째 스케줄의 form_id 사용 (fetchScheduleForDay가 선택 요일 기준으로 덮어씀)
           postingData.form_id = schedules[0].form_id
+          if (cancelled) return
+          setSchedulesByDay(buildSchedulesByDay(schedules))
+        } else {
+          setSchedulesByDay({})
         }
       }
       
@@ -712,7 +726,7 @@ export default function ApplicationFormPage() {
       }
     }
 
-    const isStaffFreeApply = staffFreeApply && posting?.category === '언어교환'
+    const isStaffFreeApply = STAFF_FREE_APPLY_ENABLED && staffFreeApply && posting?.category === '언어교환'
     const needsReceipt = paymentMethod === 'bank' && !isStaffFreeApply
 
     // Validate payment receipt for bank transfer
@@ -941,7 +955,7 @@ export default function ApplicationFormPage() {
     }
 
     const hasBankAccount = !!posting?.bank_account;
-    const isStaffFreeApply = staffFreeApply && posting?.category === '언어교환'
+    const isStaffFreeApply = STAFF_FREE_APPLY_ENABLED && staffFreeApply && posting?.category === '언어교환'
 
     if (isStaffFreeApply) {
       handleSubmit(e)
@@ -1082,7 +1096,7 @@ export default function ApplicationFormPage() {
   const isRecurringApply =
     !!posting?.is_recurring &&
     posting?.category === '언어교환'
-  const isStaffFreeApply = staffFreeApply && posting?.category === '언어교환'
+  const isStaffFreeApply = STAFF_FREE_APPLY_ENABLED && staffFreeApply && posting?.category === '언어교환'
   const canSubmitApplication =
     !isRecurringApply ||
     (!!selectedDay && dayFormReady && !dayFormLoading && questions.length > 0)
@@ -1121,52 +1135,42 @@ export default function ApplicationFormPage() {
           </header>
 
           <form onSubmit={handlePreSubmit} className="space-y-8">
-            {/* 언어교환 요일/언어 선택 */}
+            {/* 언어교환 요일 선택 (시간·장소 포함 카드형) */}
             {posting?.category === '언어교환' && posting?.is_recurring && (
               <Card className="border-primary/20 shadow-lg rounded-[32px] overflow-hidden bg-surface/10">
-                <CardContent className="p-8 space-y-8">
-                  <div className="space-y-4">
+                <CardContent className="p-8 space-y-6">
+                  <div className="space-y-2">
                     <Label className="text-lg font-black text-foreground flex items-center gap-2">
                       <span className="w-1.5 h-6 bg-primary rounded-full" />
                       {locale === 'en' ? 'Select Meeting Day' : '참여 요일 선택'} *
                     </Label>
-                    {selectableMeetingDays !== undefined && selectableMeetingDays.length === 0 ? (
-                      <p className="text-sm font-bold text-muted-foreground rounded-2xl bg-muted/60 px-4 py-3 border border-border/60">
-                        {tDict.booking.noSelectableDaysThisWeek}
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {(() => {
-                          const dayOrder = ['월', '화', '수', '목', '금', '토', '일']
-                          const sortedDays = [...(selectableMeetingDays ?? [])].sort((a, b) => {
-                            return dayOrder.indexOf(a) - dayOrder.indexOf(b)
-                          })
-                          return sortedDays.map((day: string) => (
-                            <button
-                              key={day}
-                              type="button"
-                              onClick={() => setSelectedDay(day)}
-                              className={cn(
-                                "px-6 py-3 rounded-2xl font-black transition-all border-2",
-                                selectedDay === day
-                                  ? "bg-primary text-white border-primary shadow-lg scale-105"
-                                  : "bg-card text-muted-foreground border-border hover:border-primary/30"
-                              )}
-                            >
-                              {day}{locale === 'en' ? '' : '요일'}
-                            </button>
-                          ))
-                        })()}
-                      </div>
-                    )}
-                    {selectedDay && sessionEventDate ? (
-                      <p className="text-sm font-bold text-primary pt-1">
-                        {locale === 'en'
-                          ? `Session date: ${formatSessionDateLabel(sessionEventDate, 'en')}`
-                          : `참석 예정일: ${formatSessionDateLabel(sessionEventDate, 'ko')}`}
-                      </p>
-                    ) : null}
+                    <p className="text-sm font-medium text-muted-foreground leading-relaxed pl-3.5">
+                      {locale === 'en'
+                        ? 'Time and location differ by day. Please check before selecting your meeting day.'
+                        : '요일마다 시간과 장소가 다릅니다. 참여 요일을 선택하기 전에 확인해 주세요.'}
+                    </p>
                   </div>
+                  {selectableMeetingDays !== undefined && selectableMeetingDays.length === 0 ? (
+                    <p className="text-sm font-bold text-muted-foreground rounded-2xl bg-muted/60 px-4 py-3 border border-border/60">
+                      {tDict.booking.noSelectableDaysThisWeek}
+                    </p>
+                  ) : Object.keys(schedulesByDay).length > 0 || (selectableMeetingDays?.length ?? 0) > 0 ? (
+                    <LanguageExchangeScheduleInfo
+                      mode="picker"
+                      schedulesByDay={schedulesByDay}
+                      days={selectableMeetingDays}
+                      selectedDay={selectedDay || undefined}
+                      locale={locale}
+                      onSelectDay={setSelectedDay}
+                    />
+                  ) : null}
+                  {selectedDay && sessionEventDate ? (
+                    <p className="text-sm font-bold text-primary">
+                      {locale === 'en'
+                        ? `Session date: ${formatSessionDateLabel(sessionEventDate, 'en')}`
+                        : `참석 예정일: ${formatSessionDateLabel(sessionEventDate, 'ko')}`}
+                    </p>
+                  ) : null}
                 </CardContent>
               </Card>
             )}

@@ -22,6 +22,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { NovelRenderer } from '@/components/admin/novel-renderer'
+import { buildSchedulesByDay, type LeScheduleInfo } from '@/lib/language-exchange-schedule'
+import { LanguageExchangeScheduleInfo } from '@/components/language-exchange-schedule-info'
 
 export default function PostingDetailPage() {
   const params = useParams()
@@ -32,6 +34,7 @@ export default function PostingDetailPage() {
   const tDict = i18n[locale]
   
   const [data, setData] = useState<any>(null)
+  const [schedulesByDay, setSchedulesByDay] = useState<Record<string, LeScheduleInfo>>({})
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
@@ -60,11 +63,15 @@ export default function PostingDetailPage() {
           if (schedules && schedules.length > 0) {
             result.recurring_days = schedules.map(s => s.day_of_week)
             result.is_recurring = true
+            setSchedulesByDay(buildSchedulesByDay(schedules))
+          } else {
+            setSchedulesByDay({})
           }
         }
         setData(result)
       } else {
         setData(null)
+        setSchedulesByDay({})
       }
       setLoading(false)
     }
@@ -186,14 +193,14 @@ export default function PostingDetailPage() {
     : data?.date;
   
   const displayTime = isRecurringEvent 
-    ? (locale === 'en' ? 'See application form' : '신청폼 참고')
+    ? (locale === 'en' ? 'Varies by day' : '요일별 상이')
     : data?.time;
   
   const displayLocationText = isRecurringEvent
-    ? (locale === 'en' ? 'See application form' : '신청폼 참고')
+    ? (locale === 'en' ? 'Varies by day' : '요일별 상이')
     : displayLocation;
 
-  const hasRecurringSettings = data?.is_recurring && data?.recurring_settings;
+  const hasScheduleByDay = isLanguageExchange && Object.keys(schedulesByDay).length > 0;
 
   return (
     <div className="min-h-screen bg-card">
@@ -230,37 +237,13 @@ export default function PostingDetailPage() {
                   </div>
                 </div>
 
-                {isLanguageExchange && hasRecurringSettings && (
-                  <div className="mt-6 p-6 rounded-[24px] bg-surface/20 border border-surface/50 space-y-4">
-                    <h3 className="font-black text-secondary-foreground flex items-center gap-2">
-                      <Info className="w-4 h-4" />
-                      {locale === 'en' ? 'Day-specific Schedule' : '요일별 상세 안내'}
-                    </h3>
-                    <div className="grid grid-cols-1 gap-3">
-                      {Object.entries(data.recurring_settings).map(([day, settings]: [string, any]) => {
-                        return (
-                          <div key={day} className="flex flex-col md:flex-row md:items-center justify-between p-4 rounded-2xl bg-card border border-border gap-3 shadow-sm shadow-surface/10">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center font-black text-xs shrink-0">
-                                {day}
-                              </div>
-                              <span className="font-bold text-foreground">{settings.location || displayLocation}</span>
-                            </div>
-                            {settings.languages && settings.languages.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5">
-                                {settings.languages.map((lang: string) => (
-                                  <div className='flex items-center justify-center rounded-full bg-secondary'>
-                                  <span key={lang} className="px-3 py-1 rounded-full bg-surface/30 text-secondary-foreground text-[11px] font-black uppercase tracking-wider">
-                                    {lang}
-                                  </span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
+                {hasScheduleByDay && (
+                  <div className="mt-6">
+                    <LanguageExchangeScheduleInfo
+                      schedulesByDay={schedulesByDay}
+                      days={data.recurring_days}
+                      locale={locale}
+                    />
                   </div>
                 )}
               </div>
