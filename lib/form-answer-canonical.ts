@@ -100,6 +100,25 @@ export function normalizeLanguage(raw: string): string {
   return aliasLookup(LANGUAGE_ALIASES, raw) ?? raw.trim()
 }
 
+/** 당분간 언어교환은 영어만 운영 — 신청폼에서 자동 지정 */
+export const DEFAULT_LE_LANGUAGE = '영어'
+
+export function resolveLanguageQuestionDisplayAnswer(
+  question: Pick<CanonicalFormQuestion, 'options' | 'options_en'>,
+  locale: FormDisplayLocale
+): string {
+  const options = asStringArray(question.options)
+  const optionsEn = asStringArray(question.options_en)
+  const displayList = locale === 'en' && optionsEn.length > 0 ? optionsEn : options
+  for (const opt of displayList) {
+    if (normalizeLanguage(opt) === DEFAULT_LE_LANGUAGE) return opt
+  }
+  for (const opt of options) {
+    if (normalizeLanguage(opt) === DEFAULT_LE_LANGUAGE) return opt
+  }
+  return locale === 'en' ? 'English' : DEFAULT_LE_LANGUAGE
+}
+
 export function normalizeDrink(raw: string): string {
   if (!raw) return raw
   return aliasLookup(DRINK_ALIASES, raw) ?? raw.trim()

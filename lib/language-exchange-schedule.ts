@@ -2,6 +2,8 @@ export type LeScheduleInfo = {
   dayOfWeek: string
   time: string
   location: string
+  locationEn: string
+  locationMapUrl: string
 }
 
 export const KOREAN_WEEKDAY_ORDER = ['월', '화', '수', '목', '금', '토', '일'] as const
@@ -18,6 +20,8 @@ export function buildSchedulesByDay(
     day_of_week: string
     time?: string | null
     location?: string | null
+    location_en?: string | null
+    location_map_url?: string | null
   }>
 ): Record<string, LeScheduleInfo> {
   const map: Record<string, LeScheduleInfo> = {}
@@ -27,9 +31,32 @@ export function buildSchedulesByDay(
       dayOfWeek: row.day_of_week,
       time: row.time?.trim() || '',
       location: row.location?.trim() || '',
+      locationEn: row.location_en?.trim() || '',
+      locationMapUrl: row.location_map_url?.trim() || '',
     }
   }
   return map
+}
+
+/** locale에 맞는 장소 표시 (영어 UI는 location_en 우선, 없으면 location) */
+export function getScheduleLocationLabel(
+  schedule: Pick<LeScheduleInfo, 'location' | 'locationEn'>,
+  locale: 'ko' | 'en'
+): string {
+  if (locale === 'en' && schedule.locationEn) return schedule.locationEn
+  return schedule.location
+}
+
+/** 관리자 입력 URL 우선, 없으면 location/location_en 텍스트로 네이버 지도 검색 URL 생성 */
+export function resolveLocationMapUrl(
+  schedule: Pick<LeScheduleInfo, 'location' | 'locationEn' | 'locationMapUrl'>
+): string | null {
+  if (schedule.locationMapUrl) return schedule.locationMapUrl
+  const searchText = schedule.location || schedule.locationEn
+  if (searchText) {
+    return `https://map.naver.com/v5/search/${encodeURIComponent(searchText)}`
+  }
+  return null
 }
 
 /** "19:00" → locale-aware display (e.g. 오후 7:00 / 7:00 PM) */

@@ -97,6 +97,8 @@ function LanguageManagementContent() {
           day_of_week: day,
           time: "19:00",
           location: "홍대입구역 인근",
+          location_en: "",
+          location_map_url: "",
           max_participants: 50,
           is_active: false,
           form_id: null
@@ -463,6 +465,27 @@ function LanguageManagementContent() {
                       placeholder="홍대입구역 인근"
                       className="rounded-xl"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold text-muted-foreground">장소 (English)</Label>
+                    <Input
+                      value={currentData.location_en || ""}
+                      onChange={(e) => handleScheduleFieldChange(day, "location_en", e.target.value)}
+                      placeholder="Near Hongdae Station"
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold text-muted-foreground">네이버 지도 링크</Label>
+                    <Input
+                      value={currentData.location_map_url || ""}
+                      onChange={(e) => handleScheduleFieldChange(day, "location_map_url", e.target.value)}
+                      placeholder="https://map.naver.com/..."
+                      className="rounded-xl"
+                    />
+                    <p className="text-xs font-medium text-muted-foreground">
+                      비워두면 장소명으로 네이버 지도 검색 링크를 사용합니다.
+                    </p>
                   </div>
                 </CardContent>
               </Card>

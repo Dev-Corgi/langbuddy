@@ -1,10 +1,12 @@
 'use client'
 
-import { Clock, MapPin, CalendarDays } from 'lucide-react'
+import { Clock, MapPin, CalendarDays, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   formatDayLabel,
   formatScheduleTime,
+  getScheduleLocationLabel,
+  resolveLocationMapUrl,
   sortKoreanWeekdays,
   type LeScheduleInfo,
 } from '@/lib/language-exchange-schedule'
@@ -36,16 +38,45 @@ function ScheduleDayRow({
   onSelect?: () => void
 }) {
   const en = locale === 'en'
-  const className = cn(
+  const locationLabel = schedule ? getScheduleLocationLabel(schedule, locale) : ''
+  const mapUrl =
+    schedule && (schedule.location || schedule.locationEn || schedule.locationMapUrl)
+      ? resolveLocationMapUrl(schedule)
+      : null
+
+  const rowClassName = cn(
     'flex w-full flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition-all',
     isSelected
       ? 'border-primary bg-primary/10 shadow-sm ring-2 ring-primary/20'
       : 'border-border/70 bg-card',
     mode === 'picker' && !isSelected && 'hover:border-primary/40 hover:bg-primary/5 cursor-pointer',
-    mode === 'picker' && isSelected && 'cursor-pointer'
+    mode === 'display' && 'bg-card'
   )
 
-  const content = (
+  const mapLink = mapUrl ? (
+    <a
+      href={mapUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-black transition-colors',
+        isSelected
+          ? 'border-primary/40 bg-card text-primary hover:bg-primary/10'
+          : 'border-border bg-muted/40 text-foreground hover:bg-muted hover:border-primary/30'
+      )}
+      aria-label={
+        en
+          ? `Open ${locationLabel || 'location'} in Naver Map`
+          : `${locationLabel || '장소'} 네이버 지도에서 보기`
+      }
+    >
+      <ExternalLink className="w-3 h-3 shrink-0" />
+      {en ? 'Map' : '지도'}
+    </a>
+  ) : null
+
+  const mainContent = (
     <>
       <div className="flex items-center gap-3 min-w-[88px] shrink-0">
         <span
@@ -57,7 +88,7 @@ function ScheduleDayRow({
           {formatDayLabel(day, locale)}
         </span>
       </div>
-      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-x-5 gap-y-1.5 text-sm font-bold text-foreground">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-x-5 gap-y-1.5 text-sm font-bold text-foreground min-w-0 flex-1">
         <span className="inline-flex items-center gap-1.5">
           <Clock className="w-4 h-4 text-primary shrink-0" />
           {schedule?.time
@@ -66,9 +97,12 @@ function ScheduleDayRow({
               ? 'Time TBD'
               : '시간 미정'}
         </span>
-        <span className="inline-flex items-center gap-1.5">
+        <span className="inline-flex items-center gap-1.5 min-w-0">
           <MapPin className="w-4 h-4 text-primary shrink-0" />
-          {schedule?.location || (en ? 'Location TBD' : '장소 미정')}
+          <span className="truncate">
+            {locationLabel || (en ? 'Location TBD' : '장소 미정')}
+          </span>
+          {mapLink}
         </span>
       </div>
     </>
@@ -76,13 +110,24 @@ function ScheduleDayRow({
 
   if (mode === 'picker') {
     return (
-      <button type="button" onClick={onSelect} className={className}>
-        {content}
-      </button>
+      <div
+        className={rowClassName}
+        role="button"
+        tabIndex={0}
+        onClick={onSelect}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onSelect?.()
+          }
+        }}
+      >
+        {mainContent}
+      </div>
     )
   }
 
-  return <div className={className}>{content}</div>
+  return <div className={rowClassName}>{mainContent}</div>
 }
 
 export function LanguageExchangeScheduleInfo({

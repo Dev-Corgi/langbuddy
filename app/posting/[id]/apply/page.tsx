@@ -25,8 +25,10 @@ import { cn, extractParticipantInfoFromAnswers } from "@/lib/utils"
 import {
   canonicalizeFormAnswers,
   canonicalizeLegacySelectedLanguage,
+  DEFAULT_LE_LANGUAGE,
   remapAnswersBySystemKey,
   remapAnswersForLocale,
+  resolveLanguageQuestionDisplayAnswer,
   type FormDisplayLocale,
 } from '@/lib/form-answer-canonical'
 import { PaymentReceiptUploader } from '@/components/PaymentReceiptUploader'
@@ -48,7 +50,7 @@ import { buildSchedulesByDay, type LeScheduleInfo } from '@/lib/language-exchang
 import { LanguageExchangeScheduleInfo } from '@/components/language-exchange-schedule-info'
 
 /** 디버깅용 임시 기능 — 스탭 무료 신청. 재활성화 시 true로 변경 */
-const STAFF_FREE_APPLY_ENABLED = true
+const STAFF_FREE_APPLY_ENABLED = false
 
 // Basic Radio Group Implementation
 function RadioGroup({ value, onValueChange, children, className }: any) {
@@ -180,6 +182,15 @@ export default function ApplicationFormPage() {
     if (!selectedDay) return null
     return buildAutoRecurringFormTitles(selectedDay, 'language')
   }, [posting?.is_recurring, posting?.category, selectedDay])
+
+  const isLanguageExchangeApply = posting?.category === '언어교환'
+  const visibleQuestions = useMemo(
+    () =>
+      isLanguageExchangeApply
+        ? questions.filter((q) => q.system_key !== 'language')
+        : questions,
+    [questions, isLanguageExchangeApply]
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -421,6 +432,12 @@ export default function ApplicationFormPage() {
                 initialAnswers[q.id] = currentUserInfo.kakao_id
               }
             }
+            if (q.system_key === 'language' && postingData.category === '언어교환') {
+              initialAnswers[q.id] = resolveLanguageQuestionDisplayAnswer(
+                q,
+                locale === 'en' ? 'en' : 'ko'
+              )
+            }
           })
           setAnswers(initialAnswers)
         }
@@ -586,6 +603,12 @@ export default function ApplicationFormPage() {
           initialAnswers[q.id] = currentUserData.kakao_id
         }
       }
+      if (q.system_key === 'language' && posting?.category === '언어교환') {
+        initialAnswers[q.id] = resolveLanguageQuestionDisplayAnswer(
+          q,
+          locale === 'en' ? 'en' : 'ko'
+        )
+      }
     })
     return initialAnswers
   }
@@ -671,11 +694,22 @@ export default function ApplicationFormPage() {
       userData
     )
 
+    const isLanguageExchange = posting?.category === '언어교환'
+    const langQuestion = submitQuestions.find((q) => q.system_key === 'language')
+    const displayLocale: FormDisplayLocale = locale === 'en' ? 'en' : 'ko'
+    const submitAnswersWithLang = isLanguageExchange && langQuestion
+      ? {
+          ...submitAnswers,
+          [langQuestion.id]: resolveLanguageQuestionDisplayAnswer(langQuestion, displayLocale),
+        }
+      : submitAnswers
+
     // Validate required questions (시스템 질문은 항상 필수)
     for (const q of submitQuestions) {
+      if (isLanguageExchange && q.system_key === 'language') continue
       const isRequired = q.is_required || q.system_key
       if (isRequired) {
-        const answer = submitAnswers[q.id]
+        const answer = submitAnswersWithLang[q.id]
         if (!answer || (Array.isArray(answer) && answer.length === 0)) {
           const qText = locale === 'en' && q.question_text_en ? q.question_text_en : q.question_text
           alert(locale === 'en' ? `Please answer: ${qText}` : `필수 질문에 답변해주세요: ${qText}`)
@@ -778,9 +812,13 @@ export default function ApplicationFormPage() {
       : paymentMethodFromApplyChoice(paymentMethod)
 
     const canonicalAnswers = canonicalizeFormAnswers(submitQuestions, {
-      ...submitAnswers,
-      ...(selectedLang
-        ? { _selected_language: canonicalizeLegacySelectedLanguage(selectedLang) }
+      ...submitAnswersWithLang,
+      ...(isLanguageExchange || selectedLang
+        ? {
+            _selected_language: canonicalizeLegacySelectedLanguage(
+              isLanguageExchange ? DEFAULT_LE_LANGUAGE : selectedLang
+            ),
+          }
         : {}),
     })
     const participantInfo = extractParticipantInfoFromAnswers(canonicalAnswers, submitQuestions)
@@ -883,7 +921,10 @@ export default function ApplicationFormPage() {
                 answer: Array.isArray(answers[q.id]) ? answers[q.id].join(', ') : answers[q.id]
               })),
               { question: "선택 요일", answer: selectedDay },
-              { question: "선택 언어", answer: selectedLang },
+              {
+                question: "선택 언어",
+                answer: posting?.category === '언어교환' ? DEFAULT_LE_LANGUAGE : selectedLang,
+              },
               {
                 question: "결제 방식",
                 answer: canonicalPaymentMethod,
@@ -943,8 +984,10 @@ export default function ApplicationFormPage() {
     }
 
     // Validate required questions
+    const isLanguageExchange = posting?.category === '언어교환'
     for (const q of questions) {
-      if (q.is_required) {
+      if (isLanguageExchange && q.system_key === 'language') continue
+      if (q.is_required || q.system_key) {
         const answer = answers[q.id]
         if (!answer || (Array.isArray(answer) && answer.length === 0)) {
           const qText = locale === 'en' && q.question_text_en ? q.question_text_en : q.question_text
@@ -1228,7 +1271,7 @@ export default function ApplicationFormPage() {
             ) : null}
 
             {/* 요일 선택 후에만 질문 폼 표시 */}
-            {(!posting?.is_recurring || selectedDay) && !isRecurringApplyLoadingForm && questions.map((q, idx) => {
+            {(!posting?.is_recurring || selectedDay) && !isRecurringApplyLoadingForm && visibleQuestions.map((q, idx) => {
               const qText = locale === 'en' && q.question_text_en ? q.question_text_en : q.question_text
               const qOptions = locale === 'en' && q.options_en ? q.options_en : q.options
               
@@ -1457,7 +1500,7 @@ export default function ApplicationFormPage() {
                     setPaymentMethod('bank')
                   }}
                   className={cn(
-                    "flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 transition-all group",
+                    "flex flex-col items-center justify-center gap-1.5 p-6 rounded-2xl border-2 transition-all group",
                     paymentMethod === "bank"
                       ? "bg-primary border-primary text-white shadow-lg scale-[1.02]"
                       : "bg-card border-border text-muted-foreground hover:border-primary/30"
@@ -1467,6 +1510,9 @@ export default function ApplicationFormPage() {
                   <span className={cn("text-xs font-medium", paymentMethod === "bank" ? "text-white/80" : "text-muted-foreground")}>
                     {locale === 'en' ? 'Pay now via bank transfer' : '지금 바로 계좌로 이체'}
                   </span>
+                  <span className={cn("text-sm font-black mt-0.5", paymentMethod === "bank" ? "text-white" : "text-primary")}>
+                    {locale === 'en' ? '₩10,000' : '10,000원'}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -1474,15 +1520,20 @@ export default function ApplicationFormPage() {
                     setPaymentMethod('on_site')
                   }}
                   className={cn(
-                    "flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 transition-all group",
+                    "flex flex-col items-center justify-center gap-1.5 p-6 rounded-2xl border-2 transition-all group",
                     paymentMethod === "on_site"
                       ? "bg-foreground border-foreground text-background shadow-lg scale-[1.02]"
                       : "bg-card border-border text-muted-foreground hover:border-border"
                   )}
                 >
-                  <span className="text-lg font-black">{locale === 'en' ? 'Pay on Site' : '현장현금'}</span>
+                  <span className="text-lg font-black">{locale === 'en' ? 'On-site Payment' : '현장 결제'}</span>
                   <span className={cn("text-xs font-medium", paymentMethod === "on_site" ? "text-white/80" : "text-muted-foreground")}>
                     {locale === 'en' ? 'Pay at the venue' : '모임 장소에서 직접 결제'}
+                  </span>
+                  <span className={cn("text-sm font-black mt-0.5 text-center leading-snug px-1", paymentMethod === "on_site" ? "text-white" : "text-primary")}>
+                    {locale === 'en'
+                      ? 'On-site payment is ₩12,000 for Korean participants.'
+                      : '현장결제는 한국인 12000원을 받고 있습니다.'}
                   </span>
                 </button>
               </div>
