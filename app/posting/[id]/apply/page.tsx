@@ -1532,8 +1532,8 @@ export default function ApplicationFormPage() {
                   </span>
                   <span className={cn("text-sm font-black mt-0.5 text-center leading-snug px-1", paymentMethod === "on_site" ? "text-white" : "text-primary")}>
                     {locale === 'en'
-                      ? 'On-site payment is ₩12,000 for Korean participants.'
-                      : '현장결제는 한국인 12000원을 받고 있습니다.'}
+                      ? 'On-site payment is ₩12,000. Koreans are encouraged to use bank transfer if possible!'
+                      : '현장결제 12000원 받고 있습니다. 한국분들은 되도록 계좌이체 해주세요!'}
                   </span>
                 </button>
               </div>
