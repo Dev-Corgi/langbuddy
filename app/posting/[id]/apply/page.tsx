@@ -58,7 +58,7 @@ import {
 } from '@/lib/apply-payment-draft'
 
 /** 디버깅용 임시 기능 — 스탭 무료 신청. 재활성화 시 true로 변경 */
-const STAFF_FREE_APPLY_ENABLED = false
+const STAFF_FREE_APPLY_ENABLED = true
 
 // Basic Radio Group Implementation
 function RadioGroup({ value, onValueChange, children, className }: any) {
