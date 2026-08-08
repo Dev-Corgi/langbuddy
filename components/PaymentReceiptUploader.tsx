@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useId } from 'react'
 import { Upload, X, ImageIcon, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -39,11 +39,13 @@ export function PaymentReceiptUploader({
   locale = 'ko',
 }: PaymentReceiptUploaderProps) {
   const isEn = locale === 'en'
+  const inputId = useId()
   const [preview, setPreview] = useState<string | null>(existingUrl || null)
   const [previewBroken, setPreviewBroken] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const inputDisabled = disabled || isUploading
 
   const validateFile = (file: File): boolean => {
     // 일부 브라우저/OS(특히 iOS의 HEIC)는 file.type을 빈 문자열로 보고하는 경우가 있어
@@ -92,24 +94,26 @@ export function PaymentReceiptUploader({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) handleFile(file)
+    // 같은 파일 재선택 허용 (iOS)
+    e.target.value = ''
   }
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setDragActive(false)
-    
-    if (disabled || isUploading) return
-    
+
+    if (inputDisabled) return
+
     const file = e.dataTransfer.files?.[0]
     if (file) handleFile(file)
-  }, [disabled, isUploading])
+  }, [inputDisabled])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!disabled && !isUploading) setDragActive(true)
-  }, [disabled, isUploading])
+    if (!inputDisabled) setDragActive(true)
+  }, [inputDisabled])
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -117,53 +121,49 @@ export function PaymentReceiptUploader({
     setDragActive(false)
   }, [])
 
-  const handleRemove = () => {
+  const handleRemove = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
     setPreview(null)
     setPreviewBroken(false)
     if (inputRef.current) inputRef.current.value = ''
     onRemove?.()
   }
 
-  const handleClick = () => {
-    if (!disabled && !isUploading) {
-      inputRef.current?.click()
-    }
-  }
-
   return (
     <div className="space-y-3">
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*,.heic,.heif"
-        onChange={handleChange}
-        className="hidden"
-        disabled={disabled || isUploading}
-      />
-
       {!preview ? (
-        <div
-          onClick={handleClick}
+        <label
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           className={cn(
-            "relative border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer",
-            dragActive 
-              ? "border-primary bg-primary/5" 
-              : "border-border bg-muted/30 hover:border-primary/30 hover:bg-muted/50",
-            (disabled || isUploading) && "opacity-50 cursor-not-allowed"
+            'relative block border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer',
+            dragActive
+              ? 'border-primary bg-primary/5'
+              : 'border-border bg-muted/30 hover:border-primary/30 hover:bg-muted/50',
+            inputDisabled && 'opacity-50 cursor-not-allowed pointer-events-none'
           )}
         >
+          <input
+            id={inputId}
+            ref={inputRef}
+            type="file"
+            accept="image/*,.heic,.heif"
+            onChange={handleChange}
+            disabled={inputDisabled}
+            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+            aria-label={isEn ? 'Upload payment receipt photo' : '입금 영수증 사진 업로드'}
+          />
           {isUploading ? (
-            <div className="space-y-3">
+            <div className="space-y-3 pointer-events-none">
               <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
               <p className="text-sm font-medium text-muted-foreground">
                 {isEn ? 'Processing...' : '업로드 중...'}
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 pointer-events-none">
               <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
                 <Upload className="w-6 h-6 text-primary" />
               </div>
@@ -180,7 +180,7 @@ export function PaymentReceiptUploader({
               </p>
             </div>
           )}
-        </div>
+        </label>
       ) : (
         <div className="relative rounded-2xl overflow-hidden border border-border bg-muted/30">
           <div className="relative aspect-video">
@@ -203,9 +203,10 @@ export function PaymentReceiptUploader({
           </div>
           {!disabled && (
             <Button
+              type="button"
               variant="destructive"
               size="icon"
-              className="absolute top-2 right-2 h-8 w-8 rounded-full"
+              className="absolute top-2 right-2 z-20 h-8 w-8 rounded-full"
               onClick={handleRemove}
             >
               <X className="w-4 h-4" />

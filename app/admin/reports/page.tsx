@@ -26,6 +26,7 @@ type ReportRow = {
   posting_title: string
   reporter_name: string
   reported_name: string
+  reported_is_guest?: boolean
   reporter_response_id: string
   reported_response_id: string
 }
@@ -272,9 +273,16 @@ export default function AdminReportsPage() {
               <div>
                 <h2 className="text-sm font-black text-foreground mb-3">신고 상세</h2>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">신고 대상</span>
-                    <span className="font-semibold text-foreground">{selectedReport.reported_name}</span>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground shrink-0">신고 대상</span>
+                    <span className="font-semibold text-foreground text-right">
+                      {selectedReport.reported_name}
+                      {selectedReport.reported_is_guest ? (
+                        <Badge variant="outline" className="ml-1.5 text-[10px] align-middle">
+                          현장
+                        </Badge>
+                      ) : null}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">신고자</span>

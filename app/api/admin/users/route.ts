@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
       .select(
         'id, name, gender, nationality, kakao_id, onboarding_completed, created_at, updated_at'
       )
+      .eq('is_guest', false)
       .order('updated_at', { ascending: false })
       .limit(200)
 

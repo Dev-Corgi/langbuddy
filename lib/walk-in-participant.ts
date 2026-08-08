@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   extractParticipantInfoFromAnswers,
   type CoreFormQuestion,
@@ -6,6 +7,93 @@ import { normalizeLanguage, normalizeParticipantFields } from '@/lib/form-answer
 import { normalizePaymentMethod, type PaymentMethod } from '@/lib/supported-payment-methods'
 
 export const WALK_IN_SOURCE = 'admin_manual' as const
+
+export type WalkInGuestProfile = {
+  name: string
+  gender: string
+  nationality: string
+}
+
+/**
+ * 현장 참가자용 guest 식별자 생성.
+ * public.users.id → auth.users(id) FK이므로 auth placeholder + public.users(is_guest)를 함께 만든다.
+ */
+export async function createWalkInGuestUser(
+  admin: SupabaseClient,
+  profile: WalkInGuestProfile
+): Promise<{ id: string } | { error: string }> {
+  const id = crypto.randomUUID()
+  const displayName = profile.name.trim() || 'Guest'
+  const email = `walkin-${id}@guests.langbuddy.local`
+
+  const { data: authData, error: authError } = await admin.auth.admin.createUser({
+    id,
+    email,
+    email_confirm: true,
+    password: `${crypto.randomUUID()}${crypto.randomUUID()}`,
+    user_metadata: { is_guest: true, name: displayName },
+    app_metadata: { is_guest: true, provider: 'guest', providers: ['guest'] },
+  })
+
+  if (authError || !authData.user) {
+    console.error('[createWalkInGuestUser] auth', authError)
+    return { error: authError?.message || 'guest_auth_failed' }
+  }
+
+  const userId = authData.user.id
+
+  const { error: userError } = await admin.from('users').upsert(
+    {
+      id: userId,
+      name: displayName,
+      gender: profile.gender || null,
+      nationality: profile.nationality || null,
+      onboarding_completed: false,
+      is_guest: true,
+    },
+    { onConflict: 'id' }
+  )
+
+  if (userError) {
+    console.error('[createWalkInGuestUser] users', userError)
+    await admin.auth.admin.deleteUser(userId).catch(() => {})
+    return { error: userError.message || 'guest_create_failed' }
+  }
+
+  await admin
+    .from('profiles')
+    .update({ name: displayName, name_en: displayName })
+    .eq('id', userId)
+
+  return { id: userId }
+}
+
+/** walk-in에 연결된 guest users 프로필 동기화 (is_guest인 경우만). */
+export async function syncWalkInGuestUser(
+  admin: SupabaseClient,
+  userId: string | null | undefined,
+  profile: WalkInGuestProfile
+): Promise<void> {
+  if (!userId) return
+  const displayName = profile.name.trim() || 'Guest'
+  const { error } = await admin
+    .from('users')
+    .update({
+      name: displayName,
+      gender: profile.gender || null,
+      nationality: profile.nationality || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId)
+    .eq('is_guest', true)
+  if (error) {
+    console.error('[syncWalkInGuestUser]', error)
+  }
+  await admin
+    .from('profiles')
+    .update({ name: displayName, name_en: displayName })
+    .eq('id', userId)
+}
 
 export type WalkInParticipantInput = {
   name: string

@@ -130,8 +130,8 @@ export function SessionDetailShell({
                                 title={
                                   !canReport && !alreadyReported
                                     ? isEn
-                                      ? 'This participant cannot be identified for reporting (older archived record).'
-                                      : '신고 대상을 식별할 수 없는 오래된 기록입니다.'
+                                      ? 'This participant cannot be identified for reporting (older archive or missing ID).'
+                                      : '신고 대상을 식별할 수 없습니다. (오래된 아카이브이거나 ID가 없는 참가자)'
                                     : undefined
                                 }
                                 onClick={() => handleReport(mate, r.round)}

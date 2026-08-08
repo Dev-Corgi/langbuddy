@@ -9,6 +9,7 @@ import {
 } from '@/lib/form-answer-canonical'
 import {
   buildWalkInAnswers,
+  createWalkInGuestUser,
   mapFormResponseToWalkInParticipant,
 } from '@/lib/walk-in-participant'
 import {
@@ -76,6 +77,11 @@ export async function POST(request: NextRequest) {
     const admin = createSupabaseAdmin()
     const checkedInAt = new Date().toISOString()
 
+    const guest = await createWalkInGuestUser(admin, { name, gender, nationality })
+    if ('error' in guest) {
+      return NextResponse.json({ error: guest.error }, { status: 500 })
+    }
+
     const { data: row, error } = await admin
       .from('form_responses')
       .insert({
@@ -91,14 +97,16 @@ export async function POST(request: NextRequest) {
         }),
         checked_in_at: checkedInAt,
         payment_status: defaultPaymentStatusForMethod(paymentMethod, false),
-        user_id: null,
+        user_id: guest.id,
         qr_code: null,
       })
-      .select('id, answers, checked_in_at, created_at, payment_status, payment_receipt_url')
+      .select('id, user_id, answers, checked_in_at, created_at, payment_status, payment_receipt_url')
       .single()
 
     if (error || !row) {
       console.error('[walk-in-participant] insert error:', error)
+      await admin.auth.admin.deleteUser(guest.id).catch(() => {})
+      await admin.from('users').delete().eq('id', guest.id).eq('is_guest', true)
       return NextResponse.json(
         { error: error?.message || 'insert_failed' },
         { status: 500 }

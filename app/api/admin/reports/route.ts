@@ -66,32 +66,42 @@ export async function GET(request: NextRequest) {
     ) as string[]
 
     const userNameMap = new Map<string, string>()
+    const guestUserIds = new Set<string>()
     if (userIds.length > 0) {
-      const { data: userRows } = await admin.from('users').select('id, name').in('id', userIds)
+      const { data: userRows } = await admin
+        .from('users')
+        .select('id, name, is_guest')
+        .in('id', userIds)
       for (const u of userRows || []) {
         if (u.name) userNameMap.set(u.id, u.name)
+        if (u.is_guest) guestUserIds.add(u.id)
       }
     }
 
-    const reports = (reportRows || []).map((r) => ({
-      id: r.id,
-      created_at: r.created_at,
-      session_date: r.session_date,
-      round: r.round,
-      reason: r.reason,
-      description: r.description,
-      status: r.status,
-      admin_note: r.admin_note,
-      posting_id: r.posting_id,
-      posting_title: (r.postings as unknown as { title?: string })?.title || '',
-      reporter_name: userNameMap.get(r.reporter_user_id) || '(알 수 없음)',
-      reported_name:
+    const reports = (reportRows || []).map((r) => {
+      const reportedIsGuest = !!(r.reported_user_id && guestUserIds.has(r.reported_user_id))
+      const baseReportedName =
         r.reported_name ||
         (r.reported_user_id ? userNameMap.get(r.reported_user_id) : undefined) ||
-        '(알 수 없음)',
-      reporter_response_id: r.reporter_response_id,
-      reported_response_id: r.reported_response_id,
-    }))
+        '(알 수 없음)'
+      return {
+        id: r.id,
+        created_at: r.created_at,
+        session_date: r.session_date,
+        round: r.round,
+        reason: r.reason,
+        description: r.description,
+        status: r.status,
+        admin_note: r.admin_note,
+        posting_id: r.posting_id,
+        posting_title: (r.postings as unknown as { title?: string })?.title || '',
+        reporter_name: userNameMap.get(r.reporter_user_id) || '(알 수 없음)',
+        reported_name: reportedIsGuest ? `${baseReportedName} (현장)` : baseReportedName,
+        reported_is_guest: reportedIsGuest,
+        reporter_response_id: r.reporter_response_id,
+        reported_response_id: r.reported_response_id,
+      }
+    })
 
     return NextResponse.json({ reports, total: count ?? 0, page, pageSize: PAGE_SIZE })
   } catch (err) {

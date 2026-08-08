@@ -9,8 +9,10 @@ import {
 } from '@/lib/form-answer-canonical'
 import {
   buildWalkInAnswers,
+  createWalkInGuestUser,
   isWalkInAnswers,
   mapFormResponseToWalkInParticipant,
+  syncWalkInGuestUser,
 } from '@/lib/walk-in-participant'
 import {
   defaultPaymentStatusForMethod,
@@ -63,7 +65,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const admin = createSupabaseAdmin()
     const { data: existing, error: loadErr } = await admin
       .from('form_responses')
-      .select('id, answers, checked_in_at, created_at, payment_status, payment_receipt_url')
+      .select('id, user_id, answers, checked_in_at, created_at, payment_status, payment_receipt_url')
       .eq('id', id)
       .single()
 
@@ -74,6 +76,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const prevAnswers = (existing.answers || {}) as Record<string, unknown>
     if (!isWalkInAnswers(prevAnswers)) {
       return NextResponse.json({ error: 'not_walk_in' }, { status: 400 })
+    }
+
+    let guestUserId = existing.user_id as string | null
+    if (!guestUserId) {
+      const guest = await createWalkInGuestUser(admin, { name, gender, nationality })
+      if ('error' in guest) {
+        return NextResponse.json({ error: guest.error }, { status: 500 })
+      }
+      guestUserId = guest.id
+    } else {
+      await syncWalkInGuestUser(admin, guestUserId, { name, gender, nationality })
     }
 
     const sessionDate =
@@ -126,6 +139,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         selectedDay,
         paymentMethod: resolvedPaymentMethod,
       }),
+      user_id: guestUserId,
     }
     if (paymentMethod !== undefined) {
       updatePayload.payment_status = payment_status
@@ -135,7 +149,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       .from('form_responses')
       .update(updatePayload)
       .eq('id', id)
-      .select('id, answers, checked_in_at, created_at, payment_status, payment_receipt_url')
+      .select('id, user_id, answers, checked_in_at, created_at, payment_status, payment_receipt_url')
       .single()
 
     if (error || !row) {
