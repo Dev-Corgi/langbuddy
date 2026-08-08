@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react'
 import { createClient } from '@/lib/supabase'
 import { canAccessStaffOps } from '@/lib/admin-access'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -259,7 +259,7 @@ function ParticipantCard({ participant, isOverlay = false, onEdit }: { participa
   )
 }
 
-function SortableTableContainer({
+const SortableTableContainer = memo(function SortableTableContainer({
   label,
   participants,
   round,
@@ -394,7 +394,18 @@ function SortableTableContainer({
       </Card>
     </div>
   )
-}
+}, (prev, next) => {
+  if (prev.label !== next.label || prev.round !== next.round || prev.tableLanguage !== next.tableLanguage) {
+    return false
+  }
+  if (prev.participants.length !== next.participants.length) return false
+  for (let i = 0; i < prev.participants.length; i++) {
+    const a = prev.participants[i]
+    const b = next.participants[i]
+    if (a.id !== b.id || a.name !== b.name || a.checked_in_at !== b.checked_in_at) return false
+  }
+  return true
+})
 
 function AddTableCard({
   languages,
@@ -599,6 +610,9 @@ export default function AdminArrangePage() {
     mergeLangCounts,
     seenCheckedInIdsRef,
     reloadSession,
+    getLiveRounds,
+    getLiveLangTableCounts,
+    getLiveParticipants,
   } = useArrangeSync()
 
   const formQuestionsRef = useRef<CoreFormQuestion[]>([])
@@ -694,11 +708,11 @@ export default function AdminArrangePage() {
 
   const runRoundPersist = useCallback(
     async (round: number) => {
-      const roundData = roundsRef.current.find((r) => r.round === round)
+      const roundData = getLiveRounds().find((r) => r.round === round)
       if (!roundData) return
       await commitRoundState(round, roundData)
     },
-    [commitRoundState]
+    [commitRoundState, getLiveRounds]
   )
 
   const sensors = useSensors(
@@ -795,7 +809,9 @@ export default function AdminArrangePage() {
   const handleConfirmConfig = useCallback(() => {
     if (configRound === null) return
 
-    const attendees = participants.filter((p) => p.checked_in_at)
+    const liveParticipants = getLiveParticipants()
+    const liveRounds = getLiveRounds()
+    const attendees = liveParticipants.filter((p) => p.checked_in_at)
     if (attendees.length === 0) {
       toast.error('체크인한 참가자가 없습니다.')
       return
@@ -807,10 +823,10 @@ export default function AdminArrangePage() {
       if (lang && v >= 1) counts[lang] = v
     })
 
-    const mergedCounts = { ...langTableCounts, ...counts }
-    const previousRounds = rounds.filter((r) => r.round < configRound && r.assignments.length > 0)
+    const mergedCounts = { ...getLiveLangTableCounts(), ...counts }
+    const previousRounds = liveRounds.filter((r) => r.round < configRound && r.assignments.length > 0)
     const newRoundData = runSeatingArrangeRound(configRound, attendees, counts, previousRounds)
-    const updatedRounds = rounds.map((r) => (r.round === configRound ? newRoundData : r))
+    const updatedRounds = liveRounds.map((r) => (r.round === configRound ? newRoundData : r))
 
     void commitRoundState(configRound, newRoundData, mergedCounts)
 
@@ -833,7 +849,7 @@ export default function AdminArrangePage() {
     setCurrentRound(configRound)
     setIsConfigOpen(false)
     setConfigRound(null)
-  }, [configRound, configCounts, participants, rounds, session, langTableCounts, commitRoundState])
+  }, [configRound, configCounts, session, commitRoundState, getLiveParticipants, getLiveRounds, getLiveLangTableCounts])
 
   const tableLanguageOptions = useMemo(() => {
     const langs = new Set<string>()
@@ -853,7 +869,8 @@ export default function AdminArrangePage() {
 
   const handleAddTable = useCallback(
     (roundNum: number, language: string) => {
-      const roundData = roundsRef.current.find((r) => r.round === roundNum)
+      const liveRounds = getLiveRounds()
+      const roundData = liveRounds.find((r) => r.round === roundNum)
       if (!roundData) return
 
       const result = addTableToRound(roundData, language)
@@ -863,21 +880,21 @@ export default function AdminArrangePage() {
       }
 
       markLocalSeatingEdit()
-      const updated = roundsRef.current.map((r) => (r.round === roundNum ? result.roundData : r))
-      const nextRound = updated.find((r) => r.round === roundNum)!
+      const liveLangCounts = getLiveLangTableCounts()
       void commitRoundState(
         roundNum,
-        nextRound,
-        mergeLangCounts(langTableCounts, nextRound.tableLanguages ?? {})
+        result.roundData,
+        mergeLangCounts(liveLangCounts, result.roundData.tableLanguages ?? {})
       )
       toast.success(`${result.label} 테이블이 추가되었습니다. (${language})`)
     },
-    [markLocalSeatingEdit, commitRoundState, langTableCounts, mergeLangCounts]
+    [markLocalSeatingEdit, commitRoundState, getLiveRounds, getLiveLangTableCounts, mergeLangCounts]
   )
 
   const handleDeleteTable = useCallback(
     (roundNum: number, label: string) => {
-      const roundData = roundsRef.current.find((r) => r.round === roundNum)
+      const liveRounds = getLiveRounds()
+      const roundData = liveRounds.find((r) => r.round === roundNum)
       if (!roundData) return
 
       const atTable = roundData.assignments.filter((a) => a.table_label === label).length
@@ -893,7 +910,7 @@ export default function AdminArrangePage() {
         label
       )
       markLocalSeatingEdit()
-      const updated = roundsRef.current.map((r) => (r.round === roundNum ? nextRound : r))
+      const updated = liveRounds.map((r) => (r.round === roundNum ? nextRound : r))
       void commitRoundState(roundNum, nextRound, mergeLangCountsFromRounds(updated))
 
       if (removedAssignmentCount > 0) {
@@ -902,7 +919,7 @@ export default function AdminArrangePage() {
         toast.success(`${label} 테이블이 삭제되었습니다.`)
       }
     },
-    [markLocalSeatingEdit, commitRoundState, mergeLangCountsFromRounds]
+    [markLocalSeatingEdit, commitRoundState, getLiveRounds, mergeLangCountsFromRounds]
   )
 
   const handleExportRoundCsv = useCallback(
@@ -1022,7 +1039,7 @@ export default function AdminArrangePage() {
     (oldParticipant: Participant, updated: Participant) => {
       if (oldParticipant.language === updated.language) return
 
-      const currentRoundData = roundsRef.current.find((r) => r.round === currentRound)
+      const currentRoundData = getLiveRounds().find((r) => r.round === currentRound)
       if (!currentRoundData || currentRoundData.assignments.length === 0) return
 
       const currentAssignment = currentRoundData.assignments.find(
@@ -1069,7 +1086,7 @@ export default function AdminArrangePage() {
         { duration: 5000 }
       )
     },
-    [currentRound, markLocalSeatingEdit, commitAssign]
+    [currentRound, markLocalSeatingEdit, commitAssign, getLiveRounds]
   )
 
   const handleParticipantFieldSave = useCallback(
@@ -1298,15 +1315,7 @@ export default function AdminArrangePage() {
       seenCheckedInIdsRef.current.add(participantId)
       commitCheckin(participantId, ADMIN_CHECKIN_SOURCE_DRAG)
     },
-    [commitCheckin]
-  )
-
-  const syncCheckinToServer = useCallback(
-    async (participantId: string, source: string = ADMIN_CHECKIN_SOURCE_DRAG) => {
-      commitCheckin(participantId, source)
-      return true
-    },
-    [commitCheckin]
+    [commitCheckin, seenCheckedInIdsRef]
   )
 
   const handleModalCheckin = useCallback(
@@ -1350,7 +1359,7 @@ export default function AdminArrangePage() {
         if (activeMeta.label === overMeta.label) return
 
         markLocalSeatingEdit()
-        const roundData = roundsRef.current.find((r) => r.round === activeMeta.round)
+        const roundData = getLiveRounds().find((r) => r.round === activeMeta.round)
         if (!roundData) return
         const tableLanguages = roundData.tableLanguages ?? {}
         const nextRound = {
@@ -1368,7 +1377,7 @@ export default function AdminArrangePage() {
 
       const activeId = active.id as string
       const overId = over.id as string
-      const activeParticipant = participantsRef.current.find((p) => p.id === activeId)
+      const activeParticipant = getLiveParticipants().find((p) => p.id === activeId)
       if (!activeParticipant) return
 
       // 참가자 1명을 옮길 때마다 그 참가자·그 라운드 행 1건만 즉시 upsert.
@@ -1383,7 +1392,8 @@ export default function AdminArrangePage() {
         ? Number(over.data.current.round)
         : currentRound
     const targetRound = Number.isFinite(overContainerRound) ? overContainerRound : currentRound
-    const roundData = roundsRef.current.find((r) => r.round === targetRound)
+    const liveRounds = getLiveRounds()
+    const roundData = liveRounds.find((r) => r.round === targetRound)
     const roundAssignments = roundData?.assignments || []
 
     const isOverTable = over.data?.current?.type === 'container'
@@ -1391,7 +1401,7 @@ export default function AdminArrangePage() {
       isOverTable && over.data.current?.tableLabel === 'unassigned'
     const isOverUnassignedId = String(overId).startsWith('unassigned-')
     const isOverUnassignedParticipant = (() => {
-      const hit = participantsRef.current.find((p) => p.id === overId)
+      const hit = getLiveParticipants().find((p) => p.id === overId)
       if (!hit?.checked_in_at) return false
       return !roundAssignments.some((a) => a.participant_id === overId)
     })()
@@ -1415,7 +1425,7 @@ export default function AdminArrangePage() {
     }
 
     if (assignTableLabel) {
-      const tableRoundData = roundsRef.current.find((r) => r.round === targetRound)
+      const tableRoundData = liveRounds.find((r) => r.round === targetRound)
       const tableLang = tableRoundData?.tableLanguages?.[assignTableLabel]
       if (tableLang && tableLang !== activeParticipant.language) {
         toast.error(
@@ -1437,7 +1447,6 @@ export default function AdminArrangePage() {
         if (!ok) return
       }
       applyOptimisticCheckin(activeId)
-      void syncCheckinToServer(activeId)
     }
 
     if (isOverUnassigned && !assignTableLabel) {
@@ -1451,14 +1460,12 @@ export default function AdminArrangePage() {
       if (newTableLabel === 'unassigned') {
         commitAssignment(targetRound, null)
       } else {
-        const currentRoundData = roundsRef.current.find((r) => r.round === targetRound)
+        const currentRoundData = liveRounds.find((r) => r.round === targetRound)
 
-        const previousRoundsForDrag = roundsRef.current.filter(
+        const previousRoundsForDrag = liveRounds.filter(
           (r) => r.round < targetRound && r.assignments.length > 0
         )
-        const nameById = Object.fromEntries(
-          participantsRef.current.map((p) => [p.id, p.name])
-        )
+        const nameById = Object.fromEntries(getLiveParticipants().map((p) => [p.id, p.name]))
         const { maxReunions, reunions } = reunionCountIfJoinedTable(
           activeId,
           newTableLabel,
@@ -1473,7 +1480,7 @@ export default function AdminArrangePage() {
         commitAssignment(targetRound, newTableLabel)
       }
     } else {
-      const currentRoundData = roundsRef.current.find((r) => r.round === targetRound)
+      const currentRoundData = liveRounds.find((r) => r.round === targetRound)
       const currentRoundAssignments = currentRoundData?.assignments || []
       const activeAssignment = currentRoundAssignments.find((a) => a.participant_id === activeId)
       const overAssignment = currentRoundAssignments.find((a) => a.participant_id === overId)
@@ -1481,12 +1488,10 @@ export default function AdminArrangePage() {
       if (overAssignment && overAssignment.table_label !== activeAssignment?.table_label) {
         const newTableLabel = overAssignment.table_label
 
-        const previousRoundsForDrag = roundsRef.current.filter(
+        const previousRoundsForDrag = liveRounds.filter(
           (r) => r.round < targetRound && r.assignments.length > 0
         )
-        const nameById = Object.fromEntries(
-          participantsRef.current.map((p) => [p.id, p.name])
-        )
+        const nameById = Object.fromEntries(getLiveParticipants().map((p) => [p.id, p.name]))
         const { maxReunions, reunions } = reunionCountIfJoinedTable(
           activeId,
           newTableLabel,
@@ -1548,8 +1553,9 @@ export default function AdminArrangePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-background">
         <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <p className="text-sm font-bold text-muted-foreground">최신 자리배치 불러오는 중…</p>
       </div>
     )
   }
@@ -1826,7 +1832,7 @@ export default function AdminArrangePage() {
         onDragEnd={onDragEnd}
       >
         <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8">
-          {/* Statistics & Participants Sidebar */}
+          {/* Participants Sidebar */}
           <aside className="space-y-6">
             <ParticipantAdder 
               onAddParticipant={handleAddParticipant}
@@ -1837,77 +1843,6 @@ export default function AdminArrangePage() {
               existingParticipantIds={participants.map(p => p.id)}
             />
 
-            <Card className="border-none shadow-lg rounded-[32px] overflow-hidden bg-card">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg font-black flex items-center gap-2">
-                  <Users className="w-5 h-5 text-primary" />
-                  참가자 통계
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="bg-muted/50 p-3 rounded-2xl text-center">
-                    <p className="text-[10px] font-black text-muted-foreground uppercase mb-1">신청</p>
-                    <p className="text-xl font-black">{participants.length}</p>
-                  </div>
-                  <div className="bg-emerald-50 p-3 rounded-2xl text-center">
-                    <p className="text-[10px] font-black text-emerald-600 uppercase mb-1">체크인</p>
-                    <p className="text-xl font-black text-emerald-600">{checkedInParticipants.length}</p>
-                  </div>
-                  <div className="bg-slate-100 p-3 rounded-2xl text-center">
-                    <p className="text-[10px] font-black text-slate-600 uppercase mb-1">미체크인</p>
-                    <p className="text-xl font-black text-slate-700">{uncheckedInParticipants.length}</p>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center text-sm font-bold px-1">
-                  <span className="text-muted-foreground">이번 라운드 배정</span>
-                  <span>{currentRoundAssignments.length}명</span>
-                </div>
-
-                <div className="h-px bg-muted" />
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-sm font-bold px-1">
-                    <span className="text-muted-foreground">한국인</span>
-                    <span>{participantStats.korean}명</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm font-bold px-1">
-                    <span className="text-muted-foreground">외국인</span>
-                    <span>{participantStats.foreigner}명</span>
-                  </div>
-                </div>
-
-                <div className="h-px bg-muted" />
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-sm font-bold px-1">
-                    <span className="text-muted-foreground">계좌</span>
-                    <span>{participantStats.bank}명</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm font-bold px-1">
-                    <span className="text-muted-foreground">현금</span>
-                    <span>{participantStats.cash}명</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm font-bold px-1">
-                    <span className="text-muted-foreground">스태프</span>
-                    <span>{participantStats.staff}명</span>
-                  </div>
-                </div>
-                
-                <div className="h-px bg-muted" />
-                
-                <div className="space-y-2">
-                  <p className="text-xs font-black text-muted-foreground uppercase">언어별 참가자</p>
-                  {Object.entries(_.groupBy(participants, 'language')).map(([lang, members]) => (
-                    <div key={lang} className="flex justify-between items-center text-sm font-bold">
-                      <span>{lang}</span>
-                      <span className="text-primary">{members.length}명</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
             <UnassignedList
               participants={unassignedForCurrentRound}
               round={currentRound}
@@ -1917,7 +1852,8 @@ export default function AdminArrangePage() {
             <UncheckedInList participants={uncheckedInParticipants} onEdit={setEditingParticipant} />
           </aside>
 
-          {/* Main Seating Area */}
+          {/* Main Seating Area + Stats */}
+          <div className="space-y-6 min-w-0">
           <main className="space-y-6">
             <Tabs value={currentRound.toString()} onValueChange={(v) => setCurrentRound(parseInt(v))} className="w-full">
               <div className="flex items-center justify-between mb-6">
@@ -1943,9 +1879,10 @@ export default function AdminArrangePage() {
                     variant="ghost"
                     size="icon"
                     className="rounded-xl text-muted-foreground hover:text-primary"
-                    onClick={fetchData}
+                    onClick={() => void fetchData()}
+                    disabled={seatingSyncing}
                   >
-                    <RotateCcw className={cn('w-5 h-5', loading && 'animate-spin')} />
+                    <RotateCcw className={cn('w-5 h-5', seatingSyncing && 'animate-spin')} />
                   </Button>
                   <Button
                     type="button"
@@ -1975,7 +1912,7 @@ export default function AdminArrangePage() {
                 return (
                   <TabsContent key={r} value={r.toString()} className="mt-0 focus-visible:outline-none">
                     <SortableContext items={tableSortableIds} strategy={rectSortingStrategy}>
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
                         {tableLabelsForRound.map((label) => {
                           const tableParticipants = assignments
                             .filter((a) => a.table_label === label)
@@ -2011,6 +1948,88 @@ export default function AdminArrangePage() {
               })}
             </Tabs>
           </main>
+
+          <Card className="border-none shadow-lg rounded-[32px] overflow-hidden bg-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-black flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" />
+                참가자 통계
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-0">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="rounded-2xl bg-muted/50 px-4 py-3 text-center">
+                  <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wide mb-1">신청</p>
+                  <p className="text-2xl font-black tabular-nums">{participants.length}</p>
+                </div>
+                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-center">
+                  <p className="text-[11px] font-black text-emerald-600 uppercase tracking-wide mb-1">체크인</p>
+                  <p className="text-2xl font-black text-emerald-600 tabular-nums">{checkedInParticipants.length}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-100 px-4 py-3 text-center">
+                  <p className="text-[11px] font-black text-slate-600 uppercase tracking-wide mb-1">미체크인</p>
+                  <p className="text-2xl font-black text-slate-700 tabular-nums">{uncheckedInParticipants.length}</p>
+                </div>
+                <div className="rounded-2xl bg-primary/5 px-4 py-3 text-center">
+                  <p className="text-[11px] font-black text-primary uppercase tracking-wide mb-1">R{currentRound} 배정</p>
+                  <p className="text-2xl font-black text-primary tabular-nums">{currentRoundAssignments.length}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+                  <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wide mb-3">국적</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-card px-3 py-2.5 text-center shadow-sm">
+                      <p className="text-xs font-bold text-muted-foreground mb-0.5">한국인</p>
+                      <p className="text-xl font-black tabular-nums">{participantStats.korean}명</p>
+                    </div>
+                    <div className="rounded-xl bg-card px-3 py-2.5 text-center shadow-sm">
+                      <p className="text-xs font-bold text-muted-foreground mb-0.5">외국인</p>
+                      <p className="text-xl font-black tabular-nums">{participantStats.foreigner}명</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+                  <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wide mb-3">결제 · 역할</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-xl bg-card px-2 py-2.5 text-center shadow-sm">
+                      <p className="text-xs font-bold text-muted-foreground mb-0.5">계좌</p>
+                      <p className="text-xl font-black tabular-nums">{participantStats.bank}</p>
+                    </div>
+                    <div className="rounded-xl bg-card px-2 py-2.5 text-center shadow-sm">
+                      <p className="text-xs font-bold text-muted-foreground mb-0.5">현금</p>
+                      <p className="text-xl font-black tabular-nums">{participantStats.cash}</p>
+                    </div>
+                    <div className="rounded-xl bg-card px-2 py-2.5 text-center shadow-sm">
+                      <p className="text-xs font-bold text-muted-foreground mb-0.5">스태프</p>
+                      <p className="text-xl font-black tabular-nums">{participantStats.staff}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+                  <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wide mb-3">언어</p>
+                  <div className="space-y-2">
+                    {Object.entries(_.groupBy(participants, 'language')).map(([lang, members]) => (
+                      <div
+                        key={lang}
+                        className="flex items-center justify-between rounded-xl bg-card px-3 py-2 shadow-sm text-sm font-bold"
+                      >
+                        <span>{lang}</span>
+                        <span className="text-primary tabular-nums">{members.length}명</span>
+                      </div>
+                    ))}
+                    {participants.length === 0 ? (
+                      <p className="text-xs font-bold text-muted-foreground text-center py-2">참가자 없음</p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          </div>
         </div>
 
         <DragOverlay dropAnimation={{

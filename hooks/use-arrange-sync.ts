@@ -37,7 +37,7 @@ export function useArrangeSync() {
     }
   }, [seating.snapshot, seating.postingTitle])
 
-  const loading = !authReady || (seating.syncStatus === 'loading' && !seating.snapshot)
+  const loading = !authReady || !seating.initialLoadDone
   const seatingSyncing = seating.syncStatus === 'syncing'
 
   useEffect(() => {
@@ -63,24 +63,34 @@ export function useArrangeSync() {
   }, [supabase])
 
   useEffect(() => {
-    if (!authReady) return
-    void seating.loadSession().then((loaded) => {
-      if (loaded) {
-        seenCheckedInIdsRef.current = new Set(
-          loaded.participants.filter((p) => p.checked_in_at).map((p) => p.id)
-        )
-      }
-    })
-  }, [authReady, seating.loadSession])
+    if (!authReady || !seating.snapshot) return
+    seenCheckedInIdsRef.current = new Set(
+      seating.snapshot.participants.filter((p) => p.checked_in_at).map((p) => p.id)
+    )
+  }, [authReady, seating.snapshot])
 
   const fetchData = useCallback(async () => {
-    const loaded = await seating.loadSession()
+    const loaded = await seating.loadSession({ force: true })
     if (loaded) {
       seenCheckedInIdsRef.current = new Set(
         loaded.participants.filter((p) => p.checked_in_at).map((p) => p.id)
       )
     }
   }, [seating.loadSession])
+
+  const getLiveSnapshot = seating.getLiveSnapshot
+
+  const getLiveRounds = useCallback((): RoundData[] => {
+    return getLiveSnapshot()?.rounds ?? seating.rounds
+  }, [getLiveSnapshot, seating.rounds])
+
+  const getLiveLangTableCounts = useCallback((): Record<string, number> => {
+    return getLiveSnapshot()?.config.langTableCounts ?? seating.langTableCounts
+  }, [getLiveSnapshot, seating.langTableCounts])
+
+  const getLiveParticipants = useCallback(() => {
+    return getLiveSnapshot()?.participants ?? seating.participants
+  }, [getLiveSnapshot, seating.participants])
 
   const commitAssign = useCallback(
     (round: number, participantId: string, tableLabel: string | null) => {
@@ -106,13 +116,13 @@ export function useArrangeSync() {
           tableOrder: roundData.tableOrder ?? null,
         },
       ]
-      const counts = langCounts ?? seating.langTableCounts
+      const counts = langCounts ?? getLiveLangTableCounts()
       if (counts && Object.keys(counts).length > 0) {
         patches.push({ op: 'set_lang_table_counts', langTableCounts: counts })
       }
       return seating.commitPatches(patches)
     },
-    [seating.commitPatches, seating.langTableCounts]
+    [seating.commitPatches, getLiveLangTableCounts]
   )
 
   const commitCheckin = useCallback(
@@ -149,6 +159,8 @@ export function useArrangeSync() {
     formQuestions: seating.formQuestions,
     snapshot: seating.snapshot,
     syncStatus: seating.syncStatus,
+    pendingPatchCount: seating.pendingPatchCount,
+    hasPendingLocalWork: seating.hasPendingLocalWork,
     loading,
     seatingSyncing,
     fetchData,
@@ -161,5 +173,10 @@ export function useArrangeSync() {
     seenCheckedInIdsRef,
     setSnapshot: seating.setSnapshot,
     reloadSession: seating.loadSession,
+    refreshSession: seating.refreshSession,
+    getLiveSnapshot,
+    getLiveRounds,
+    getLiveLangTableCounts,
+    getLiveParticipants,
   }
 }
