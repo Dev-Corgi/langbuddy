@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useCallback, useRef, useId } from 'react'
+import { useState, useCallback, useRef, useId, useMemo } from 'react'
 import { Upload, X, ImageIcon, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { detectInAppBrowser } from '@/lib/in-app-browser'
 
 interface PaymentReceiptUploaderProps {
   onUploadComplete?: (url: string) => void
@@ -17,9 +18,6 @@ interface PaymentReceiptUploaderProps {
 }
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
-// 아이폰 카메라로 찍은 사진은 image/heic, 일부 안드로이드 편집 앱은 image/webp로 저장되는 경우가 많아
-// 스크린샷(png/jpeg)만 허용하면 "업로드가 안 된다"는 문의가 다수 발생함. 확장자 기반 accept도 일부
-// 모바일 브라우저에서 갤러리 필터링 오류를 일으켜 image/*로 완화.
 const ALLOWED_TYPES = [
   'image/jpeg',
   'image/png',
@@ -30,16 +28,17 @@ const ALLOWED_TYPES = [
 ]
 const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp']
 
-export function PaymentReceiptUploader({ 
-  onUploadComplete, 
+export function PaymentReceiptUploader({
+  onUploadComplete,
   onFileSelect,
-  onRemove, 
+  onRemove,
   existingUrl,
   disabled = false,
   locale = 'ko',
 }: PaymentReceiptUploaderProps) {
   const isEn = locale === 'en'
   const inputId = useId()
+  const inApp = useMemo(() => detectInAppBrowser(), [])
   const [preview, setPreview] = useState<string | null>(existingUrl || null)
   const [previewBroken, setPreviewBroken] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -48,8 +47,6 @@ export function PaymentReceiptUploader({
   const inputDisabled = disabled || isUploading
 
   const validateFile = (file: File): boolean => {
-    // 일부 브라우저/OS(특히 iOS의 HEIC)는 file.type을 빈 문자열로 보고하는 경우가 있어
-    // 확장자로도 한 번 더 확인한다.
     const ext = file.name.split('.').pop()?.toLowerCase() || ''
     const typeOk = file.type ? ALLOWED_TYPES.includes(file.type) : ALLOWED_EXTENSIONS.includes(ext)
     const extOk = ALLOWED_EXTENSIONS.includes(ext)
@@ -73,17 +70,14 @@ export function PaymentReceiptUploader({
     if (!validateFile(file)) return
 
     setIsUploading(true)
-    
+
     try {
-      // 로컬 미리보기 생성 (HEIC 등 일부 포맷은 브라우저에 따라 렌더링되지 않을 수 있음)
       const localPreview = URL.createObjectURL(file)
       setPreviewBroken(false)
       setPreview(localPreview)
-      
-      // 파일 객체를 부모 컴포넌트에 전달
       onFileSelect(file)
       onUploadComplete?.(localPreview)
-    } catch (error) {
+    } catch {
       toast.error(isEn ? 'Something went wrong while processing the file.' : '파일 업로드 중 오류가 발생했습니다.')
       setPreview(null)
     } finally {
@@ -93,27 +87,35 @@ export function PaymentReceiptUploader({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) handleFile(file)
-    // 같은 파일 재선택 허용 (iOS)
+    if (file) void handleFile(file)
     e.target.value = ''
   }
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragActive(false)
-
+  const openFilePicker = useCallback(() => {
     if (inputDisabled) return
-
-    const file = e.dataTransfer.files?.[0]
-    if (file) handleFile(file)
+    inputRef.current?.click()
   }, [inputDisabled])
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!inputDisabled) setDragActive(true)
-  }, [inputDisabled])
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setDragActive(false)
+      if (inputDisabled) return
+      const file = e.dataTransfer.files?.[0]
+      if (file) void handleFile(file)
+    },
+    [inputDisabled]
+  )
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (!inputDisabled) setDragActive(true)
+    },
+    [inputDisabled]
+  )
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -132,55 +134,76 @@ export function PaymentReceiptUploader({
 
   return (
     <div className="space-y-3">
+      {inApp.isKakaoTalk ? (
+        <p className="text-xs font-medium text-amber-800 dark:text-amber-200 rounded-xl bg-amber-500/10 border border-amber-500/25 px-3 py-2 leading-relaxed">
+          {isEn
+            ? 'If the photo picker does not open, tap ⋮ (top right) → Open in browser (Chrome/Samsung Internet), then try again.'
+            : '사진 선택 창이 안 뜨면 우측 상단 ⋮ → 「다른 브라우저로 열기」(Chrome·삼성 인터넷) 후 다시 시도해 주세요.'}
+        </p>
+      ) : null}
+
+      <input
+        id={inputId}
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleChange}
+        disabled={inputDisabled}
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden
+      />
+
       {!preview ? (
-        <label
+        <div
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           className={cn(
-            'relative block border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer',
+            'relative border-2 border-dashed rounded-2xl p-8 text-center transition-all',
             dragActive
               ? 'border-primary bg-primary/5'
-              : 'border-border bg-muted/30 hover:border-primary/30 hover:bg-muted/50',
-            inputDisabled && 'opacity-50 cursor-not-allowed pointer-events-none'
+              : 'border-border bg-muted/30',
+            inputDisabled && 'opacity-50'
           )}
         >
-          <input
-            id={inputId}
-            ref={inputRef}
-            type="file"
-            accept="image/*,.heic,.heif"
-            onChange={handleChange}
-            disabled={inputDisabled}
-            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-            aria-label={isEn ? 'Upload payment receipt photo' : '입금 영수증 사진 업로드'}
-          />
           {isUploading ? (
-            <div className="space-y-3 pointer-events-none">
+            <div className="space-y-3">
               <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
               <p className="text-sm font-medium text-muted-foreground">
                 {isEn ? 'Processing...' : '업로드 중...'}
               </p>
             </div>
           ) : (
-            <div className="space-y-3 pointer-events-none">
+            <div className="space-y-4">
               <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
                 <Upload className="w-6 h-6 text-primary" />
               </div>
               <div>
                 <p className="text-sm font-bold text-foreground">
-                  {isEn ? 'Tap to upload a photo' : '클릭하여 사진 업로드'}
+                  {isEn ? 'Upload payment receipt' : '입금 영수증 사진 첨부'}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {isEn ? 'Or drag and drop' : '또는 드래그하여 놓기'}
+                  {isEn ? 'JPG, PNG, HEIC, WEBP (max 5MB)' : 'JPG, PNG, HEIC, WEBP (최대 5MB)'}
                 </p>
               </div>
-              <p className="text-[10px] text-muted-foreground">
-                {isEn ? 'JPG, PNG, HEIC, WEBP (max 5MB)' : 'JPG, PNG, HEIC, WEBP (최대 5MB)'}
-              </p>
+              <Button
+                type="button"
+                variant="default"
+                className="w-full rounded-xl font-bold h-12"
+                disabled={inputDisabled}
+                onClick={openFilePicker}
+              >
+                {isEn ? 'Choose photo' : '사진 선택하기'}
+              </Button>
+              {!inApp.isInApp ? (
+                <p className="text-[10px] text-muted-foreground">
+                  {isEn ? 'Or drag and drop a file here' : '또는 파일을 여기에 드래그'}
+                </p>
+              ) : null}
             </div>
           )}
-        </label>
+        </div>
       ) : (
         <div className="relative rounded-2xl overflow-hidden border border-border bg-muted/30">
           <div className="relative aspect-video">
