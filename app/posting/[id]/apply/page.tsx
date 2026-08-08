@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
+import { createPortal } from "react-dom"
 import { toast } from "sonner"
 import { useParams, useRouter, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase"
@@ -48,6 +49,13 @@ import {
 import { canAccessStaffOps } from '@/lib/admin-access'
 import { buildSchedulesByDay, type LeScheduleInfo } from '@/lib/language-exchange-schedule'
 import { LanguageExchangeScheduleInfo } from '@/components/language-exchange-schedule-info'
+import {
+  clearReceiptDraft,
+  dataUrlToFile,
+  fileToDataUrl,
+  loadReceiptDraft,
+  saveReceiptDraft,
+} from '@/lib/apply-payment-draft'
 
 /** 디버깅용 임시 기능 — 스탭 무료 신청. 재활성화 시 true로 변경 */
 const STAFF_FREE_APPLY_ENABLED = false
@@ -102,9 +110,9 @@ export default function ApplicationFormPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentReceiptFile, setPaymentReceiptFile] = useState<File | null>(null)
   const [paymentReceiptPreview, setPaymentReceiptPreview] = useState<string | null>(null)
-  const suppressDataRefreshUntilRef = useRef(0)
-  const lastAuthUserIdRef = useRef<string | null>(null)
+  const [paymentPortalReady, setPaymentPortalReady] = useState(false)
   const preserveFormStateRef = useRef(false)
+  const receiptDraftRestoredRef = useRef(false)
   const [selectedDay, setSelectedDay] = useState<string>("")
   const [availableLangs, setAvailableLangs] = useState<string[]>([])
   const [selectedLang, setSelectedLang] = useState<string>("")
@@ -127,68 +135,70 @@ export default function ApplicationFormPage() {
   const [schedulesByDay, setSchedulesByDay] = useState<Record<string, LeScheduleInfo>>({})
 
   useEffect(() => {
+    setPaymentPortalReady(true)
+  }, [])
+
+  useEffect(() => {
     preserveFormStateRef.current =
       showPaymentModal || paymentReceiptFile !== null || paymentReceiptPreview !== null
   }, [showPaymentModal, paymentReceiptFile, paymentReceiptPreview])
 
-  useEffect(() => {
-    return () => {
-      if (paymentReceiptPreview?.startsWith('blob:')) {
-        URL.revokeObjectURL(paymentReceiptPreview)
+  const handleReceiptFileSelect = useCallback(
+    async (file: File) => {
+      setPaymentReceiptFile(file)
+      const dataUrl = await fileToDataUrl(file)
+      setPaymentReceiptPreview(dataUrl)
+      const postingId = posting?.id
+      if (postingId) {
+        saveReceiptDraft({
+          postingId: String(postingId),
+          fileName: file.name || 'receipt.jpg',
+          fileType: file.type || 'image/jpeg',
+          dataUrl,
+          paymentMethod: paymentMethod || 'bank',
+          savedAt: Date.now(),
+        })
       }
-    }
-  }, [paymentReceiptPreview])
-
-  const handleReceiptFileSelect = useCallback((file: File) => {
-    setPaymentReceiptFile(file)
-    setPaymentReceiptPreview((prev) => {
-      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev)
-      return URL.createObjectURL(file)
-    })
-  }, [])
+    },
+    [posting?.id, paymentMethod]
+  )
 
   const handleReceiptRemove = useCallback(() => {
     setPaymentReceiptFile(null)
-    setPaymentReceiptPreview((prev) => {
-      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev)
-      return null
-    })
-  }, [])
+    setPaymentReceiptPreview(null)
+    if (posting?.id) clearReceiptDraft(String(posting.id))
+  }, [posting?.id])
 
-  const handleReceiptPickerActivity = useCallback((active: boolean) => {
-    if (active) {
-      suppressDataRefreshUntilRef.current = Date.now() + 8000
+  useEffect(() => {
+    const postingId = posting?.id
+    if (!postingId || receiptDraftRestoredRef.current) return
+
+    const draft = loadReceiptDraft(String(postingId))
+    if (!draft?.dataUrl) return
+    if (Date.now() - draft.savedAt > 24 * 60 * 60 * 1000) {
+      clearReceiptDraft(String(postingId))
+      return
     }
-  }, [])
+
+    receiptDraftRestoredRef.current = true
+    try {
+      const file = dataUrlToFile(draft.dataUrl, draft.fileName, draft.fileType)
+      setPaymentReceiptFile(file)
+      setPaymentReceiptPreview(draft.dataUrl)
+      if (draft.paymentMethod === 'bank' || draft.paymentMethod === 'on_site') {
+        setPaymentMethod(draft.paymentMethod)
+      } else {
+        setPaymentMethod('bank')
+      }
+      setShowPaymentModal(true)
+    } catch {
+      clearReceiptDraft(String(postingId))
+    }
+  }, [posting?.id])
 
   useEffect(() => {
     setAuthChecked(true)
   }, [])
-
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (Date.now() < suppressDataRefreshUntilRef.current) return
-
-      // 갤러리/은행앱 복귀 시 토큰·세션 재검사 — 폼·결제 모달 유지
-      if (
-        event === 'TOKEN_REFRESHED' ||
-        event === 'INITIAL_SESSION' ||
-        event === 'USER_UPDATED'
-      ) {
-        return
-      }
-
-      const userId = session?.user?.id ?? null
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-        if (userId !== lastAuthUserIdRef.current) {
-          lastAuthUserIdRef.current = userId
-          setAuthRefreshTick((t) => t + 1)
-        }
-        return
-      }
-    })
-    return () => subscription.unsubscribe()
-  }, [supabase])
 
   useEffect(() => {
     if (posting?.category !== '언어교환') return
@@ -1004,6 +1014,7 @@ export default function ApplicationFormPage() {
         }
       }
       router.push(`/apply/complete?id=${responseData.id}`)
+      if (posting?.id) clearReceiptDraft(String(posting.id))
     }
     setSubmitting(false)
   }
@@ -1530,8 +1541,9 @@ export default function ApplicationFormPage() {
         </div>
       </main>
 
-      {/* Payment Selection & Info Modal */}
-      {showPaymentModal && (
+      {/* Payment modal — body portal: WebView 갤러리 복귀 시 페이지 리렌더와 분리 */}
+      {paymentPortalReady && showPaymentModal
+        ? createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300 overflow-y-auto">
           <Card className="w-full max-w-md max-h-[min(90vh,720px)] flex flex-col border-none shadow-2xl rounded-[32px] overflow-hidden bg-card animate-in zoom-in-95 duration-300 my-auto">
             <CardHeader className="shrink-0 p-8 pb-4 text-center">
@@ -1655,7 +1667,6 @@ export default function ApplicationFormPage() {
                     <PaymentReceiptUploader
                       locale={locale}
                       previewUrl={paymentReceiptPreview}
-                      onPickerActivity={handleReceiptPickerActivity}
                       onFileSelect={handleReceiptFileSelect}
                       onRemove={handleReceiptRemove}
                     />
@@ -1708,8 +1719,10 @@ export default function ApplicationFormPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
-      )}
+        </div>,
+        document.body
+        )
+        : null}
     </div>
   )
 }
