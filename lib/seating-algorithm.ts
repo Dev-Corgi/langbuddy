@@ -27,6 +27,14 @@ export type DuplicatePairSummary = {
   rounds: number[]
 }
 
+export type ReunionPairDetail = {
+  otherParticipantId: string
+  otherParticipantName: string
+  meetingCount: number
+}
+
+export type TableWarningParticipant = SeatingAlgorithmParticipant & { name?: string }
+
 export type RoundQualityReport = {
   duplicatePairs: DuplicatePairSummary[]
   duplicateRate: string
@@ -126,17 +134,21 @@ function buildCapacitiesForLanguage(count: number, tableCount?: number): number[
   return capacities
 }
 
-export function getTableWarnings(participants: SeatingAlgorithmParticipant[]): string[] {
+export function getTableWarnings(participants: TableWarningParticipant[]): string[] {
+  const roster =
+    participants.length > 0
+      ? participants.map((p) => p.name?.trim() || '?').join(', ')
+      : '없음'
   const hasKorean = participants.some((p) => p.nationality === '한국인')
   const hasForeigner = participants.some((p) => p.nationality === '외국인')
   const hasMale = participants.some((p) => p.gender === '남')
   const hasFemale = participants.some((p) => p.gender === '여')
 
   const warnings: string[] = []
-  if (!hasKorean) warnings.push('한국인 없음')
-  if (!hasForeigner) warnings.push('외국인 없음')
-  if (!hasMale) warnings.push('남성 없음')
-  if (!hasFemale) warnings.push('여성 없음')
+  if (!hasKorean) warnings.push(`한국인 없음 (${roster})`)
+  if (!hasForeigner) warnings.push(`외국인 없음 (${roster})`)
+  if (!hasMale) warnings.push(`남성 없음 (${roster})`)
+  if (!hasFemale) warnings.push(`여성 없음 (${roster})`)
 
   return warnings
 }
@@ -433,20 +445,43 @@ export function reunionCountIfJoinedTable(
   participantId: string,
   tableLabel: string,
   roundAssignments: Assignment[],
-  previousRounds: RoundData[]
-): { maxReunions: number; worstPairName: string | null } {
+  previousRounds: RoundData[],
+  nameById: Record<string, string> = {}
+): { maxReunions: number; reunions: ReunionPairDetail[] } {
   const seenPairs = buildSeenPairs(previousRounds)
   const tableMemberIds = roundAssignments
     .filter((a) => a.table_label === tableLabel && a.participant_id !== participantId)
     .map((a) => a.participant_id)
 
-  let maxReunions = 0
+  const reunions: ReunionPairDetail[] = []
   for (const otherId of tableMemberIds) {
-    const count = seenPairs.get(pairKey(participantId, otherId)) || 0
-    if (count > maxReunions) maxReunions = count
+    const meetingCount = seenPairs.get(pairKey(participantId, otherId)) || 0
+    if (meetingCount <= 0) continue
+    reunions.push({
+      otherParticipantId: otherId,
+      otherParticipantName: nameById[otherId]?.trim() || otherId.slice(0, 8),
+      meetingCount,
+    })
   }
 
-  return { maxReunions, worstPairName: null }
+  reunions.sort((a, b) => b.meetingCount - a.meetingCount)
+  const maxReunions = reunions[0]?.meetingCount ?? 0
+  return { maxReunions, reunions }
+}
+
+export function formatReunionHintMessage(
+  movingParticipantName: string,
+  tableLabel: string,
+  reunions: ReunionPairDetail[],
+  maxLines = 4
+): string {
+  if (reunions.length === 0) return ''
+
+  const pairLines = reunions.slice(0, maxLines).map(
+    (r) => `${movingParticipantName}↔${r.otherParticipantName}(${r.meetingCount}회)`
+  )
+  const rest = reunions.length > maxLines ? ` 외 ${reunions.length - maxLines}명` : ''
+  return `${tableLabel} 테이블 재회: ${pairLines.join(' · ')}${rest}. 배치는 적용됩니다.`
 }
 
 export function evaluateRoundQuality(

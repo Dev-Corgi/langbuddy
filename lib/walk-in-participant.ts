@@ -141,6 +141,8 @@ export type ArrangedParticipant = {
   /** 회원 신청 시 profiles 연결 */
   userId?: string | null
   isWalkIn?: boolean
+  /** profiles.is_staff 또는 answers._payment_method === '스탭무료' */
+  isStaff?: boolean
   paymentMethod?: PaymentMethod | null
   paymentStatus?: string | null
   paymentReceiptUrl?: string | null
@@ -159,7 +161,7 @@ export function mapFormResponseToParticipant(
     payment_receipt_url?: string | null
   },
   questions: CoreFormQuestion[] = [],
-  options?: { userNamesById?: Record<string, string> }
+  options?: { userNamesById?: Record<string, string>; staffUserIds?: Set<string> }
 ): ArrangedParticipant {
   const answers = (row.answers || {}) as Record<string, unknown>
   const info = extractParticipantInfoFromAnswers(answers, questions)
@@ -175,6 +177,12 @@ export function mapFormResponseToParticipant(
       ? options.userNamesById[row.user_id]
       : ''
 
+  const rawPayment =
+    typeof answers._payment_method === 'string' ? answers._payment_method.trim() : ''
+  const isStaff =
+    rawPayment === '스탭무료' ||
+    !!(row.user_id && options?.staffUserIds?.has(row.user_id))
+
   return {
     id: row.id,
     name: nameFromAnswers || nameFromUser || 'Anonymous',
@@ -185,6 +193,7 @@ export function mapFormResponseToParticipant(
     created_at: row.created_at ?? null,
     userId: row.user_id ?? null,
     isWalkIn: isWalkInAnswers(answers) || undefined,
+    isStaff: isStaff || undefined,
     paymentMethod: normalizePaymentMethod(answers._payment_method),
     paymentStatus: row.payment_status ?? null,
     paymentReceiptUrl: row.payment_receipt_url ?? null,

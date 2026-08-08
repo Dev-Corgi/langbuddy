@@ -15,6 +15,7 @@ export type ArrangeParticipantLoadResult = {
   questionsByFormId: Record<string, CoreFormQuestion[]>
   scheduleQuestions: CoreFormQuestion[]
   userNamesById: Record<string, string>
+  staffUserIds: Set<string>
 }
 
 export async function loadArrangeParticipantsForSession(
@@ -67,7 +68,13 @@ export async function loadArrangeParticipantsForSession(
     : []
 
   if (formIds.length === 0) {
-    return { participants: [], questionsByFormId, scheduleQuestions, userNamesById: {} }
+    return {
+      participants: [],
+      questionsByFormId,
+      scheduleQuestions,
+      userNamesById: {},
+      staffUserIds: new Set(),
+    }
   }
 
   const { data: responsesRaw } = await supabase
@@ -90,20 +97,27 @@ export async function loadArrangeParticipantsForSession(
   ]
 
   const userNamesById: Record<string, string> = {}
+  const staffUserIds = new Set<string>()
   if (userIds.length > 0) {
-    const { data: users } = await supabase.from('users').select('id, name').in('id', userIds)
+    const [{ data: users }, { data: staffProfiles }] = await Promise.all([
+      supabase.from('users').select('id, name').in('id', userIds),
+      supabase.from('profiles').select('id').in('id', userIds).eq('is_staff', true),
+    ])
     for (const u of users || []) {
       const id = u.id as string
       const name = u.name as string | null
       if (name?.trim()) userNamesById[id] = name.trim()
+    }
+    for (const p of staffProfiles || []) {
+      staffUserIds.add(p.id as string)
     }
   }
 
   const participants = responses.map((r) => {
     const fid = r.form_id as string
     const questions = questionsByFormId[fid] ?? scheduleQuestions
-    return mapFormResponseToParticipant(r, questions, { userNamesById })
+    return mapFormResponseToParticipant(r, questions, { userNamesById, staffUserIds })
   })
 
-  return { participants, questionsByFormId, scheduleQuestions, userNamesById }
+  return { participants, questionsByFormId, scheduleQuestions, userNamesById, staffUserIds }
 }

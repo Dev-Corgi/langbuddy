@@ -37,11 +37,10 @@ import { buildLangCheckinModalPayload } from '@/lib/admin-checkin-display'
 import { ADMIN_CHECKIN_SOURCE_DRAG, ADMIN_CHECKIN_SOURCE_MODAL } from '@/lib/admin-manual-checkin'
 import {
   isWalkInAnswers,
-  mapFormResponseToParticipant,
   type ArrangedParticipant,
 } from '@/lib/walk-in-participant'
 import { SUPPORTED_LANGUAGES, isSupportedLanguage } from '@/lib/supported-languages'
-import { loadArrangeParticipantsForSession } from '@/lib/arrange-participants'
+import { useArrangeSync } from '@/hooks/use-arrange-sync'
 
 function participantRecencyMs(p: ArrangedParticipant): { checkedIn: number; created: number } {
   const checkedIn = p.checked_in_at ? Date.parse(p.checked_in_at) : 0
@@ -68,12 +67,7 @@ function sortParticipantsByNameAsc(list: ArrangedParticipant[]): ArrangedPartici
     a.name.localeCompare(b.name, 'ko', { sensitivity: 'base', numeric: true })
   )
 }
-import {
-  loadSeatingLiveState,
-  persistParticipantAssignment,
-  persistRoundSeating,
-  type SeatingConfigPayload,
-} from '@/lib/seating-live-sync'
+import type { SeatingConfigPayload } from '@/lib/seating-live-sync'
 import {
   QrScanResultSheet,
   type QrScanResultSheetPayload,
@@ -105,7 +99,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import _ from 'lodash'
-import { arrangeRound as runSeatingArrangeRound, calculateAutoTableCounts, getTableWarnings, pickBestTableForLateJoin, evaluateRoundQuality, formatDuplicateWarningMessage, reunionCountIfJoinedTable } from '@/lib/seating-algorithm'
+import { arrangeRound as runSeatingArrangeRound, calculateAutoTableCounts, getTableWarnings, pickBestTableForLateJoin, evaluateRoundQuality, formatDuplicateWarningMessage, formatReunionHintMessage, reunionCountIfJoinedTable } from '@/lib/seating-algorithm'
 import type { RoundData } from '@/lib/seating-algorithm'
 import { formatDebugLog, generateDebugLog } from '@/lib/seating-debug-logger'
 import { RoundImageExporter } from '@/components/admin/round-image-exporter'
@@ -587,57 +581,51 @@ function UncheckedInList({ participants, onEdit }: { participants: Participant[]
 // --- Main Page ---
 
 export default function AdminArrangePage() {
-  const supabase = useMemo(() => createClient(), [])
-  const sessionRef = useRef<ArrangePostingSession | null>(null)
+  const {
+    supabase,
+    session,
+    participants,
+    rounds,
+    langTableCounts,
+    formQuestions,
+    loading,
+    seatingSyncing,
+    fetchData,
+    commitAssign,
+    commitRoundState,
+    commitCheckin,
+    commitUncheckin,
+    mergeLangCountsFromRounds,
+    mergeLangCounts,
+    seenCheckedInIdsRef,
+    reloadSession,
+  } = useArrangeSync()
+
   const formQuestionsRef = useRef<CoreFormQuestion[]>([])
-  const questionsByFormIdRef = useRef<Record<string, CoreFormQuestion[]>>({})
-  const userNamesByIdRef = useRef<Record<string, string>>({})
-  const participantsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const suppressParticipantRefreshRef = useRef(false)
-  const suppressParticipantRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const readyForPersistRef = useRef(false)
-  /** 라운드별 "마지막으로 persist를 스케줄한" rounds 배열 스냅샷 (참조 비교로 변경 감지) */
-  const prevRoundsSnapshotRef = useRef<RoundData[]>([])
-  const roundPersistTimerRef = useRef<Record<number, ReturnType<typeof setTimeout> | null>>({})
-  const roundPersistInFlightRef = useRef<Record<number, boolean>>({})
-  const roundPersistPendingRef = useRef<Record<number, boolean>>({})
   const participantsRef = useRef<Participant[]>([])
   const roundsRef = useRef<RoundData[]>([])
-  const langTableCountsRef = useRef<Record<string, number>>({})
   const lastCheckinModalRef = useRef<{ id: string; at: number } | null>(null)
-  const seenCheckedInIdsRef = useRef<Set<string>>(new Set())
   const activeDragIdRef = useRef<string | null>(null)
 
   const [checkinModalOpen, setCheckinModalOpen] = useState(false)
   const [checkinModalPayload, setCheckinModalPayload] =
     useState<QrScanResultSheetPayload | null>(null)
-
-  const [loading, setLoading] = useState(true)
-  const [session, setTodaySession] = useState<ArrangePostingSession | null>(null)
-  const [participants, setParticipants] = useState<Participant[]>([])
-  const [formQuestions, setFormQuestions] = useState<CoreFormQuestion[]>([])
-  const [rounds, setRounds] = useState<RoundData[]>([
-    { round: 1, assignments: [], tableLanguages: {} },
-    { round: 2, assignments: [], tableLanguages: {} },
-    { round: 3, assignments: [], tableLanguages: {} }
-  ])
   const [currentRound, setCurrentRound] = useState(1)
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [langTableCounts, setLangTableCounts] = useState<Record<string, number>>({})
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [configRound, setConfigRound] = useState<number | null>(null)
   const [configCounts, setConfigCounts] = useState<Record<string, number>>({})
   const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null)
+  const [deletingParticipantId, setDeletingParticipantId] = useState<string | null>(null)
   const [debugLogs, setDebugLogs] = useState<string[]>([])
   const [showDebugLogs, setShowDebugLogs] = useState(false)
-  const [seatingSyncing, setSeatingSyncing] = useState(false)
   const [notifyingRound, setNotifyingRound] = useState<number | null>(null)
 
-  sessionRef.current = session
   formQuestionsRef.current = formQuestions
   participantsRef.current = participants
   roundsRef.current = rounds
-  langTableCountsRef.current = langTableCounts
+
+  const markLocalSeatingEdit = useCallback(() => {}, [])
 
   const showCheckinModalForResponse = useCallback(
     async (row: {
@@ -647,9 +635,7 @@ export default function AdminArrangePage() {
       payment_status?: string | null
       checked_in_at?: string | null
     }) => {
-      const s = sessionRef.current
-      const questions = formQuestionsRef.current
-      if (!s?.id || !row.checked_in_at) return
+      if (!session?.id || !row.checked_in_at) return
 
       const todayStr = todayYYYYMMDDSeoul()
       const currentDay = koreanWeekdayLetterSeoul()
@@ -672,8 +658,8 @@ export default function AdminArrangePage() {
         const payload = await buildLangCheckinModalPayload(
           supabase,
           row,
-          questions,
-          s.id,
+          formQuestionsRef.current,
+          session.id,
           todayStr
         )
         setCheckinModalPayload(payload)
@@ -682,166 +668,38 @@ export default function AdminArrangePage() {
         console.error('[arrange] check-in modal:', e)
       }
     },
-    [supabase]
+    [session?.id, supabase]
   )
 
-  const scheduleParticipantsRefresh = useCallback(() => {
-    if (suppressParticipantRefreshRef.current) return
-    if (participantsRefreshTimerRef.current) {
-      clearTimeout(participantsRefreshTimerRef.current)
-    }
-    participantsRefreshTimerRef.current = setTimeout(() => {
-      participantsRefreshTimerRef.current = null
-      if (suppressParticipantRefreshRef.current) return
-      void (async () => {
-        const s = sessionRef.current
-        if (!s?.id) return
-        const todayStr = todayYYYYMMDDSeoul()
-        const currentDay = koreanWeekdayLetterSeoul()
-        const loaded = await loadArrangeParticipantsForSession(supabase, {
-          postingId: s.id,
-          scheduleFormId: s.form_id ?? null,
-          todayStr,
-          currentDay,
-        })
-        questionsByFormIdRef.current = loaded.questionsByFormId
-        userNamesByIdRef.current = loaded.userNamesById
-        setFormQuestions(loaded.scheduleQuestions)
-        setParticipants(loaded.participants)
-        seenCheckedInIdsRef.current = new Set(
-          loaded.participants.filter((p) => p.checked_in_at).map((p) => p.id)
-        )
-      })()
-    }, 350)
-  }, [supabase])
-
-  const markLocalSeatingEdit = useCallback(() => {
-    suppressParticipantRefreshRef.current = true
-    if (suppressParticipantRefreshTimerRef.current) {
-      clearTimeout(suppressParticipantRefreshTimerRef.current)
-    }
-    suppressParticipantRefreshTimerRef.current = setTimeout(() => {
-      suppressParticipantRefreshRef.current = false
-      suppressParticipantRefreshTimerRef.current = null
-    }, 1200)
-  }, [])
-
-  /** 라운드 단위 replace — 테이블 추가/삭제/순서변경/자동배치 등 구조적 변경 전용 */
-  const runRoundPersist = useCallback(async (round: number) => {
-    const s = sessionRef.current
-    if (!s?.id) return
-
-    if (roundPersistInFlightRef.current[round]) {
-      roundPersistPendingRef.current[round] = true
-      return
-    }
-
-    const roundData = roundsRef.current.find((r) => r.round === round)
-    if (!roundData) return
-
-    roundPersistInFlightRef.current[round] = true
-    const todayStr = todayYYYYMMDDSeoul()
-    const checkedIds = new Set(
-      participantsRef.current.filter((p) => p.checked_in_at).map((p) => p.id)
-    )
-
-    setSeatingSyncing(true)
-    try {
-      await persistRoundSeating({
-        postingId: s.id,
-        sessionDate: todayStr,
-        round,
-        tableLanguages: roundData.tableLanguages ?? {},
-        tableOrder: roundData.tableOrder ?? null,
-        langTableCounts: langTableCountsRef.current,
-        assignments: roundData.assignments,
-        checkedParticipantIds: checkedIds,
+  useEffect(() => {
+    for (const p of participants) {
+      if (!p.checked_in_at || seenCheckedInIdsRef.current.has(p.id)) continue
+      seenCheckedInIdsRef.current.add(p.id)
+      if (p.isWalkIn) continue
+      void showCheckinModalForResponse({
+        id: p.id,
+        user_id: p.userId,
+        checked_in_at: p.checked_in_at,
+        answers: {},
       })
-    } catch (err) {
-      console.error(`[arrange] round ${round} persist:`, err)
-      const msg = err instanceof Error ? err.message : '동기화에 실패했습니다.'
-      toast.error(
-        msg.length < 160 ? `${round}라운드 저장 실패: ${msg}` : `${round}라운드 저장 실패: ${msg.slice(0, 150)}…`,
-        { id: `round-persist-fail-${round}` }
-      )
-      roundPersistPendingRef.current[round] = true
-    } finally {
-      setSeatingSyncing(false)
-      roundPersistInFlightRef.current[round] = false
-      if (roundPersistPendingRef.current[round]) {
-        roundPersistPendingRef.current[round] = false
-        if (roundPersistTimerRef.current[round]) {
-          clearTimeout(roundPersistTimerRef.current[round]!)
-        }
-        roundPersistTimerRef.current[round] = setTimeout(() => {
-          roundPersistTimerRef.current[round] = null
-          void runRoundPersist(round)
-        }, 1500)
-      }
     }
-  }, [])
+  }, [participants, showCheckinModalForResponse, seenCheckedInIdsRef])
 
-  const scheduleRoundPersist = useCallback(
-    (round: number) => {
-      if (!readyForPersistRef.current) return
-      if (roundPersistTimerRef.current[round]) {
-        clearTimeout(roundPersistTimerRef.current[round]!)
-      }
-      roundPersistTimerRef.current[round] = setTimeout(() => {
-        roundPersistTimerRef.current[round] = null
-        void runRoundPersist(round)
-      }, 300)
-    },
-    [runRoundPersist]
-  )
-
-  /** 드래그로 참가자 1명을 옮길 때: 단건 upsert. 실패 시에만 라운드 단위 재시도로 폴백. */
   const persistParticipantMove = useCallback(
     (round: number, participantId: string, tableLabel: string | null) => {
-      const s = sessionRef.current
-      if (!s?.id) return
-      const todayStr = todayYYYYMMDDSeoul()
-      void persistParticipantAssignment({
-        postingId: s.id,
-        sessionDate: todayStr,
-        round,
-        participantId,
-        tableLabel,
-      }).catch((err) => {
-        console.error('[arrange] participant assign persist failed:', err)
-        const p = participantsRef.current.find((x) => x.id === participantId)
-        toast.error(`${p?.name || '참가자'}님 배치 저장에 실패했습니다. 자동으로 재시도합니다.`, {
-          id: `assign-fail-${participantId}`,
-        })
-        scheduleRoundPersist(round)
-      })
+      commitAssign(round, participantId, tableLabel)
     },
-    [scheduleRoundPersist]
+    [commitAssign]
   )
 
-  // rounds 상태가 바뀔 때마다 "실제로 바뀐 라운드"만 골라 라운드 단위로 persist 예약.
-  // (참조 비교: 안 바뀐 라운드는 setRounds에서도 같은 객체 참조를 유지하는 불변 업데이트 패턴을 씀)
-  useEffect(() => {
-    if (!readyForPersistRef.current || !session?.id) return
-    const prev = prevRoundsSnapshotRef.current
-    rounds.forEach((r, idx) => {
-      if (prev[idx] !== r) {
-        scheduleRoundPersist(r.round)
-      }
-    })
-    prevRoundsSnapshotRef.current = rounds
-  }, [rounds, session?.id, scheduleRoundPersist])
-
-  useEffect(() => {
-    return () => {
-      Object.values(roundPersistTimerRef.current).forEach((t) => {
-        if (t) clearTimeout(t)
-      })
-      if (suppressParticipantRefreshTimerRef.current) {
-        clearTimeout(suppressParticipantRefreshTimerRef.current)
-      }
-    }
-  }, [])
+  const runRoundPersist = useCallback(
+    async (round: number) => {
+      const roundData = roundsRef.current.find((r) => r.round === round)
+      if (!roundData) return
+      await commitRoundState(round, roundData)
+    },
+    [commitRoundState]
+  )
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -868,356 +726,6 @@ export default function AdminArrangePage() {
     }
     return closestCenter(args)
   }, [])
-
-  useEffect(() => {
-    void fetchData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
-  }, [supabase])
-
-  useEffect(() => {
-    const formId = session?.form_id
-    if (!formId) return
-
-    const channel = supabase
-      .channel(`checkin-updates-${formId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'form_responses',
-          filter: `form_id=eq.${formId}`,
-        },
-        (payload) => {
-          const row = payload.new as {
-            id?: string
-            form_id?: string
-            user_id?: string | null
-            answers?: Record<string, unknown> | null
-            payment_status?: string | null
-            payment_receipt_url?: string | null
-            checked_in_at?: string | null
-            created_at?: string | null
-          }
-
-          const rowId = row?.id
-          const answers = (row.answers || {}) as Record<string, unknown>
-
-          if (rowId && payload.eventType === 'UPDATE') {
-            const formId = row.form_id
-            const questions =
-              (formId && questionsByFormIdRef.current[formId]) ||
-              formQuestionsRef.current
-            const patched = mapFormResponseToParticipant(
-              {
-                id: rowId,
-                user_id: row.user_id,
-                answers: row.answers,
-                checked_in_at: row.checked_in_at,
-                created_at: row.created_at,
-                payment_status: row.payment_status,
-                payment_receipt_url: row.payment_receipt_url,
-              },
-              questions,
-              { userNamesById: userNamesByIdRef.current }
-            )
-            setParticipants((prev) => {
-              const idx = prev.findIndex((p) => p.id === rowId)
-              if (idx === -1) {
-                if (!suppressParticipantRefreshRef.current) scheduleParticipantsRefresh()
-                return prev
-              }
-              const next = [...prev]
-              if (patched.name === 'Anonymous' && prev[idx].name !== 'Anonymous') {
-                patched.name = prev[idx].name
-              }
-              next[idx] = patched
-              participantsRef.current = next
-              return next
-            })
-            setEditingParticipant((prev) => (prev?.id === rowId ? patched : prev))
-          } else if (!suppressParticipantRefreshRef.current) {
-            scheduleParticipantsRefresh()
-          }
-
-          if (
-            rowId &&
-            row.checked_in_at &&
-            !seenCheckedInIdsRef.current.has(rowId)
-          ) {
-            seenCheckedInIdsRef.current.add(rowId)
-            if (
-              !isWalkInAnswers(answers) &&
-              answers._checkin_source !== ADMIN_CHECKIN_SOURCE_DRAG
-            ) {
-              void showCheckinModalForResponse({ ...row, id: rowId })
-            }
-          }
-        }
-      )
-      .subscribe()
-
-    return () => {
-      if (participantsRefreshTimerRef.current) {
-        clearTimeout(participantsRefreshTimerRef.current)
-        participantsRefreshTimerRef.current = null
-      }
-      void supabase.removeChannel(channel)
-    }
-  }, [
-    supabase,
-    session?.form_id,
-    scheduleParticipantsRefresh,
-    showCheckinModalForResponse,
-  ])
-
-  // seating_assignments/postings 변경을 전체 reload가 아니라 "머지"로 반영.
-  // 참가자 단건 upsert·라운드 단위 replace 어느 쪽이 서버에 반영되든, 결과로 오는
-  // INSERT/UPDATE/DELETE 이벤트를 그대로 로컬 상태에 병합하면 되므로 타이밍 문제(suppress
-  // 타이머로 원격 반영을 막았다 재개하는 방식)가 구조적으로 필요 없어짐.
-  useEffect(() => {
-    const postingId = session?.id
-    if (!postingId) return
-
-    // 이 병합으로 만들어진 라운드는 "이미 서버와 일치"하는 상태이므로,
-    // 곧바로 되돌려 persist(echo)하지 않도록 prevRoundsSnapshotRef를 함께 갱신해 둔다.
-    const mergeAssignment = (round: number, participantId: string, tableLabel: string | null) => {
-      setRounds((prev) => {
-        const idx = prev.findIndex((r) => r.round === round)
-        if (idx === -1) return prev
-        const current = prev[idx].assignments
-        const nextAssignments = setParticipantTableAssignment(current, participantId, tableLabel)
-        const unchanged =
-          current.length === nextAssignments.length &&
-          current.every(
-            (a, i) =>
-              a.participant_id === nextAssignments[i]?.participant_id &&
-              a.table_label === nextAssignments[i]?.table_label
-          )
-        if (unchanged) return prev
-        const next = [...prev]
-        next[idx] = { ...prev[idx], assignments: nextAssignments }
-        const snap = [...prevRoundsSnapshotRef.current]
-        snap[idx] = next[idx]
-        prevRoundsSnapshotRef.current = snap
-        return next
-      })
-    }
-
-    const channel = supabase
-      .channel(`seating-live-${postingId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'seating_assignments',
-          filter: `posting_id=eq.${postingId}`,
-        },
-        (payload) => {
-          const todayStr = todayYYYYMMDDSeoul()
-          if (payload.eventType === 'DELETE') {
-            const old = payload.old as {
-              round?: number
-              participant_id?: string
-              session_date?: string | null
-            }
-            if (
-              old?.round != null &&
-              old.participant_id &&
-              (old.session_date === todayStr || old.session_date == null)
-            ) {
-              mergeAssignment(old.round, old.participant_id, null)
-            }
-            return
-          }
-          const row = payload.new as {
-            round?: number
-            participant_id?: string | null
-            table_label?: string | null
-            session_date?: string | null
-          }
-          if (
-            row?.round != null &&
-            row.participant_id &&
-            row.table_label &&
-            (row.session_date === todayStr || row.session_date == null)
-          ) {
-            mergeAssignment(row.round, row.participant_id, row.table_label)
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'postings',
-          filter: `id=eq.${postingId}`,
-        },
-        (payload) => {
-          const row = payload.new as { seating_config?: SeatingConfigPayload | null }
-          const cfg = row?.seating_config
-          if (!cfg) return
-          if (cfg.langTableCounts) setLangTableCounts(cfg.langTableCounts)
-          if (cfg.tableLanguagesByRound || cfg.tableOrderByRound) {
-            setRounds((prev) => {
-              const next = prev.map((r, idx) => {
-                const lang = cfg.tableLanguagesByRound?.[String(r.round)]
-                const order = cfg.tableOrderByRound?.[String(r.round)]
-                if (!lang && !order) return r
-                const merged = {
-                  ...r,
-                  tableLanguages: lang ?? r.tableLanguages,
-                  tableOrder: order ?? r.tableOrder,
-                }
-                const snap = [...prevRoundsSnapshotRef.current]
-                snap[idx] = merged
-                prevRoundsSnapshotRef.current = snap
-                return merged
-              })
-              return next
-            })
-          }
-        }
-      )
-      .subscribe()
-
-    return () => {
-      void supabase.removeChannel(channel)
-    }
-  }, [supabase, session?.id])
-
-  const fetchData = async () => {
-    readyForPersistRef.current = false
-    setLoading(true)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        window.location.href = '/admin/login'
-        return
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_superadmin, is_staff')
-        .eq('id', user.id)
-        .single()
-
-      if (!canAccessStaffOps(user.email, profile)) {
-        window.location.href = '/admin/dashboard'
-        return
-      }
-
-      const { data: sessions } = await supabase
-        .from('postings')
-        .select('*')
-        .eq('category', '언어교환')
-        .is('day_of_week', null)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-
-      if (!sessions || sessions.length === 0) {
-        setTodaySession(null)
-        setLoading(false)
-        return
-      }
-
-      const foundSession = sessions[0]
-      const todayStr = todayYYYYMMDDSeoul()
-      const currentDay = koreanWeekdayLetterSeoul()
-
-      const { data: schedule } = await supabase
-        .from('language_exchange_schedules')
-        .select('*')
-        .eq('posting_id', foundSession.id)
-        .eq('day_of_week', currentDay)
-        .eq('is_active', true)
-        .single()
-      
-      if (!schedule) {
-        toast.error(`오늘(${currentDay}요일) 언어교환 세션이 없습니다.`)
-        setTodaySession(null)
-        setLoading(false)
-        return
-      }
-      
-      const sessionWithFormId = { ...foundSession, form_id: schedule.form_id, day_of_week: currentDay }
-      setTodaySession(sessionWithFormId as ArrangePostingSession)
-
-      let questionsForExtract: CoreFormQuestion[] = []
-      if (schedule.form_id) {
-        const { data: qData } = await supabase
-          .from('form_questions')
-          .select('*')
-          .eq('form_id', schedule.form_id)
-          .order('display_order', { ascending: true })
-        if (qData) {
-          questionsForExtract = qData as CoreFormQuestion[]
-        }
-      }
-
-      // Load saved table config if exists
-      const seatingConfig = (foundSession.seating_config || null) as SeatingConfigPayload | null
-      if (seatingConfig?.langTableCounts) {
-        setLangTableCounts(seatingConfig.langTableCounts)
-      }
-
-      const loaded = await loadArrangeParticipantsForSession(supabase, {
-        postingId: foundSession.id,
-        scheduleFormId: schedule.form_id ?? null,
-        todayStr,
-        currentDay,
-      })
-      questionsByFormIdRef.current = loaded.questionsByFormId
-      userNamesByIdRef.current = loaded.userNamesById
-      setFormQuestions(loaded.scheduleQuestions.length ? loaded.scheduleQuestions : questionsForExtract)
-      const mapped = loaded.participants
-      setParticipants(mapped)
-      seenCheckedInIdsRef.current = new Set(
-        mapped.filter((p) => p.checked_in_at).map((p) => p.id)
-      )
-
-      const languageGroups = _.groupBy(mapped, 'language')
-      const initialCounts: Record<string, number> = { ...langTableCounts }
-      let hasChanges = false
-
-      Object.entries(languageGroups).forEach(([lang, members]) => {
-        if (!initialCounts[lang]) {
-          initialCounts[lang] = Math.ceil(members.length / 5)
-          hasChanges = true
-        }
-      })
-
-      if (hasChanges) {
-        setLangTableCounts(initialCounts)
-      }
-
-      const checkedIds = new Set(mapped.filter((p) => p.checked_in_at).map((p) => p.id))
-      const { rounds: loadedRounds } = await loadSeatingLiveState(
-        supabase,
-        foundSession.id,
-        todayStr,
-        mapped,
-        seatingConfig,
-        checkedIds
-      )
-      if (loadedRounds.some((r) => r.assignments.length > 0)) {
-        setRounds(loadedRounds)
-        prevRoundsSnapshotRef.current = loadedRounds
-      } else {
-        prevRoundsSnapshotRef.current = roundsRef.current
-      }
-      readyForPersistRef.current = true
-
-      setLoading(false)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const checkedInParticipants = useMemo(() => 
     participants.filter(p => p.checked_in_at), 
@@ -1276,12 +784,12 @@ export default function AdminArrangePage() {
       if (lang && v >= 1) counts[lang] = v
     })
 
-    setLangTableCounts((prev) => ({ ...prev, ...counts }))
-
+    const mergedCounts = { ...langTableCounts, ...counts }
     const previousRounds = rounds.filter((r) => r.round < configRound && r.assignments.length > 0)
     const newRoundData = runSeatingArrangeRound(configRound, attendees, counts, previousRounds)
     const updatedRounds = rounds.map((r) => (r.round === configRound ? newRoundData : r))
-    setRounds(updatedRounds)
+
+    void commitRoundState(configRound, newRoundData, mergedCounts)
 
     const dbgParticipants = attendees.map((p) => ({
       id: p.id,
@@ -1302,7 +810,7 @@ export default function AdminArrangePage() {
     setCurrentRound(configRound)
     setIsConfigOpen(false)
     setConfigRound(null)
-  }, [configRound, configCounts, participants, rounds, session])
+  }, [configRound, configCounts, participants, rounds, session, langTableCounts, commitRoundState])
 
   const tableLanguageOptions = useMemo(() => {
     const langs = new Set<string>()
@@ -1333,13 +841,15 @@ export default function AdminArrangePage() {
 
       markLocalSeatingEdit()
       const updated = roundsRef.current.map((r) => (r.round === roundNum ? result.roundData : r))
-      setLangTableCounts(
-        mergeLangTableCounts(langTableCountsRef.current, result.roundData.tableLanguages ?? {})
+      const nextRound = updated.find((r) => r.round === roundNum)!
+      void commitRoundState(
+        roundNum,
+        nextRound,
+        mergeLangCounts(langTableCounts, nextRound.tableLanguages ?? {})
       )
-      setRounds(updated)
       toast.success(`${result.label} 테이블이 추가되었습니다. (${language})`)
     },
-    [markLocalSeatingEdit]
+    [markLocalSeatingEdit, commitRoundState, langTableCounts, mergeLangCounts]
   )
 
   const handleDeleteTable = useCallback(
@@ -1361,8 +871,7 @@ export default function AdminArrangePage() {
       )
       markLocalSeatingEdit()
       const updated = roundsRef.current.map((r) => (r.round === roundNum ? nextRound : r))
-      setLangTableCounts(langTableCountsFromRounds(updated))
-      setRounds(updated)
+      void commitRoundState(roundNum, nextRound, mergeLangCountsFromRounds(updated))
 
       if (removedAssignmentCount > 0) {
         toast.success(`${label} 테이블 삭제 · ${removedAssignmentCount}명 미배정`)
@@ -1370,7 +879,7 @@ export default function AdminArrangePage() {
         toast.success(`${label} 테이블이 삭제되었습니다.`)
       }
     },
-    [markLocalSeatingEdit]
+    [markLocalSeatingEdit, commitRoundState, mergeLangCountsFromRounds]
   )
 
   const handleExportRoundCsv = useCallback(
@@ -1405,89 +914,85 @@ export default function AdminArrangePage() {
   // --- Seating Algorithm ---
 
   const handleAddParticipant = (newParticipant: Participant) => {
-    if (newParticipant.checked_in_at) {
-      seenCheckedInIdsRef.current.add(newParticipant.id)
-    }
+    void (async () => {
+      const loaded = await reloadSession()
+      const list = loaded?.participants ?? participantsRef.current
+      const p = list.find((x) => x.id === newParticipant.id) ?? newParticipant
 
-    setParticipants((prev) => {
-      const exists = prev.find((p) => p.id === newParticipant.id)
-      if (exists) {
-        return prev.map((p) => (p.id === newParticipant.id ? { ...p, ...newParticipant } : p))
+      if (p.checked_in_at) {
+        seenCheckedInIdsRef.current.add(p.id)
       }
-      return [...prev, newParticipant]
-    })
 
-    if (!newParticipant.checked_in_at) {
-      toast.info(
-        `${newParticipant.name}님은 현장 QR 체크인 전입니다. 미체크인 목록에서 미배정 또는 테이블로 드래그하면 체크인 후 이동·배정할 수 있습니다.`,
-        { duration: 5000 }
-      )
-      return
-    }
-
-    const stage = deriveArrangeStage(rounds)
-    if (stage === 1) {
-      toast.success(`${newParticipant.name}님이 미배정 인원으로 등록되었습니다.`, { duration: 5000 })
-      return
-    }
-
-    const targetRound = targetRoundForLateJoin(stage)
-    if (targetRound == null) return
-
-    const roundData = rounds.find((r) => r.round === targetRound)
-    if (!roundData || roundData.assignments.length === 0) {
-      toast.info(
-        `${targetRound}라운드 배치가 아직 없습니다. 해당 라운드「배치」를 먼저 실행한 뒤 다시 추가해 주세요.`,
-        { duration: 5000 }
-      )
-      return
-    }
-
-    if (roundData.assignments.some((a) => a.participant_id === newParticipant.id)) {
-      toast.info(`${newParticipant.name}님은 이미 ${targetRound}라운드에 배정되어 있습니다.`, { duration: 4000 })
-      return
-    }
-
-    const tableLanguages = roundData.tableLanguages || {}
-    const previousRounds = rounds.filter(
-      (r) => r.round < targetRound && r.assignments.length > 0
-    )
-    const allAttendees = [...participants.filter((p) => p.checked_in_at), newParticipant]
-    const bestTable = pickBestTableForLateJoin(
-      newParticipant,
-      roundData.assignments,
-      tableLanguages,
-      allAttendees,
-      previousRounds
-    )
-
-    if (!bestTable) {
-      toast.warning(
-        `${newParticipant.name}님이 추가되었습니다. ${targetRound}라운드에 ${newParticipant.language} 테이블이 없어 미배정 상태입니다.`,
-        { duration: 5000 }
-      )
-      return
-    }
-
-    setRounds((prev) => {
-      const updated = [...prev]
-      const roundIdx = updated.findIndex((r) => r.round === targetRound)
-      if (roundIdx !== -1) {
-        updated[roundIdx] = {
-          ...updated[roundIdx],
-          assignments: [
-            ...updated[roundIdx].assignments,
-            { participant_id: newParticipant.id, table_label: bestTable },
-          ],
-        }
+      if (!p.checked_in_at) {
+        toast.info(
+          `${p.name}님은 현장 QR 체크인 전입니다. 미체크인 목록에서 미배정 또는 테이블로 드래그하면 체크인 후 이동·배정할 수 있습니다.`,
+          { duration: 5000 }
+        )
+        return
       }
-      return updated
-    })
 
-    toast.success(
-      `${newParticipant.name}님이 ${targetRound}라운드 ${bestTable} 테이블에 배치되었습니다.`,
-      { duration: 5000 }
-    )
+      const currentRounds = loaded?.rounds ?? roundsRef.current
+      const stage = deriveArrangeStage(currentRounds)
+      if (stage === 1) {
+        toast.success(`${p.name}님이 미배정 인원으로 등록되었습니다.`, { duration: 5000 })
+        return
+      }
+
+      const targetRound = targetRoundForLateJoin(stage)
+      if (targetRound == null) return
+
+      const roundData = currentRounds.find((r) => r.round === targetRound)
+      if (!roundData || roundData.assignments.length === 0) {
+        toast.info(
+          `${targetRound}라운드 배치가 아직 없습니다. 해당 라운드「배치」를 먼저 실행한 뒤 다시 추가해 주세요.`,
+          { duration: 5000 }
+        )
+        return
+      }
+
+      if (roundData.assignments.some((a) => a.participant_id === p.id)) {
+        toast.info(`${p.name}님은 이미 ${targetRound}라운드에 배정되어 있습니다.`, { duration: 4000 })
+        return
+      }
+
+      const tableLanguages = roundData.tableLanguages || {}
+      const previousRounds = currentRounds.filter(
+        (r) => r.round < targetRound && r.assignments.length > 0
+      )
+      const allAttendees = [...list.filter((x) => x.checked_in_at), p]
+      const bestTable = pickBestTableForLateJoin(
+        p,
+        roundData.assignments,
+        tableLanguages,
+        allAttendees,
+        previousRounds
+      )
+
+      if (!bestTable) {
+        toast.warning(
+          `${p.name}님이 추가되었습니다. ${targetRound}라운드에 ${p.language} 테이블이 없어 미배정 상태입니다.`,
+          { duration: 5000 }
+        )
+        return
+      }
+
+      commitAssign(targetRound, p.id, bestTable)
+      toast.success(
+        `${p.name}님이 ${targetRound}라운드 ${bestTable} 테이블에 배치되었습니다.`,
+        { duration: 5000 }
+      )
+      const nameById = Object.fromEntries(list.map((x) => [x.id, x.name]))
+      const { maxReunions, reunions } = reunionCountIfJoinedTable(
+        p.id,
+        bestTable,
+        roundData.assignments,
+        previousRounds,
+        nameById
+      )
+      if (maxReunions > 0) {
+        toast.info(formatReunionHintMessage(p.name, bestTable, reunions), { duration: 8000 })
+      }
+    })()
   }
 
   const applyLanguageReassignment = useCallback(
@@ -1524,20 +1029,7 @@ export default function AdminArrangePage() {
         })
 
         markLocalSeatingEdit()
-        setRounds((prev) => {
-          const updatedRounds = [...prev]
-          const roundIdx = updatedRounds.findIndex((r) => r.round === currentRound)
-          if (roundIdx !== -1) {
-            updatedRounds[roundIdx] = {
-              ...updatedRounds[roundIdx],
-              assignments: updatedRounds[roundIdx].assignments.map((a) =>
-                a.participant_id === updated.id ? { ...a, table_label: minTable } : a
-              ),
-            }
-          }
-          roundsRef.current = updatedRounds
-          return updatedRounds
-        })
+        commitAssign(currentRound, updated.id, minTable)
 
         toast.success(
           `${updated.name}님의 언어가 ${updated.language}로 변경되어 ${minTable}테이블로 재배정되었습니다.`,
@@ -1547,27 +1039,14 @@ export default function AdminArrangePage() {
       }
 
       markLocalSeatingEdit()
-      setRounds((prev) => {
-        const updatedRounds = [...prev]
-        const roundIdx = updatedRounds.findIndex((r) => r.round === currentRound)
-        if (roundIdx !== -1) {
-          updatedRounds[roundIdx] = {
-            ...updatedRounds[roundIdx],
-            assignments: updatedRounds[roundIdx].assignments.filter(
-              (a) => a.participant_id !== updated.id
-            ),
-          }
-        }
-        roundsRef.current = updatedRounds
-        return updatedRounds
-      })
+      commitAssign(currentRound, updated.id, null)
 
       toast.warning(
         `${updated.name}님의 언어가 ${updated.language}로 변경되었으나, 현재 라운드에 해당 언어 테이블이 없어 미배정 상태입니다.`,
         { duration: 5000 }
       )
     },
-    [currentRound, markLocalSeatingEdit]
+    [currentRound, markLocalSeatingEdit, commitAssign]
   )
 
   const handleParticipantFieldSave = useCallback(
@@ -1598,7 +1077,7 @@ export default function AdminArrangePage() {
             participant?: Participant
           }
           if (!res.ok || !data.participant) {
-            toast.error(data.error || '참가자 정보 저장에 실패했습니다.')
+            toast.error(data.error || `${updated.name}님 정보 저장에 실패했습니다.`)
             return false
           }
           persisted = data.participant
@@ -1613,28 +1092,25 @@ export default function AdminArrangePage() {
             participant?: Participant
           }
           if (!res.ok || !data.participant) {
-            toast.error(data.error || '참가자 정보 저장에 실패했습니다.')
+            toast.error(data.error || `${updated.name}님 정보 저장에 실패했습니다.`)
             return false
           }
           persisted = data.participant
         }
       } catch (err) {
         console.error(err)
-        toast.error('참가자 정보 저장에 실패했습니다.')
+        toast.error(`${updated.name}님 정보 저장에 실패했습니다.`)
         return false
       }
 
       markLocalSeatingEdit()
-      setParticipants((prev) => {
-        const next = prev.map((p) => (p.id === persisted.id ? persisted : p))
-        participantsRef.current = next
-        return next
-      })
-      setEditingParticipant((prev) => (prev?.id === persisted.id ? persisted : prev))
-      applyLanguageReassignment(oldParticipant, persisted)
+      await reloadSession()
+      const refreshed = participantsRef.current.find((p) => p.id === persisted.id) ?? persisted
+      setEditingParticipant((prev) => (prev?.id === refreshed.id ? refreshed : prev))
+      applyLanguageReassignment(oldParticipant, refreshed)
       return true
     },
-    [applyLanguageReassignment, markLocalSeatingEdit]
+    [applyLanguageReassignment, markLocalSeatingEdit, reloadSession]
   )
 
   const handleReceiptUpload = useCallback(
@@ -1654,30 +1130,24 @@ export default function AdminArrangePage() {
           participant?: Participant
         }
         if (!res.ok || !data.participant) {
-          toast.error(data.error || '영수증 업로드에 실패했습니다.')
+          toast.error(data.error || `${oldParticipant.name}님 영수증 업로드에 실패했습니다.`)
           return null
         }
 
         const persisted = data.participant
         markLocalSeatingEdit()
-        setParticipants((prev) => {
-          const next = prev.map((p) => (p.id === persisted.id ? persisted : p))
-          participantsRef.current = next
-          return next
-        })
+        await reloadSession()
         setEditingParticipant((prev) => (prev?.id === persisted.id ? persisted : prev))
         toast.success('영수증이 업로드되었습니다.')
         return persisted
       } catch (err) {
         console.error(err)
-        toast.error('영수증 업로드에 실패했습니다.')
+        toast.error(`${oldParticipant.name}님 영수증 업로드에 실패했습니다.`)
         return null
       }
     },
-    [markLocalSeatingEdit]
+    [markLocalSeatingEdit, reloadSession]
   )
-
-  const [deletingParticipantId, setDeletingParticipantId] = useState<string | null>(null)
 
   const handleDeleteParticipant = async (p: Participant) => {
     try {
@@ -1688,18 +1158,12 @@ export default function AdminArrangePage() {
       })
       if (responseErr) throw responseErr
 
-      setParticipants((prev) => prev.filter((x) => x.id !== p.id))
-      setRounds((prev) =>
-        prev.map((r) => ({
-          ...r,
-          assignments: r.assignments.filter((a) => a.participant_id !== p.id),
-        }))
-      )
+      await reloadSession()
       setEditingParticipant(null)
-      toast.success('참가자를 삭제했습니다.')
+      toast.success(`${p.name}님을 삭제했습니다.`)
     } catch (err) {
       console.error(err)
-      toast.error('삭제에 실패했습니다. 권한(RLS) 또는 네트워크를 확인해 주세요.')
+      toast.error(`${p.name}님 삭제에 실패했습니다. 권한(RLS) 또는 네트워크를 확인해 주세요.`)
       throw err
     } finally {
       setDeletingParticipantId(null)
@@ -1717,13 +1181,9 @@ export default function AdminArrangePage() {
         return
       }
 
-      if (roundPersistTimerRef.current[roundNum]) {
-        clearTimeout(roundPersistTimerRef.current[roundNum]!)
-        roundPersistTimerRef.current[roundNum] = null
-      }
       await runRoundPersist(roundNum)
 
-      const attendees = participantsRef.current.filter((p) => p.checked_in_at)
+      const roundAfter = roundsRef.current.find((r) => r.round === roundNum) ?? roundData
       setNotifyingRound(roundNum)
       try {
         const res = await fetch('/api/admin/notify-seating-round', {
@@ -1733,9 +1193,9 @@ export default function AdminArrangePage() {
             postingId: sessionForNotify.id,
             sessionDate: todayYYYYMMDDSeoul(),
             round: roundNum,
-            tableLanguages: roundData.tableLanguages || {},
-            assignments: roundData.assignments,
-            participants: attendees.map((p) => ({
+            tableLanguages: roundAfter.tableLanguages || {},
+            assignments: roundAfter.assignments,
+            participants: participantsRef.current.filter((p) => p.checked_in_at).map((p) => ({
               id: p.id,
               name: p.name,
               nationality: String(p.nationality),
@@ -1795,157 +1255,59 @@ export default function AdminArrangePage() {
     setActiveId(id)
   }
 
-  const showReunionHint = useCallback((maxReunions: number, toastId: string) => {
-    toast.info(
-      `이 테이블에는 이전 라운드에서 ${maxReunions}번 만난 참가자가 있습니다. 배치는 적용됩니다.`,
-      { id: toastId, duration: 5000 }
-    )
-  }, [])
+  const showReunionHint = useCallback(
+    (
+      movingParticipantName: string,
+      tableLabel: string,
+      reunions: Parameters<typeof formatReunionHintMessage>[2],
+      toastId: string
+    ) => {
+      toast.info(formatReunionHintMessage(movingParticipantName, tableLabel, reunions), {
+        id: toastId,
+        duration: 8000,
+      })
+    },
+    []
+  )
 
   const applyOptimisticCheckin = useCallback(
     (participantId: string) => {
-      const checkedInAt = new Date().toISOString()
       seenCheckedInIdsRef.current.add(participantId)
-      markLocalSeatingEdit()
-      setParticipants((prev) => {
-        const next = prev.map((p) =>
-          p.id === participantId ? { ...p, checked_in_at: checkedInAt } : p
-        )
-        participantsRef.current = next
-        return next
-      })
-      return checkedInAt
+      commitCheckin(participantId, ADMIN_CHECKIN_SOURCE_DRAG)
     },
-    [markLocalSeatingEdit]
+    [commitCheckin]
   )
-
-  const revertOptimisticCheckin = useCallback((participantId: string) => {
-    seenCheckedInIdsRef.current.delete(participantId)
-    setParticipants((prev) => {
-      const next = prev.map((p) =>
-        p.id === participantId ? { ...p, checked_in_at: null } : p
-      )
-      participantsRef.current = next
-      return next
-    })
-  }, [])
 
   const syncCheckinToServer = useCallback(
     async (participantId: string, source: string = ADMIN_CHECKIN_SOURCE_DRAG) => {
-      try {
-        const res = await fetch('/api/admin/manual-checkin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            responseId: participantId,
-            source,
-          }),
-        })
-        if (!res.ok) throw new Error('checkin_failed')
-        const data = (await res.json()) as { checked_in_at?: string }
-        if (data.checked_in_at) {
-          setParticipants((prev) => {
-            const next = prev.map((p) =>
-              p.id === participantId ? { ...p, checked_in_at: data.checked_in_at! } : p
-            )
-            participantsRef.current = next
-            return next
-          })
-        }
-        return true
-      } catch {
-        revertOptimisticCheckin(participantId)
-        toast.error('체크인 처리에 실패했습니다.')
-        return false
-      }
+      commitCheckin(participantId, source)
+      return true
     },
-    [revertOptimisticCheckin]
+    [commitCheckin]
   )
 
   const handleModalCheckin = useCallback(
     async (participant: Participant) => {
-      applyOptimisticCheckin(participant.id)
-      const ok = await syncCheckinToServer(participant.id, ADMIN_CHECKIN_SOURCE_MODAL)
-      if (ok) {
-        setEditingParticipant(null)
-      }
+      commitCheckin(participant.id, ADMIN_CHECKIN_SOURCE_MODAL)
+      setEditingParticipant(null)
     },
-    [applyOptimisticCheckin, syncCheckinToServer]
+    [commitCheckin]
   )
 
   const handleModalUncheckin = useCallback(
     async (participant: Participant) => {
-      const prevCheckedInAt = participant.checked_in_at
-      const prevRounds = structuredClone(roundsRef.current) as RoundData[]
-
       seenCheckedInIdsRef.current.delete(participant.id)
-      markLocalSeatingEdit()
-      setParticipants((prev) => {
-        const next = prev.map((p) =>
-          p.id === participant.id ? { ...p, checked_in_at: null } : p
-        )
-        participantsRef.current = next
-        return next
-      })
-      setRounds((prev) => {
-        const next = prev.map((r) => ({
-          ...r,
-          assignments: r.assignments.filter((a) => a.participant_id !== participant.id),
-        }))
-        roundsRef.current = next
-        return next
-      })
-
-      try {
-        const res = await fetch('/api/admin/manual-uncheckin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ responseId: participant.id }),
-        })
-        if (!res.ok) throw new Error('uncheckin_failed')
-        setEditingParticipant(null)
-      } catch {
-        if (prevCheckedInAt) {
-          seenCheckedInIdsRef.current.add(participant.id)
-        }
-        setParticipants((prev) => {
-          const next = prev.map((p) =>
-            p.id === participant.id ? { ...p, checked_in_at: prevCheckedInAt } : p
-          )
-          participantsRef.current = next
-          return next
-        })
-        setRounds(prevRounds)
-        roundsRef.current = prevRounds
-        toast.error('체크인 해제에 실패했습니다.')
-        throw new Error('uncheckin_failed')
-      }
+      commitUncheckin(participant.id)
+      setEditingParticipant(null)
     },
-    [markLocalSeatingEdit]
+    [commitUncheckin, seenCheckedInIdsRef]
   )
 
   const applyRoundAssignmentUpdate = useCallback(
-    (targetRound: number, updater: (assignments: RoundData['assignments']) => RoundData['assignments']) => {
-      markLocalSeatingEdit()
-      setRounds((prev) => {
-        const newRounds = [...prev]
-        const roundIdx = newRounds.findIndex((r) => r.round === targetRound)
-        if (roundIdx === -1) return prev
-        const currentAssignments = [...(newRounds[roundIdx].assignments || [])]
-        newRounds[roundIdx] = {
-          ...newRounds[roundIdx],
-          assignments: updater(currentAssignments),
-        }
-        roundsRef.current = newRounds
-        // 이 변경은 commitAssignment가 별도로 단건 upsert를 이미 호출하므로,
-        // 라운드 단위 generic effect가 같은 내용을 중복으로 다시 저장(echo)하지 않도록 표시.
-        const snap = [...prevRoundsSnapshotRef.current]
-        snap[roundIdx] = newRounds[roundIdx]
-        prevRoundsSnapshotRef.current = snap
-        return newRounds
-      })
+    (targetRound: number, participantId: string, tableLabel: string | null) => {
+      persistParticipantMove(targetRound, participantId, tableLabel)
     },
-    [markLocalSeatingEdit]
+    [persistParticipantMove]
   )
 
   const onDragEnd = (event: DragEndEvent) => {
@@ -1965,23 +1327,19 @@ export default function AdminArrangePage() {
         if (activeMeta.label === overMeta.label) return
 
         markLocalSeatingEdit()
-        setRounds((prev) => {
-          const next = prev.map((roundData) => {
-            if (roundData.round !== activeMeta.round) return roundData
-            const tableLanguages = roundData.tableLanguages ?? {}
-            return {
-              ...roundData,
-              tableOrder: reorderTableLabels(
-                tableLanguages,
-                roundData.tableOrder,
-                activeMeta.label,
-                overMeta.label
-              ),
-            }
-          })
-          roundsRef.current = next
-          return next
-        })
+        const roundData = roundsRef.current.find((r) => r.round === activeMeta.round)
+        if (!roundData) return
+        const tableLanguages = roundData.tableLanguages ?? {}
+        const nextRound = {
+          ...roundData,
+          tableOrder: reorderTableLabels(
+            tableLanguages,
+            roundData.tableOrder,
+            activeMeta.label,
+            overMeta.label
+          ),
+        }
+        void commitRoundState(activeMeta.round, nextRound)
         return
       }
 
@@ -1994,10 +1352,7 @@ export default function AdminArrangePage() {
       // 다른 참가자·다른 라운드 데이터를 절대 건드리지 않으므로, 다른 관리자가
       // 동시에 다른 참가자를 옮겨도 서로 덮어쓸 일이 없다.
       const commitAssignment = (targetRound: number, tableLabel: string | null) => {
-        applyRoundAssignmentUpdate(targetRound, (currentAssignments) =>
-          setParticipantTableAssignment(currentAssignments, activeId, tableLabel)
-        )
-        persistParticipantMove(targetRound, activeId, tableLabel)
+        applyRoundAssignmentUpdate(targetRound, activeId, tableLabel)
       }
 
       const overContainerRound =
@@ -2041,7 +1396,7 @@ export default function AdminArrangePage() {
       const tableLang = tableRoundData?.tableLanguages?.[assignTableLabel]
       if (tableLang && tableLang !== activeParticipant.language) {
         toast.error(
-          `언어가 다릅니다: ${activeParticipant.language} 참가자는 ${tableLang} 테이블에 앉을 수 없습니다.`,
+          `언어 불일치: ${activeParticipant.name}님(${activeParticipant.language})은 ${assignTableLabel}(${tableLang}) 테이블에 배치할 수 없습니다.`,
           { id: 'lang-mismatch' }
         )
         return
@@ -2078,14 +1433,18 @@ export default function AdminArrangePage() {
         const previousRoundsForDrag = roundsRef.current.filter(
           (r) => r.round < targetRound && r.assignments.length > 0
         )
-        const { maxReunions } = reunionCountIfJoinedTable(
+        const nameById = Object.fromEntries(
+          participantsRef.current.map((p) => [p.id, p.name])
+        )
+        const { maxReunions, reunions } = reunionCountIfJoinedTable(
           activeId,
           newTableLabel,
           currentRoundData?.assignments || [],
-          previousRoundsForDrag
+          previousRoundsForDrag,
+          nameById
         )
         if (maxReunions > 0) {
-          showReunionHint(maxReunions, 'reunion-hint')
+          showReunionHint(activeParticipant.name, newTableLabel, reunions, 'reunion-hint')
         }
 
         commitAssignment(targetRound, newTableLabel)
@@ -2102,14 +1461,23 @@ export default function AdminArrangePage() {
         const previousRoundsForDrag = roundsRef.current.filter(
           (r) => r.round < targetRound && r.assignments.length > 0
         )
-        const { maxReunions } = reunionCountIfJoinedTable(
+        const nameById = Object.fromEntries(
+          participantsRef.current.map((p) => [p.id, p.name])
+        )
+        const { maxReunions, reunions } = reunionCountIfJoinedTable(
           activeId,
           newTableLabel,
           currentRoundAssignments,
-          previousRoundsForDrag
+          previousRoundsForDrag,
+          nameById
         )
         if (maxReunions > 0) {
-          showReunionHint(maxReunions, 'reunion-hint-participant')
+          showReunionHint(
+            activeParticipant.name,
+            newTableLabel,
+            reunions,
+            'reunion-hint-participant'
+          )
         }
 
         commitAssignment(targetRound, newTableLabel)
@@ -2119,7 +1487,11 @@ export default function AdminArrangePage() {
     }
     } catch (err) {
       console.error('[arrange] onDragEnd:', err)
-      toast.error('배치 처리 중 오류가 발생했습니다. 새로고침 후 다시 시도해 주세요.')
+      const dragId = activeDragIdRef.current
+      const dragged =
+        dragId != null ? participantsRef.current.find((p) => p.id === dragId) : null
+      const who = dragged?.name ? `${dragged.name}님 ` : ''
+      toast.error(`${who}배치 처리 중 오류가 발생했습니다. 새로고침 후 다시 시도해 주세요.`)
     } finally {
       activeDragIdRef.current = null
     }
