@@ -736,6 +736,29 @@ export default function AdminArrangePage() {
     [participants]
   )
 
+  const participantStats = useMemo(() => {
+    let korean = 0
+    let foreigner = 0
+    let bank = 0
+    let cash = 0
+    let staff = 0
+
+    for (const p of participants) {
+      if (p.nationality === '한국인') korean += 1
+      else if (p.nationality === '외국인') foreigner += 1
+
+      if (p.isStaff) {
+        staff += 1
+      } else {
+        const method = p.paymentMethod
+        if (method === '계좌이체' || method === '현장계좌') bank += 1
+        else if (method === '현장현금') cash += 1
+      }
+    }
+
+    return { korean, foreigner, bank, cash, staff }
+  }, [participants])
+
   const unassignedForCurrentRound = useMemo(() => {
     const assignments = rounds.find((r) => r.round === currentRound)?.assignments || []
     const unassigned = participants.filter(
@@ -1839,6 +1862,36 @@ export default function AdminArrangePage() {
                 <div className="flex justify-between items-center text-sm font-bold px-1">
                   <span className="text-muted-foreground">이번 라운드 배정</span>
                   <span>{currentRoundAssignments.length}명</span>
+                </div>
+
+                <div className="h-px bg-muted" />
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-sm font-bold px-1">
+                    <span className="text-muted-foreground">한국인</span>
+                    <span>{participantStats.korean}명</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm font-bold px-1">
+                    <span className="text-muted-foreground">외국인</span>
+                    <span>{participantStats.foreigner}명</span>
+                  </div>
+                </div>
+
+                <div className="h-px bg-muted" />
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-sm font-bold px-1">
+                    <span className="text-muted-foreground">계좌</span>
+                    <span>{participantStats.bank}명</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm font-bold px-1">
+                    <span className="text-muted-foreground">현금</span>
+                    <span>{participantStats.cash}명</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm font-bold px-1">
+                    <span className="text-muted-foreground">스태프</span>
+                    <span>{participantStats.staff}명</span>
+                  </div>
                 </div>
                 
                 <div className="h-px bg-muted" />
