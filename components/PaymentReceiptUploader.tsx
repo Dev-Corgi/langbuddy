@@ -229,6 +229,12 @@ export function PaymentReceiptUploader({
           </div>
         </div>
       )}
+
+      <p className="text-[11px] text-muted-foreground font-medium leading-snug text-center">
+        {isEn
+          ? 'If you have upload issues, please use Chrome or Safari.'
+          : '업로드 문제 발생 시 Chrome/Safari에서 진행해 주세요.'}
+      </p>
     </div>
   )
 }
