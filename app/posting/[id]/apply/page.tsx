@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { toast } from "sonner"
 import { useParams, useRouter, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase"
@@ -101,7 +101,10 @@ export default function ApplicationFormPage() {
   const [paymentMethod, setPaymentMethod] = useState<ApplyPaymentChoice>("")
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentReceiptFile, setPaymentReceiptFile] = useState<File | null>(null)
-  
+  const [paymentReceiptPreview, setPaymentReceiptPreview] = useState<string | null>(null)
+  const suppressDataRefreshUntilRef = useRef(0)
+  const lastAuthUserIdRef = useRef<string | null>(null)
+  const preserveFormStateRef = useRef(false)
   const [selectedDay, setSelectedDay] = useState<string>("")
   const [availableLangs, setAvailableLangs] = useState<string[]>([])
   const [selectedLang, setSelectedLang] = useState<string>("")
@@ -124,19 +127,65 @@ export default function ApplicationFormPage() {
   const [schedulesByDay, setSchedulesByDay] = useState<Record<string, LeScheduleInfo>>({})
 
   useEffect(() => {
+    preserveFormStateRef.current =
+      showPaymentModal || paymentReceiptFile !== null || paymentReceiptPreview !== null
+  }, [showPaymentModal, paymentReceiptFile, paymentReceiptPreview])
+
+  useEffect(() => {
+    return () => {
+      if (paymentReceiptPreview?.startsWith('blob:')) {
+        URL.revokeObjectURL(paymentReceiptPreview)
+      }
+    }
+  }, [paymentReceiptPreview])
+
+  const handleReceiptFileSelect = useCallback((file: File) => {
+    setPaymentReceiptFile(file)
+    setPaymentReceiptPreview((prev) => {
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(file)
+    })
+  }, [])
+
+  const handleReceiptRemove = useCallback(() => {
+    setPaymentReceiptFile(null)
+    setPaymentReceiptPreview((prev) => {
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev)
+      return null
+    })
+  }, [])
+
+  const handleReceiptPickerActivity = useCallback((active: boolean) => {
+    if (active) {
+      suppressDataRefreshUntilRef.current = Date.now() + 8000
+    }
+  }, [])
+
+  useEffect(() => {
     setAuthChecked(true)
   }, [])
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      // TOKEN_REFRESHED / INITIAL_SESSION fire on the *same* logged-in user —
-      // e.g. right after the tab regains focus (Supabase checks/refreshes the
-      // session on visibilitychange). That happens every time a user briefly
-      // leaves to their banking app for a bank transfer and comes back. Only
-      // reload the page's data on an actual identity change (sign in/out),
-      // otherwise we'd wipe out everything the user already typed in the form.
-      if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') return
-      setAuthRefreshTick((t) => t + 1)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (Date.now() < suppressDataRefreshUntilRef.current) return
+
+      // 갤러리/은행앱 복귀 시 토큰·세션 재검사 — 폼·결제 모달 유지
+      if (
+        event === 'TOKEN_REFRESHED' ||
+        event === 'INITIAL_SESSION' ||
+        event === 'USER_UPDATED'
+      ) {
+        return
+      }
+
+      const userId = session?.user?.id ?? null
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        if (userId !== lastAuthUserIdRef.current) {
+          lastAuthUserIdRef.current = userId
+          setAuthRefreshTick((t) => t + 1)
+        }
+        return
+      }
     })
     return () => subscription.unsubscribe()
   }, [supabase])
@@ -249,6 +298,11 @@ export default function ApplicationFormPage() {
     let currentUserInfo: any = null
     
     async function fetchData() {
+      const preserveForm = preserveFormStateRef.current
+      if (!preserveForm) {
+        setLoading(true)
+      }
+
       // 0. Check user authentication
       const { data: { user: authUser } } = await supabase.auth.getUser()
       if (cancelled) return
@@ -342,7 +396,9 @@ export default function ApplicationFormPage() {
         return
       }
       setShowApplyAuthGate(false)
-      setLoading(true)
+      if (!preserveForm) {
+        setLoading(true)
+      }
 
       // Category check - Language Exchange always allowed to use form
       const isCustomFormAllowed = postingData.apply_type === 'form' ||
@@ -360,9 +416,11 @@ export default function ApplicationFormPage() {
       // 여기서는 form을 건드리지 않는다. 사용자가 요일을 선택하면 fetchScheduleForDay가 로드한다.
       if (postingData.is_recurring &&
           postingData.category === '언어교환') {
-        setForm(null)
-        setQuestions([])
-        setAnswers({})
+        if (!preserveForm) {
+          setForm(null)
+          setQuestions([])
+          setAnswers({})
+        }
         setDayFormLoading(false)
         setDayFormReady(false)
         setLoading(false)
@@ -396,50 +454,52 @@ export default function ApplicationFormPage() {
         if (questionData) {
           if (cancelled) return
           setQuestions(questionData)
-          const initialAnswers: Record<string, any> = {}
-          questionData.forEach(q => {
-            if (q.question_type === 'checkbox') initialAnswers[q.id] = []
-            else initialAnswers[q.id] = ''
+          if (!preserveForm) {
+            const initialAnswers: Record<string, any> = {}
+            questionData.forEach(q => {
+              if (q.question_type === 'checkbox') initialAnswers[q.id] = []
+              else initialAnswers[q.id] = ''
 
-            if (currentUserInfo) {
-              if (q.system_key === 'name') {
-                initialAnswers[q.id] = currentUserInfo.name
-              } else if (q.system_key === 'gender') {
-                const genderOptions = locale === 'en' && q.options_en ? q.options_en : q.options
-                const userGender = currentUserInfo.gender
-                let normalized = ''
-                if (userGender === '남' || userGender === '남자' || userGender === 'Male') normalized = 'male'
-                else if (userGender === '여' || userGender === '여자' || userGender === 'Female') normalized = 'female'
-                const matched = genderOptions?.find((opt: string) => {
-                  if (normalized === 'male') return opt === '남자' || opt === 'Male' || opt === '남'
-                  if (normalized === 'female') return opt === '여자' || opt === 'Female' || opt === '여'
-                  return false
-                })
-                initialAnswers[q.id] = matched || userGender
-              } else if (q.system_key === 'nationality') {
-                const natOptions = locale === 'en' && q.options_en ? q.options_en : q.options
-                const userNat = currentUserInfo.nationality
-                let normalized = ''
-                if (userNat === '한국인' || userNat === 'Korean') normalized = 'korean'
-                else if (userNat === '외국인' || userNat === 'Foreigner') normalized = 'foreigner'
-                const matched = natOptions?.find((opt: string) => {
-                  if (normalized === 'korean') return opt === '한국인' || opt === 'Korean'
-                  if (normalized === 'foreigner') return opt === '외국인' || opt === 'Foreigner'
-                  return false
-                })
-                initialAnswers[q.id] = matched || userNat
-              } else if (q.system_key === 'kakao_id' && currentUserInfo.kakao_id) {
-                initialAnswers[q.id] = currentUserInfo.kakao_id
+              if (currentUserInfo) {
+                if (q.system_key === 'name') {
+                  initialAnswers[q.id] = currentUserInfo.name
+                } else if (q.system_key === 'gender') {
+                  const genderOptions = locale === 'en' && q.options_en ? q.options_en : q.options
+                  const userGender = currentUserInfo.gender
+                  let normalized = ''
+                  if (userGender === '남' || userGender === '남자' || userGender === 'Male') normalized = 'male'
+                  else if (userGender === '여' || userGender === '여자' || userGender === 'Female') normalized = 'female'
+                  const matched = genderOptions?.find((opt: string) => {
+                    if (normalized === 'male') return opt === '남자' || opt === 'Male' || opt === '남'
+                    if (normalized === 'female') return opt === '여자' || opt === 'Female' || opt === '여'
+                    return false
+                  })
+                  initialAnswers[q.id] = matched || userGender
+                } else if (q.system_key === 'nationality') {
+                  const natOptions = locale === 'en' && q.options_en ? q.options_en : q.options
+                  const userNat = currentUserInfo.nationality
+                  let normalized = ''
+                  if (userNat === '한국인' || userNat === 'Korean') normalized = 'korean'
+                  else if (userNat === '외국인' || userNat === 'Foreigner') normalized = 'foreigner'
+                  const matched = natOptions?.find((opt: string) => {
+                    if (normalized === 'korean') return opt === '한국인' || opt === 'Korean'
+                    if (normalized === 'foreigner') return opt === '외국인' || opt === 'Foreigner'
+                    return false
+                  })
+                  initialAnswers[q.id] = matched || userNat
+                } else if (q.system_key === 'kakao_id' && currentUserInfo.kakao_id) {
+                  initialAnswers[q.id] = currentUserInfo.kakao_id
+                }
               }
-            }
-            if (q.system_key === 'language' && postingData.category === '언어교환') {
-              initialAnswers[q.id] = resolveLanguageQuestionDisplayAnswer(
-                q,
-                locale === 'en' ? 'en' : 'ko'
-              )
-            }
-          })
-          setAnswers(initialAnswers)
+              if (q.system_key === 'language' && postingData.category === '언어교환') {
+                initialAnswers[q.id] = resolveLanguageQuestionDisplayAnswer(
+                  q,
+                  locale === 'en' ? 'en' : 'ko'
+                )
+              }
+            })
+            setAnswers(initialAnswers)
+          }
         }
       } else {
         console.error('Form not found for id:', postingData.form_id)
@@ -1079,7 +1139,7 @@ export default function ApplicationFormPage() {
     )
   }
 
-  if (loading) {
+  if (loading && !showPaymentModal) {
     return (
       <div className="min-h-screen bg-background overflow-x-hidden">
         <MainNav />
@@ -1594,12 +1654,10 @@ export default function ApplicationFormPage() {
                     </p>
                     <PaymentReceiptUploader
                       locale={locale}
-                      onFileSelect={(file) => {
-                        setPaymentReceiptFile(file)
-                      }}
-                      onRemove={() => {
-                        setPaymentReceiptFile(null)
-                      }}
+                      previewUrl={paymentReceiptPreview}
+                      onPickerActivity={handleReceiptPickerActivity}
+                      onFileSelect={handleReceiptFileSelect}
+                      onRemove={handleReceiptRemove}
                     />
                   </div>
 

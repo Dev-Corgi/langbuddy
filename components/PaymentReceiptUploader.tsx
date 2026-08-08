@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useId, useMemo } from 'react'
+import { useState, useCallback, useRef, useId, useMemo, useEffect } from 'react'
 import { Upload, X, ImageIcon, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -11,9 +11,12 @@ interface PaymentReceiptUploaderProps {
   onUploadComplete?: (url: string) => void
   onFileSelect: (file: File) => void
   onRemove?: () => void
+  /** 부모가 보관하는 blob/url — remount·백그라운드 복귀 후에도 미리보기 유지 */
+  previewUrl?: string | null
   existingUrl?: string
   disabled?: boolean
-  /** 'ko' | 'en' — 기본 ko */
+  /** 갤러리/카메라 피커 열림 — 부모가 데이터 refetch 억제 */
+  onPickerActivity?: (active: boolean) => void
   locale?: string
 }
 
@@ -32,19 +35,43 @@ export function PaymentReceiptUploader({
   onUploadComplete,
   onFileSelect,
   onRemove,
+  previewUrl,
   existingUrl,
   disabled = false,
+  onPickerActivity,
   locale = 'ko',
 }: PaymentReceiptUploaderProps) {
   const isEn = locale === 'en'
   const inputId = useId()
   const inApp = useMemo(() => detectInAppBrowser(), [])
-  const [preview, setPreview] = useState<string | null>(existingUrl || null)
+  const externalPreview = previewUrl ?? existingUrl ?? null
+  const [preview, setPreview] = useState<string | null>(externalPreview)
   const [previewBroken, setPreviewBroken] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const inputDisabled = disabled || isUploading
+  const pickerActiveRef = useRef(false)
+
+  useEffect(() => {
+    setPreview(externalPreview)
+    if (externalPreview) setPreviewBroken(false)
+  }, [externalPreview])
+
+  useEffect(() => {
+    const endPicker = () => {
+      if (!pickerActiveRef.current) return
+      pickerActiveRef.current = false
+      onPickerActivity?.(false)
+    }
+    window.addEventListener('focus', endPicker)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') endPicker()
+    })
+    return () => {
+      window.removeEventListener('focus', endPicker)
+    }
+  }, [onPickerActivity])
 
   const validateFile = (file: File): boolean => {
     const ext = file.name.split('.').pop()?.toLowerCase() || ''
@@ -69,17 +96,15 @@ export function PaymentReceiptUploader({
   const handleFile = async (file: File) => {
     if (!validateFile(file)) return
 
+    pickerActiveRef.current = false
+    onPickerActivity?.(false)
     setIsUploading(true)
 
     try {
-      const localPreview = URL.createObjectURL(file)
-      setPreviewBroken(false)
-      setPreview(localPreview)
       onFileSelect(file)
-      onUploadComplete?.(localPreview)
     } catch {
       toast.error(isEn ? 'Something went wrong while processing the file.' : '파일 업로드 중 오류가 발생했습니다.')
-      setPreview(null)
+      onRemove?.()
     } finally {
       setIsUploading(false)
     }
@@ -93,8 +118,10 @@ export function PaymentReceiptUploader({
 
   const openFilePicker = useCallback(() => {
     if (inputDisabled) return
+    pickerActiveRef.current = true
+    onPickerActivity?.(true)
     inputRef.current?.click()
-  }, [inputDisabled])
+  }, [inputDisabled, onPickerActivity])
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -126,7 +153,6 @@ export function PaymentReceiptUploader({
   const handleRemove = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setPreview(null)
     setPreviewBroken(false)
     if (inputRef.current) inputRef.current.value = ''
     onRemove?.()
