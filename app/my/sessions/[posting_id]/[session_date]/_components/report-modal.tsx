@@ -121,8 +121,8 @@ export function ReportModal({
           </DialogTitle>
           <DialogDescription className="mt-1.5 leading-relaxed">
             {isEn
-              ? `Submit a report about "${reportedName}". Reports are reviewed by administrators.`
-              : `"${reportedName}" 참가자에 대한 신고를 접수합니다. 관리자가 검토 후 처리합니다.`}
+              ? 'Reports are handled anonymously. Staff cannot see who submitted the report.'
+              : '익명으로 처리되며 스텝들도 누가 신고했는지 알 수 없습니다.'}
           </DialogDescription>
         </DialogHeader>
 

@@ -35,6 +35,11 @@ export const REPORT_REASONS = [
     labelEn: 'Unwanted contact attempts (KakaoTalk, DMs, etc.)',
   },
   {
+    value: '언어교환 목적과 맞지 않는 과도한 이성 접근',
+    labelKo: '언어교환 목적과 맞지 않는 과도한 이성 접근',
+    labelEn: 'Excessive romantic advances inconsistent with language exchange',
+  },
+  {
     value: '불필요한 신체접촉',
     labelKo: '불필요한 신체접촉',
     labelEn: 'Unwanted physical contact',
