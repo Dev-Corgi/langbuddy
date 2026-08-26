@@ -18,6 +18,8 @@ type Props = {
   roundLabel: string
   sessions: SeatingSession[]
   isEn: boolean
+  /** e.g. `/debug` — prefixes session detail links */
+  hrefBase?: string
 }
 
 export function SeatingHistoryCard({
@@ -27,6 +29,7 @@ export function SeatingHistoryCard({
   roundLabel,
   sessions,
   isEn,
+  hrefBase = '',
 }: Props) {
   return (
     <Card className="border-border/80">
@@ -53,7 +56,7 @@ export function SeatingHistoryCard({
             <div key={`${s.posting_id}|${s.session_date}`}>
               {idx > 0 ? <Separator className="my-3" /> : null}
               <Link
-                href={`/my/sessions/${s.posting_id}/${s.session_date}`}
+                href={`${hrefBase}/my/sessions/${s.posting_id}/${s.session_date}`}
                 className="group flex items-center justify-between rounded-xl border border-border/60 bg-muted/20 px-4 py-4 transition-colors hover:bg-muted/50"
               >
                 <div className="space-y-2">

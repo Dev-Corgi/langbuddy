@@ -35,6 +35,8 @@ type Props = {
   round: number
   isEn: boolean
   onSuccess: () => void
+  /** UI-only: skip /api/reports */
+  mockMode?: boolean
 }
 
 export function ReportModal({
@@ -47,6 +49,7 @@ export function ReportModal({
   round,
   isEn,
   onSuccess,
+  mockMode = false,
 }: Props) {
   const [reason, setReason] = useState<ReportReason | ''>('')
   const [otherText, setOtherText] = useState('')
@@ -76,6 +79,14 @@ export function ReportModal({
 
     setLoading(true)
     try {
+      if (mockMode) {
+        await new Promise((r) => setTimeout(r, 400))
+        toast.success(isEn ? 'Mock report — not saved.' : '목업 신고 — 저장되지 않습니다.')
+        onSuccess()
+        handleClose()
+        return
+      }
+
       const res = await fetch('/api/reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

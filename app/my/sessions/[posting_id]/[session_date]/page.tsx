@@ -46,10 +46,32 @@ export default async function SessionDetailPage({
     .eq('posting_id', posting_id)
     .eq('session_date', session_date)
 
+  const { data: existingPraises } = await admin
+    .from('praises')
+    .select('praised_user_id, round')
+    .eq('praiser_user_id', user.id)
+    .eq('posting_id', posting_id)
+    .eq('session_date', session_date)
+
   const reportedSet = new Set<string>() // `${round}|${reported_user_id}`
   for (const r of existingReports || []) {
     if (r.reported_user_id) reportedSet.add(`${r.round}|${r.reported_user_id}`)
   }
+
+  const praisedSet = new Set<string>() // `${round}|${praised_user_id}`
+  for (const p of existingPraises || []) {
+    if (p.praised_user_id) praisedSet.add(`${p.round}|${p.praised_user_id}`)
+  }
+
+  const { data: existingFacilityReport } = await admin
+    .from('facility_reports')
+    .select('id')
+    .eq('reporter_user_id', user.id)
+    .eq('posting_id', posting_id)
+    .eq('session_date', session_date)
+    .maybeSingle()
+
+  const facilityReportSubmitted = !!existingFacilityReport
 
   // 현재 사용자의 form_responses 중 이 세션에 배치된 항목 조회
   const { data: myResponses } = await admin
@@ -112,6 +134,8 @@ export default async function SessionDetailPage({
         sessionDate={session_date}
         rounds={archivedRounds}
         reportedSet={Array.from(reportedSet)}
+        praisedSet={Array.from(praisedSet)}
+        facilityReportSubmitted={facilityReportSubmitted}
       />
     )
   }
@@ -198,6 +222,8 @@ export default async function SessionDetailPage({
       sessionDate={session_date}
       rounds={rounds}
       reportedSet={Array.from(reportedSet)}
+      praisedSet={Array.from(praisedSet)}
+      facilityReportSubmitted={facilityReportSubmitted}
     />
   )
 }

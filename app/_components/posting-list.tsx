@@ -11,14 +11,25 @@ import { useLocale } from "@/hooks/use-locale"
 import { i18n } from "@/lib/i18n"
 import { PostingInfo } from "./posting-info"
 
-export function PostingList() {
+export function PostingList({
+  initialItems,
+  hrefBase = '',
+}: {
+  initialItems?: any[]
+  hrefBase?: string
+} = {}) {
   const locale = useLocale()
   const t = i18n[locale]
-  const [items, setItems] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [items, setItems] = useState<any[]>(initialItems || [])
+  const [loading, setLoading] = useState(!initialItems)
   const supabase = createClient()
 
   useEffect(() => {
+    if (initialItems) {
+      setItems(initialItems)
+      setLoading(false)
+      return
+    }
     async function fetchPostings() {
       const now = new Date().toISOString()
       let query = supabase
@@ -36,7 +47,7 @@ export function PostingList() {
       setLoading(false)
     }
     fetchPostings()
-  }, [supabase])
+  }, [supabase, initialItems])
 
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -131,7 +142,7 @@ export function PostingList() {
           const dDay = calculateDday(item.date)
           return (
             <div key={item.id}>
-              <Link href={`/posting/${item.id}`} className="group cursor-pointer">
+              <Link href={`${hrefBase}/posting/${item.id}`} className="group cursor-pointer">
                 {/* Mobile: Horizontal Layout / Desktop: Vertical Layout */}
                 <div className="flex md:flex-col gap-4 md:gap-0">
                   {/* Poster Image */}

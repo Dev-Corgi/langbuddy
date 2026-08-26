@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { usePathname } from "next/navigation"
 
 import { useLocale } from "@/hooks/use-locale"
+import { isDebugPath, prefixDebugHref, stripDebugPrefix } from "@/lib/debug/debug-base-path"
 
 const NAV_ITEMS = (locale: string) => [
   { icon: Home, label: locale === 'en' ? 'Home' : '홈', href: "/" },
@@ -19,18 +20,25 @@ export function BottomNav() {
   const locale = useLocale()
 
   // Hide BottomNav on booking pages
-  if (pathname?.startsWith('/booking')) return null
+  if (pathname?.startsWith('/booking') || pathname?.startsWith('/debug/booking')) return null
 
+  const inDebug = isDebugPath(pathname)
+  const basePath = inDebug ? '/debug' : ''
+  const pathForActive = inDebug ? stripDebugPrefix(pathname || '/') : (pathname || '/')
   const items = NAV_ITEMS(locale)
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around h-16 px-2 bg-card/80 backdrop-blur-lg border-t border-border md:hidden">
       {items.map((item) => {
-        const isActive = pathname === item.href
+        const href = prefixDebugHref(item.href, basePath)
+        const isActive =
+          item.href === '/'
+            ? pathForActive === '/'
+            : pathForActive === item.href || pathForActive.startsWith(`${item.href}/`)
         return (
           <Link
             key={item.label}
-            href={item.href}
+            href={href}
             className={cn(
               "flex flex-col items-center justify-center gap-1 px-2 py-1 transition-all duration-300",
               isActive ? "text-primary" : "text-muted-foreground hover:text-foreground/70"

@@ -2,16 +2,20 @@
 
 import Link from "next/link"
 import { Instagram } from "lucide-react"
+import { usePathname } from "next/navigation"
 import { useLocale } from "@/hooks/use-locale"
+import { isDebugPath, prefixDebugHref } from "@/lib/debug/debug-base-path"
 
 export function Footer() {
   const locale = useLocale()
+  const pathname = usePathname()
+  const basePath = isDebugPath(pathname) ? '/debug' : ''
+  const privacyHref = prefixDebugHref('/privacy', basePath)
   
   return (
     <footer className="w-full bg-muted/30 border-t border-border mt-auto relative overflow-hidden">
       <div className="mx-auto max-w-screen-2xl px-6 py-10 md:py-16">
         <div className="flex flex-row justify-between items-end gap-4">
-          {/* Left Section: Logo & Slogan */}
           <div className="flex flex-col items-start space-y-2 md:space-y-4">
             <span className="text-2xl md:text-3xl font-black text-primary tracking-tighter hover:opacity-80 transition-opacity">
               LangBuddy
@@ -23,9 +27,7 @@ export function Footer() {
             </p>
           </div>
 
-          {/* Right Section: Social & Copyright */}
           <div className="flex flex-col items-end space-y-4 md:space-y-6 text-right">
-            {/* Instagram Button */}
             <a 
               href="https://instagram.com" 
               target="_blank" 
@@ -37,21 +39,18 @@ export function Footer() {
             </a>
 
             <Link
-              href="/privacy"
+              href={privacyHref}
               className="text-[10px] md:text-xs font-black tracking-tight text-muted-foreground hover:text-primary transition-colors underline-offset-4 hover:underline"
             >
               {locale === 'en' ? 'Privacy Policy' : '개인정보 처리방침'}
             </Link>
 
-            {/* Copyright */}
             <p className="text-muted-foreground/60 text-[9px] md:text-xs font-black tracking-tight whitespace-nowrap">
               &copy; 2026 LangBuddy. {locale === 'en' ? 'All rights reserved.' : '모든 권리 보유.'}
             </p>
           </div>
         </div>
       </div>
-      {/* Mobile spacing for BottomNav */}
-      {/* <div className="h-20 md:hidden" /> */}
     </footer>
   )
 }

@@ -13,11 +13,17 @@ import { useLocale } from "@/hooks/use-locale"
 import { i18n } from "@/lib/i18n"
 import { PostingInfo } from "./posting-info"
 
-export function PostingCarousel() {
+export function PostingCarousel({
+  initialItems,
+  hrefBase = '',
+}: {
+  initialItems?: any[]
+  hrefBase?: string
+} = {}) {
   const locale = useLocale()
   const t = i18n[locale]
-  const [items, setItems] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [items, setItems] = useState<any[]>(initialItems || [])
+  const [loading, setLoading] = useState(!initialItems)
   const [index, setIndex] = useState(0)
   const [isMobile, setIsMobile] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -26,6 +32,11 @@ export function PostingCarousel() {
   const supabase = createClient()
 
   useEffect(() => {
+    if (initialItems) {
+      setItems(initialItems)
+      setLoading(false)
+      return
+    }
     async function fetchPostings() {
       const now = new Date().toISOString()
       let query = supabase
@@ -43,7 +54,7 @@ export function PostingCarousel() {
       setLoading(false)
     }
     fetchPostings()
-  }, [supabase])
+  }, [supabase, initialItems])
 
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -214,7 +225,7 @@ export function PostingCarousel() {
                     />
                     {/* Main Poster Image */}
                     <Link 
-                      href={`/posting/${item.id}`}
+                      href={`${hrefBase}/posting/${item.id}`}
                       className="absolute inset-0 flex items-center justify-center p-6 md:p-8"
                     >
                       <div className="relative w-full h-full shadow-2xl transition-transform duration-300 group-hover/card:scale-[1.05]">
@@ -233,7 +244,7 @@ export function PostingCarousel() {
                     )}
                   </div>
                   
-                  <Link href={`/posting/${item.id}`} className="mt-4 block group">
+                  <Link href={`${hrefBase}/posting/${item.id}`} className="mt-4 block group">
                     <PostingInfo item={item} size="sm" />
                     
                     {/* 5. Additional Info Row */}

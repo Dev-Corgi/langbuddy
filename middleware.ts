@@ -5,6 +5,7 @@ import {
   hasAdminPanelAccess,
   isClubLeaderAllowedPath,
   isClubLeaderUser,
+  isSuperAdminUser,
 } from '@/lib/admin-access'
 
 export async function middleware(request: NextRequest) {
@@ -62,6 +63,28 @@ export async function middleware(request: NextRequest) {
 
   const { data: { session } } = await supabase.auth.getSession()
 
+  // /debug 경로 보호 — 카카오 세션 + 슈퍼관리자만
+  if (request.nextUrl.pathname.startsWith('/debug')) {
+    const nextPath = `${request.nextUrl.pathname}${request.nextUrl.search}`
+    if (!session?.user) {
+      const login = new URL('/auth/login', request.url)
+      login.searchParams.set('next', nextPath)
+      return NextResponse.redirect(login)
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_superadmin, is_admin, is_staff')
+      .eq('id', session.user.id)
+      .maybeSingle()
+
+    if (!isSuperAdminUser(session.user.email, profile)) {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+
+    return response
+  }
+
   // /admin 경로 보호
   if (request.nextUrl.pathname.startsWith('/admin')) {
     const isLoginPage = request.nextUrl.pathname === '/admin/login'
@@ -112,5 +135,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: ['/admin/:path*', '/debug', '/debug/:path*'],
 }

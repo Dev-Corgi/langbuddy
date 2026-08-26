@@ -9,8 +9,9 @@ import { usePathname } from "next/navigation"
 import { motion } from "framer-motion"
 
 import { cn } from "@/lib/utils"
-import { i18n, type Locale } from "@/lib/i18n"
+import { i18n } from "@/lib/i18n"
 import { useLocale } from "@/hooks/use-locale"
+import { isDebugPath, prefixDebugHref, stripDebugPrefix } from "@/lib/debug/debug-base-path"
 
 const PRIMARY_LINKS = (t: any) => [
   { href: "/", label: t.nav.home },
@@ -53,10 +54,13 @@ function MainNavContent({ activePrimaryLabel, user, userData }: { activePrimaryL
   const pathname = usePathname();
   const locale = useLocale();
   const supabase = createClient();
+  const inDebug = isDebugPath(pathname)
+  const basePath = inDebug ? '/debug' : ''
+  const pathForActive = inDebug ? stripDebugPrefix(pathname || '/') : (pathname || '/')
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    window.location.href = '/'
+    window.location.href = inDebug ? '/debug' : '/'
   };
   
   const toggleLocale = () => {
@@ -66,16 +70,22 @@ function MainNavContent({ activePrimaryLabel, user, userData }: { activePrimaryL
   };
 
   const t = i18n[locale];
-  const links = PRIMARY_LINKS(t);
+  const links = PRIMARY_LINKS(t).map((link) => ({
+    ...link,
+    href: prefixDebugHref(link.href, basePath),
+    matchHref: link.href,
+  }));
   
   // 현재 경로를 기반으로 활성 탭 결정
-  // 1. pathname으로 매칭 시도
   const matchedLink = links.find(link => {
-    if (link.href === '/') return pathname === '/';
-    return pathname.startsWith(link.href);
+    if (link.matchHref === '/') return pathForActive === '/';
+    return pathForActive === link.matchHref || pathForActive.startsWith(`${link.matchHref}/`);
   });
 
   const currentActiveLabel = activePrimaryLabel || matchedLink?.label || t.nav.home;
+  const homeHref = prefixDebugHref('/', basePath)
+  const myHref = prefixDebugHref('/my', basePath)
+  const loginHref = `/auth/login?next=${encodeURIComponent(inDebug ? '/debug' : '/')}`
 
   return (
     <header className="w-full border-b border-border bg-background sticky top-0 z-100">
@@ -85,7 +95,7 @@ function MainNavContent({ activePrimaryLabel, user, userData }: { activePrimaryL
           {/* Top Row */}
           <div className="flex items-center h-[64px] gap-6">
             {/* Logo */}
-            <Link href="/" className="shrink-0 transition-transform hover:scale-105 active:scale-95 flex items-center h-full">
+            <Link href={homeHref} className="shrink-0 transition-transform hover:scale-105 active:scale-95 flex items-center h-full">
               <span className="text-[22px] font-black text-primary tracking-tighter leading-none">LangBuddy</span>
             </Link>
 
@@ -143,7 +153,7 @@ function MainNavContent({ activePrimaryLabel, user, userData }: { activePrimaryL
                 </div>
               ) : (
                 <Link 
-                  href="/auth/login" 
+                  href={loginHref} 
                   className="flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-[12px] font-black transition-all shadow-sm active:scale-95"
                 >
                   <User className="w-3.5 h-3.5" />
@@ -177,7 +187,7 @@ function MainNavContent({ activePrimaryLabel, user, userData }: { activePrimaryL
             </nav>
 
             <div className="flex items-center gap-5">
-              <Link href="/my" className="flex items-center gap-2 text-[13px] font-black text-muted-foreground hover:text-primary transition-colors">
+              <Link href={myHref} className="flex items-center gap-2 text-[13px] font-black text-muted-foreground hover:text-primary transition-colors">
                 <ReceiptText className="w-4 h-4" />
                 {t.nav.myBookings}
               </Link>
@@ -190,7 +200,7 @@ function MainNavContent({ activePrimaryLabel, user, userData }: { activePrimaryL
       <div className="md:hidden">
         <div className="flex flex-col">
           <div className="flex items-center justify-between h-16 px-6 border-b border-border/50 bg-background/95 backdrop-blur-md">
-            <Link href="/" className="shrink-0 transition-transform active:scale-95 flex items-center h-full">
+            <Link href={homeHref} className="shrink-0 transition-transform active:scale-95 flex items-center h-full">
               <span className="text-[20px] font-black text-primary tracking-tighter leading-none">LangBuddy</span>
             </Link>
             
@@ -211,7 +221,7 @@ function MainNavContent({ activePrimaryLabel, user, userData }: { activePrimaryL
                 </button>
               ) : (
                 <Link
-                  href="/auth/login"
+                  href={loginHref}
                   className="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground transition-colors active:bg-primary/90"
                 >
                   <User className="w-5 h-5" />

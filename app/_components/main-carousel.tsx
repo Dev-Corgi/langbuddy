@@ -46,16 +46,58 @@ function useMediaQuery(query: string) {
 type MainCarouselProps = {
   className?: string
   autoPlayMs?: number
+  /** When set, skip live fetch and use these postings */
+  postings?: any[]
+  hrefBase?: string
 }
 
-export function MainCarousel({ className, autoPlayMs = 5000 }: MainCarouselProps) {
+export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase = '' }: MainCarouselProps) {
   const [slides, setSlides] = useState<CarouselSlide[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!postings)
   const isDesktop = useMediaQuery("(min-width: 768px)")
   const supabase = createClient()
   const locale = useLocale()
 
   useEffect(() => {
+    const mapPostings = (data: any[]) => {
+      const sortedData = [...data].sort((a, b) => {
+        const categoryPriority = (item: any) => {
+          if (item.category === '언어교환') return 0
+          return 1
+        }
+        const catA = categoryPriority(a)
+        const catB = categoryPriority(b)
+        if (catA !== catB) return catA - catB
+        if (a.date && b.date) {
+          return new Date(a.date).getTime() - new Date(b.date).getTime()
+        }
+        return 0
+      })
+      const fallbackImage = "/imagebuttons/meetup.jpg"
+      const prefix = hrefBase || ''
+      return sortedData.map(posting => ({
+        id: posting.id,
+        title: posting.title,
+        title_en: posting.title_en,
+        subtitle: posting.subtitle,
+        subtitle_en: posting.subtitle_en,
+        description: `${posting.location || ''} ${posting.time ? '• ' + posting.time : ''}`.trim(),
+        description_en: `${posting.location_en || posting.location || ''} ${posting.time ? '• ' + posting.time : ''}`.trim(),
+        period: posting.date,
+        location: posting.location,
+        image_url: posting.image_url || fallbackImage,
+        mobile_image_url: posting.image_url || fallbackImage,
+        thumbnail_url: posting.image_url || fallbackImage,
+        link_url: `${prefix}/posting/${posting.id === 'debug-language-master' ? 'language' : posting.id}`
+      }))
+    }
+
+    if (postings) {
+      setSlides(mapPostings(postings))
+      setLoading(false)
+      return
+    }
+
     async function fetchCarousels() {
       const now = new Date().toISOString()
       console.log('🔍 Carousel Query - Current time:', now)
@@ -85,44 +127,7 @@ export function MainCarousel({ className, autoPlayMs = 5000 }: MainCarouselProps
       })
       
       if (data && data.length > 0) {
-        // 카테고리 우선순위로 정렬: 언어교환 > 번개
-        const sortedData = [...data].sort((a, b) => {
-          const categoryPriority = (item: any) => {
-            if (item.category === '언어교환') return 0
-            return 1 // 번개
-          }
-          
-          const catA = categoryPriority(a)
-          const catB = categoryPriority(b)
-          
-          if (catA !== catB) {
-            return catA - catB
-          }
-          
-          // 같은 카테고리 내에서는 날짜순
-          if (a.date && b.date) {
-            return new Date(a.date).getTime() - new Date(b.date).getTime()
-          }
-          return 0
-        })
-        
-        // Map postings to carousel slide format
-        const fallbackImage = "/imagebuttons/meetup.jpg"
-        const mappedSlides = sortedData.map(posting => ({
-          id: posting.id,
-          title: posting.title,
-          title_en: posting.title_en,
-          subtitle: posting.subtitle,
-          subtitle_en: posting.subtitle_en,
-          description: `${posting.location || ''} ${posting.time ? '• ' + posting.time : ''}`.trim(),
-          description_en: `${posting.location_en || posting.location || ''} ${posting.time ? '• ' + posting.time : ''}`.trim(),
-          period: posting.date,
-          location: posting.location,
-          image_url: posting.image_url || fallbackImage,
-          mobile_image_url: posting.image_url || fallbackImage,
-          thumbnail_url: posting.image_url || fallbackImage,
-          link_url: `/posting/${posting.id}`
-        }))
+        const mappedSlides = mapPostings(data)
         console.log('✅ Mapped slides:', mappedSlides.length)
         setSlides(mappedSlides)
       } else {
@@ -131,7 +136,7 @@ export function MainCarousel({ className, autoPlayMs = 5000 }: MainCarouselProps
       setLoading(false)
     }
     fetchCarousels()
-  }, [supabase])
+  }, [supabase, postings, hrefBase])
 
   const [activeIndex, setActiveIndex] = useState(0)
   const [direction, setDirection] = useState(0)
