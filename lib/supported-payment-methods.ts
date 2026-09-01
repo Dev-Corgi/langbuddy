@@ -3,6 +3,7 @@ export const PAYMENT_METHODS = [
   '계좌이체',
   '현장현금',
   '현장계좌',
+  '스탭무료',
 ] as const
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
@@ -22,6 +23,8 @@ const LEGACY_ALIASES: Record<string, PaymentMethod> = {
   현장계좌: '현장계좌',
   현장추가: '현장현금',
   테스트더미: '현장현금',
+  스탭: '스탭무료',
+  스탭무료: '스탭무료',
 }
 
 export function isSupportedPaymentMethod(value: string): value is PaymentMethod {
@@ -76,6 +79,7 @@ export function formatPaymentMethodLabel(
     if (paymentStatus === 'pending') return '계좌이체 (입금 대기)'
     return '계좌이체'
   }
+  if (method === '스탭무료') return '스탭'
   return method
 }
 

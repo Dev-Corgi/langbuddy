@@ -50,7 +50,7 @@ export function PaymentMethodFields({
               onClick={() => onPaymentMethodChange(method)}
               disabled={disabled}
             >
-              {method}
+              {formatPaymentMethodLabel(method)}
             </Button>
           ))}
         </div>
