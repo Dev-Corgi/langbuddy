@@ -8,9 +8,16 @@ import { useLocale } from "@/hooks/use-locale"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, MapPin } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import {
+  buildSchedulesByDay,
+  formatDayGroupLabel,
+  getVenueGroupLocationLabel,
+  groupSchedulesByVenue,
+  type ScheduleVenueGroup,
+} from "@/lib/language-exchange-schedule"
 
 type CarouselSlide = {
   id: string
@@ -23,6 +30,7 @@ type CarouselSlide = {
   period?: string
   location?: string
   location_en?: string
+  category?: string
   image_url: string
   mobile_image_url?: string
   thumbnail_url?: string
@@ -48,11 +56,20 @@ type MainCarouselProps = {
   autoPlayMs?: number
   /** When set, skip live fetch and use these postings */
   postings?: any[]
+  /** Optional LE schedules for mock/debug (skips DB schedule fetch when postings is set) */
+  schedules?: Array<{
+    day_of_week: string
+    time?: string | null
+    location?: string | null
+    location_en?: string | null
+    location_map_url?: string | null
+  }>
   hrefBase?: string
 }
 
-export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase = '' }: MainCarouselProps) {
+export function MainCarousel({ className, autoPlayMs = 5000, postings, schedules, hrefBase = '' }: MainCarouselProps) {
   const [slides, setSlides] = useState<CarouselSlide[]>([])
+  const [venueGroups, setVenueGroups] = useState<ScheduleVenueGroup[]>([])
   const [loading, setLoading] = useState(!postings)
   const isDesktop = useMediaQuery("(min-width: 768px)")
   const supabase = createClient()
@@ -85,6 +102,7 @@ export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase 
         description_en: `${posting.location_en || posting.location || ''} ${posting.time ? '• ' + posting.time : ''}`.trim(),
         period: posting.date,
         location: posting.location,
+        category: posting.category,
         image_url: posting.image_url || fallbackImage,
         mobile_image_url: posting.image_url || fallbackImage,
         thumbnail_url: posting.image_url || fallbackImage,
@@ -94,53 +112,60 @@ export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase 
 
     if (postings) {
       setSlides(mapPostings(postings))
+      setVenueGroups(
+        schedules?.length
+          ? groupSchedulesByVenue(buildSchedulesByDay(schedules))
+          : []
+      )
       setLoading(false)
       return
     }
 
     async function fetchCarousels() {
       const now = new Date().toISOString()
-      console.log('🔍 Carousel Query - Current time:', now)
-      
       const categories = ['언어교환', '번개']
-      
-      const { data, error } = await supabase
-        .from('postings')
-        .select('*')
-        .in('category', categories)
-        .eq('status', 'active')
-        .or(`deadline.is.null,deadline.gt.${now}`)
-        .order('date', { ascending: true, nullsFirst: false })
-        .limit(10)
-      
+
+      const [{ data, error }, { data: scheduleRows }] = await Promise.all([
+        supabase
+          .from('postings')
+          .select('*')
+          .in('category', categories)
+          .eq('status', 'active')
+          .or(`deadline.is.null,deadline.gt.${now}`)
+          .order('date', { ascending: true, nullsFirst: false })
+          .limit(10),
+        supabase
+          .from('language_exchange_schedules')
+          .select('day_of_week, time, location, location_en, location_map_url, is_active')
+          .eq('is_active', true),
+      ])
+
       console.log('📊 Carousel Query Result:', {
         count: data?.length || 0,
         error,
-        data: data?.map(p => ({
-          id: p.id,
-          title: p.title,
-          status: p.status,
-          deadline: p.deadline,
-          date: p.date,
-          image_url: p.image_url
-        }))
+        schedules: scheduleRows?.length || 0,
       })
-      
+
       if (data && data.length > 0) {
-        const mappedSlides = mapPostings(data)
-        console.log('✅ Mapped slides:', mappedSlides.length)
-        setSlides(mappedSlides)
+        setSlides(mapPostings(data))
       } else {
         setSlides([])
       }
+
+      if (scheduleRows && scheduleRows.length > 0) {
+        setVenueGroups(groupSchedulesByVenue(buildSchedulesByDay(scheduleRows)))
+      } else {
+        setVenueGroups([])
+      }
+
       setLoading(false)
     }
     fetchCarousels()
-  }, [supabase, postings, hrefBase])
+  }, [supabase, postings, schedules, hrefBase])
 
   const [activeIndex, setActiveIndex] = useState(0)
   const [direction, setDirection] = useState(0)
-  
+
   const touchStartXRef = useRef<number | null>(null)
   const touchDeltaXRef = useRef(0)
 
@@ -188,10 +213,15 @@ export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase 
     if (touchStartXRef.current == null) return
     const deltaX = touchDeltaXRef.current
     touchStartXRef.current = null
-    
+
     if (deltaX < -50) goNext()
     else if (deltaX > 50) goPrev()
   }
+
+  const showLanguageVenues = useMemo(() => {
+    const activeSlide = slides[activeIndex]
+    return activeSlide?.category === '언어교환' && venueGroups.length > 0
+  }, [slides, activeIndex, venueGroups.length])
 
   if (loading || slides.length === 0) return (
     <section className={cn("w-full min-w-0 overflow-x-hidden relative", className)}>
@@ -237,10 +267,9 @@ export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase 
   }
 
   const active = slides[activeIndex]
-  
+
   const displayTitle = (locale === 'en' && active?.title_en) ? active.title_en : active?.title
   const displaySubtitle = (locale === 'en' && active?.subtitle_en) ? active.subtitle_en : active?.subtitle
-  const displayDescription = (locale === 'en' && active?.description_en) ? active.description_en : active?.description
 
   return (
     <section className={cn("w-full min-w-0 overflow-x-hidden relative", className)}>
@@ -284,7 +313,6 @@ export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase 
           </motion.div>
         </AnimatePresence>
 
-        {/* Improved Gradient Overlay */}
         <div
           className={cn(
             "absolute inset-0 pointer-events-none",
@@ -308,14 +336,13 @@ export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase 
               exit="hidden"
               variants={{
                 hidden: { opacity: 0 },
-                visible: { 
+                visible: {
                   opacity: 1,
                   transition: { staggerChildren: 0.1, delayChildren: 0.3 }
                 }
               }}
               className="flex flex-col h-full w-full"
             >
-              {/* Top Section: Featured Badge */}
               <motion.div
                 variants={{
                   hidden: { opacity: 0, y: -10 },
@@ -327,8 +354,7 @@ export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase 
                 </div>
               </motion.div>
 
-              {/* Bottom Section: Text Content */}
-              <div className={cn("space-y-2 md:space-y-8", isDesktop ? "mt-20" : "mt-16")}>
+              <div className={cn("space-y-2 md:space-y-6", isDesktop ? "mt-20" : "mt-12")}>
                 {displaySubtitle ? (
                   <motion.div
                     variants={{
@@ -343,7 +369,7 @@ export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase 
                     </p>
                   </motion.div>
                 ) : null}
-                
+
                 <motion.h2
                   variants={{
                     hidden: { opacity: 0, y: 20 },
@@ -357,14 +383,51 @@ export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase 
                   {displayTitle}
                 </motion.h2>
 
+                {showLanguageVenues ? (
+                  <motion.div
+                    variants={{
+                      hidden: { opacity: 0, y: 12 },
+                      visible: { opacity: 1, y: 0 }
+                    }}
+                    className="pt-1 md:pt-0"
+                  >
+                    <div className="inline-flex max-w-full flex-col gap-2.5 rounded-2xl border border-white/15 bg-black/35 px-5 py-4 backdrop-blur-md md:gap-3.5 md:rounded-3xl md:px-7 md:py-5">
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-white/55 md:text-sm">
+                        {locale === 'en' ? 'Venues by day' : '요일별 장소'}
+                      </p>
+                      <div className="space-y-2 md:space-y-2.5">
+                        {venueGroups.map((group) => {
+                          const dayLabel = formatDayGroupLabel(group.days, locale)
+                          const locationLabel = getVenueGroupLocationLabel(group, locale)
+                          return (
+                            <div
+                              key={`${dayLabel}-${locationLabel}`}
+                              className="flex min-w-0 items-center gap-3 text-white/95 md:gap-4"
+                            >
+                              <span className="shrink-0 text-sm font-black tracking-wide text-white/70 md:min-w-[5.5rem] md:text-base">
+                                {dayLabel}
+                              </span>
+                              <span className="h-4 w-px shrink-0 bg-white/25 md:h-5" aria-hidden />
+                              <span className="inline-flex min-w-0 items-center gap-2 text-sm font-bold md:text-lg">
+                                <MapPin className="size-4 shrink-0 opacity-80 md:size-5" />
+                                <span className="truncate">{locationLabel}</span>
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : null}
+
                 <motion.div
                   variants={{
                     hidden: { opacity: 0, y: 15 },
                     visible: { opacity: 1, y: 0 }
                   }}
-                  className="pt-3 md:pt-4 pointer-events-auto"
+                  className="pt-2 md:pt-2 pointer-events-auto"
                 >
-                  <Button 
+                  <Button
                     className="group h-9 md:h-16 px-5 md:px-12 rounded-lg md:rounded-2xl bg-primary text-primary-foreground font-semibold text-sm md:text-xl shadow-2xl shadow-primary/40 hover:bg-primary/90 transition-all active:scale-95"
                     asChild
                   >
@@ -376,8 +439,7 @@ export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase 
                 </motion.div>
               </div>
 
-              {/* Bottom Section: Pagination & Progress */}
-              <div className="flex items-center justify-between pointer-events-auto mt-24">
+              <div className="flex items-center justify-between pointer-events-auto mt-auto pt-8 md:pt-10">
                 <div className={cn("flex items-center gap-1.5  md:gap-4", isDesktop && "hidden")}>
                   {slides.map((s, idx) => {
                     const selected = idx === activeIndex
@@ -402,23 +464,11 @@ export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase 
                     )
                   })}
                 </div>
-
-                {/* <div
-                  className={cn(
-                    "rounded-full bg-black/20 backdrop-blur-md border border-white/10 px-3 pt-1.5 pb-2.5 text-xs md:text-sm text-white tracking-[0.2em]",
-                    isDesktop ? "hidden" : "block"
-                  )}
-                >
-                  <span className="opacity-60ks">{String(activeIndex + 1).padStart(2, '0')}</span>
-                  <span className="mx-1.5 md:mx-3 text-primary">/</span>
-                  <span>{String(slides.length).padStart(2, '0')}</span>
-                </div> */}
               </div>
             </motion.div>
           </AnimatePresence>
         </div>
 
-        {/* Desktop Thumbnail Navigation */}
         {isDesktop ? (
           <div className="absolute bottom-12 left-1/2 -translate-x-1/2 w-full max-w-[1600px] px-16 pointer-events-auto overflow-visible">
             <div className="flex items-center gap-4 overflow-x-auto overscroll-x-contain scrollbar-hide py-4 px-4 overflow-visible">
@@ -434,8 +484,8 @@ export function MainCarousel({ className, autoPlayMs = 5000, postings, hrefBase 
                     aria-pressed={selected}
                     className={cn(
                       "group relative h-14 w-14 md:h-16 md:w-16 shrink-0 rounded-2xl transition-all duration-500",
-                      selected 
-                        ? "scale-110 z-10 bg-primary p-[5px]" 
+                      selected
+                        ? "scale-110 z-10 bg-primary p-[5px]"
                         : "opacity-60 hover:opacity-100 hover:scale-105 bg-border/30 p-px"
                     )}
                   >

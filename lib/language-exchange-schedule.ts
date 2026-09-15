@@ -92,3 +92,61 @@ export function formatDayLabel(day: string, locale: 'ko' | 'en'): string {
   }
   return `${day}요일`
 }
+
+/** 짧은 요일 라벨 (히어로 등 공간 제약 UI용) — 수 / Wed */
+export function formatDayShortLabel(day: string, locale: 'ko' | 'en'): string {
+  if (locale === 'en') {
+    return formatDayLabel(day, 'en')
+  }
+  return day
+}
+
+/** 같은 장소끼리 요일을 묶어 표시 (수·금 → 동일 장소) */
+export type ScheduleVenueGroup = {
+  days: string[]
+  location: string
+  locationEn: string
+}
+
+export function groupSchedulesByVenue(
+  schedulesByDay: Record<string, LeScheduleInfo>
+): ScheduleVenueGroup[] {
+  const groups = new Map<string, ScheduleVenueGroup>()
+
+  for (const day of sortKoreanWeekdays(Object.keys(schedulesByDay))) {
+    const schedule = schedulesByDay[day]
+    if (!schedule) continue
+    const location = schedule.location.trim()
+    const locationEn = schedule.locationEn.trim()
+    if (!location && !locationEn) continue
+
+    // 한국어 장소를 우선 키로 사용 (영문 표기 불일치 시에도 같은 장소로 묶임)
+    const key = (location || locationEn).toLowerCase()
+    const existing = groups.get(key)
+    if (existing) {
+      existing.days.push(day)
+      if (!existing.location && location) existing.location = location
+      if (!existing.locationEn && locationEn) existing.locationEn = locationEn
+    } else {
+      groups.set(key, { days: [day], location, locationEn })
+    }
+  }
+
+  return Array.from(groups.values())
+}
+
+export function formatDayGroupLabel(days: string[], locale: 'ko' | 'en'): string {
+  return sortKoreanWeekdays(days)
+    .map((d) => formatDayShortLabel(d, locale))
+    .join(', ')
+}
+
+export function getVenueGroupLocationLabel(
+  group: Pick<ScheduleVenueGroup, 'location' | 'locationEn'>,
+  locale: 'ko' | 'en'
+): string {
+  return getScheduleLocationLabel(
+    { location: group.location, locationEn: group.locationEn },
+    locale
+  )
+}

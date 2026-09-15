@@ -3,7 +3,7 @@ import { MainCarousel } from '@/app/_components/main-carousel'
 import { PostingCarousel } from '@/app/_components/posting-carousel'
 import { PostingList } from '@/app/_components/posting-list'
 import { DEBUG_BASE_PATH } from '@/lib/debug/debug-base-path'
-import { MOCK_ALL_POSTINGS, MOCK_MEETUP_POSTINGS } from '@/lib/debug/mock-data'
+import { MOCK_ALL_POSTINGS, MOCK_LE_SCHEDULES, MOCK_MEETUP_POSTINGS } from '@/lib/debug/mock-data'
 
 export default function DebugHomePage() {
   return (
@@ -16,7 +16,11 @@ export default function DebugHomePage() {
 
       <MainNav activePrimaryLabel="Home" />
       <main className="pt-5 pb-5 md:pt-0 md:pb-10 relative z-10">
-        <MainCarousel postings={[...MOCK_ALL_POSTINGS]} hrefBase={DEBUG_BASE_PATH} />
+        <MainCarousel
+          postings={[...MOCK_ALL_POSTINGS]}
+          schedules={[...MOCK_LE_SCHEDULES]}
+          hrefBase={DEBUG_BASE_PATH}
+        />
 
         <div className="mx-auto w-full max-w-[1600px] space-y-10 pb-5 md:space-y-32">
           <div className="px-4 xl:px-40 bg-muted/30 py-15">
