@@ -5,6 +5,7 @@ import {
   hasAdminPanelAccess,
   isClubLeaderAllowedPath,
   isClubLeaderUser,
+  isSuperAdminOnlyPath,
   isSuperAdminUser,
 } from '@/lib/admin-access'
 
@@ -119,6 +120,16 @@ export async function middleware(request: NextRequest) {
     if (!hasAdminPanelAccess(session.user.email, profile)) {
       return NextResponse.redirect(
         new URL('/admin/login?error=no_access', request.url)
+      )
+    }
+
+    // 슈퍼 관리자 전용 메뉴 (히스토리 등)
+    if (
+      isSuperAdminOnlyPath(request.nextUrl.pathname) &&
+      !isSuperAdminUser(session.user.email, profile)
+    ) {
+      return NextResponse.redirect(
+        new URL(getAdminHomePath(session.user.email, profile), request.url)
       )
     }
 

@@ -123,7 +123,52 @@ export async function resolveUserRole(
   }
 }
 
-/** @deprecated setProfileRole 사용 */
+/** 소모임장·스탭 플래그를 독립적으로 설정 (슈퍼관리자 플래그는 유지) */
+export async function setProfileRoleFlags(
+  admin: SupabaseClient,
+  userId: string,
+  flags: { is_admin?: boolean; is_staff?: boolean }
+): Promise<{ error: string | null }> {
+  const current = await fetchProfileRoleFlags(admin, userId)
+  const now = new Date().toISOString()
+  const patch = {
+    is_admin: flags.is_admin !== undefined ? flags.is_admin : current.is_admin,
+    is_staff: flags.is_staff !== undefined ? flags.is_staff : current.is_staff,
+    updated_at: now,
+  }
+
+  const { data: updated, error: updateError } = await admin
+    .from('profiles')
+    .update(patch)
+    .eq('id', userId)
+    .select('id')
+    .maybeSingle()
+
+  if (updateError) {
+    return { error: updateError.message }
+  }
+  if (updated) {
+    return { error: null }
+  }
+
+  const { data: userRow } = await admin.from('users').select('name').eq('id', userId).maybeSingle()
+  const name = userRow?.name?.trim() || 'User'
+  const { error: insertError } = await admin.from('profiles').insert({
+    id: userId,
+    name,
+    is_superadmin: false,
+    is_admin: patch.is_admin,
+    is_staff: patch.is_staff,
+    updated_at: now,
+  })
+
+  if (insertError) {
+    return { error: insertError.message }
+  }
+  return { error: null }
+}
+
+/** @deprecated setProfileRoleFlags 또는 setProfileRole 사용 */
 export async function setProfileIsAdmin(
   admin: SupabaseClient,
   userId: string,

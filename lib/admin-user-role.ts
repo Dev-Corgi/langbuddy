@@ -37,6 +37,31 @@ export function adminRoleToFlags(role: AdminUserRole): {
   }
 }
 
+/** 활성화된 관리자 역할 라벨 (소모임장·스탭 중복 가능) */
+export function getAdminRoleLabels(
+  flags: AdminRoleFlags | null | undefined,
+  email: string | null | undefined,
+  isEn: boolean
+): string[] {
+  if (isSuperAdminEmail(email) || flags?.is_superadmin) {
+    return [getAdminRoleLabel('superadmin', isEn)]
+  }
+  const labels: string[] = []
+  if (flags?.is_admin) labels.push(getAdminRoleLabel('admin', isEn))
+  if (flags?.is_staff) labels.push(getAdminRoleLabel('staff', isEn))
+  return labels
+}
+
+export function formatAdminRoleLabels(
+  flags: AdminRoleFlags | null | undefined,
+  email: string | null | undefined,
+  isEn: boolean
+): string {
+  const labels = getAdminRoleLabels(flags, email, isEn)
+  if (labels.length === 0) return getAdminRoleLabel('member', isEn)
+  return labels.join(isEn ? ' · ' : ' · ')
+}
+
 export function getAdminRoleLabel(role: AdminUserRole, isEn: boolean): string {
   if (isEn) {
     switch (role) {

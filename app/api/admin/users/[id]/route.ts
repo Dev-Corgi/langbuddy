@@ -7,6 +7,7 @@ import {
   isTargetSuperAdmin,
   resolveUserRole,
   setProfileRole,
+  setProfileRoleFlags,
 } from '@/lib/admin-user-roles'
 import { isValidAdminUserRole } from '@/lib/admin-user-role'
 
@@ -76,20 +77,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const body = (await request.json()) as AdminUserUpdatePayload
     const admin = createSupabaseAdmin()
 
-    const roleToSet =
-      body.role !== undefined
-        ? body.role
-        : body.is_admin !== undefined
-          ? body.is_admin
-            ? 'admin'
-            : 'member'
-          : undefined
+    const hasRoleFlags =
+      body.is_admin !== undefined || body.is_staff !== undefined
+    const roleToSet = body.role
 
-    if (roleToSet !== undefined) {
-      if (!isValidAdminUserRole(roleToSet)) {
-        return NextResponse.json({ error: 'invalid_role' }, { status: 400 })
-      }
-
+    if (hasRoleFlags || roleToSet !== undefined) {
       const targetIsSuper = await isTargetSuperAdmin(admin, id)
       if (targetIsSuper) {
         return NextResponse.json(
@@ -98,11 +90,24 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         )
       }
 
-      const { error: profileError } = await setProfileRole(admin, id, roleToSet)
-
-      if (profileError) {
-        console.error('[admin/users/[id]] profile role update error:', profileError)
-        return NextResponse.json({ error: profileError }, { status: 500 })
+      if (hasRoleFlags) {
+        const { error: profileError } = await setProfileRoleFlags(admin, id, {
+          is_admin: body.is_admin,
+          is_staff: body.is_staff,
+        })
+        if (profileError) {
+          console.error('[admin/users/[id]] profile flags update error:', profileError)
+          return NextResponse.json({ error: profileError }, { status: 500 })
+        }
+      } else if (roleToSet !== undefined) {
+        if (!isValidAdminUserRole(roleToSet)) {
+          return NextResponse.json({ error: 'invalid_role' }, { status: 400 })
+        }
+        const { error: profileError } = await setProfileRole(admin, id, roleToSet)
+        if (profileError) {
+          console.error('[admin/users/[id]] profile role update error:', profileError)
+          return NextResponse.json({ error: profileError }, { status: 500 })
+        }
       }
     }
 
@@ -149,7 +154,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       body.kakao_id !== undefined ||
       body.onboarding_completed !== undefined
 
-    if (!userFieldsTouched && roleToSet === undefined) {
+    if (!userFieldsTouched && !hasRoleFlags && roleToSet === undefined) {
       return NextResponse.json({ error: 'no_fields' }, { status: 400 })
     }
 

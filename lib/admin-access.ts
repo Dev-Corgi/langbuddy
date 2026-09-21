@@ -40,6 +40,12 @@ export function hasAdminPanelAccess(
   return !!profile?.is_staff
 }
 
+/** 슈퍼 관리자 전용 /admin 하위 경로 */
+export function isSuperAdminOnlyPath(pathname: string): boolean {
+  if (pathname === '/admin/history' || pathname.startsWith('/admin/history/')) return true
+  return false
+}
+
 /** 소모임장이 접근 가능한 /admin 하위 경로 */
 export function isClubLeaderAllowedPath(pathname: string): boolean {
   if (pathname === '/admin/login') return true

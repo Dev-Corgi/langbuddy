@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { VALID_PRAISE_REASONS } from '@/lib/praise-reasons'
+import { ensureUsersExist } from '@/lib/ensure-users-exist'
 
 export async function POST(request: NextRequest) {
   try {
@@ -107,6 +108,12 @@ export async function POST(request: NextRequest) {
 
     if (!verified) {
       return NextResponse.json({ error: 'not_same_session' }, { status: 403 })
+    }
+
+    const ensured = await ensureUsersExist(admin, [user.id, praisedUserId])
+    if (!ensured.ok) {
+      console.error('[POST /api/praises] ensureUsersExist', ensured.error)
+      return NextResponse.json({ error: 'insert_failed' }, { status: 500 })
     }
 
     const insertPayload: Record<string, unknown> = {

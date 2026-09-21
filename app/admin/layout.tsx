@@ -20,12 +20,13 @@ import {
   Users,
   LayoutGrid,
   Flag,
+  History,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/hooks/use-locale'
 import { i18n } from '@/lib/i18n'
-import { resolveAdminUserRole } from '@/lib/admin-user-role'
+import { isSuperAdminUser, isClubLeaderUser } from '@/lib/admin-access'
 
 export default function AdminLayout({
   children,
@@ -33,7 +34,12 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [panelRole, setPanelRole] = useState<'superadmin' | 'admin' | 'staff' | 'member'>('member')
+  const [profileFlags, setProfileFlags] = useState({
+    is_superadmin: false,
+    is_admin: false,
+    is_staff: false,
+  })
+  const [userEmail, setUserEmail] = useState<string | undefined>()
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
@@ -53,8 +59,12 @@ export default function AdminLayout({
           return
         }
 
-        const role = resolveAdminUserRole(email, profile)
-        setPanelRole(role === 'member' ? 'member' : role)
+        setUserEmail(email)
+        setProfileFlags({
+          is_superadmin: !!profile?.is_superadmin,
+          is_admin: !!profile?.is_admin,
+          is_staff: !!profile?.is_staff,
+        })
       } catch (err) {
         console.error('AdminLayout: Unexpected error:', err)
       }
@@ -75,7 +85,8 @@ export default function AdminLayout({
       if (session?.user) {
         fetchProfile(session.user.id, session.user.email)
       } else {
-        setPanelRole('member')
+        setProfileFlags({ is_superadmin: false, is_admin: false, is_staff: false })
+        setUserEmail(undefined)
       }
     })
 
@@ -101,11 +112,12 @@ export default function AdminLayout({
     window.dispatchEvent(new Event('localeChange'));
   };
 
-  const isSuperAdmin = panelRole === 'superadmin'
-  const isStaff = panelRole === 'staff'
-  const isAdmin = panelRole === 'admin'
-  const adminHomeHref =
-    panelRole === 'admin' ? '/admin/meetups' : '/admin/dashboard'
+  const isSuperAdmin = isSuperAdminUser(userEmail, profileFlags)
+  const isStaff = profileFlags.is_staff
+  const isAdmin = profileFlags.is_admin
+  const adminHomeHref = isClubLeaderUser(userEmail, profileFlags)
+    ? '/admin/meetups'
+    : '/admin/dashboard'
 
   const menuItems = [
     ...(isSuperAdmin || isStaff
@@ -116,6 +128,7 @@ export default function AdminLayout({
       { href: '/admin/arrange', label: locale === 'en' ? 'Seating' : '자리 배치', icon: LayoutGrid },
       { href: '/admin/qr-scanner', label: locale === 'en' ? 'QR check-in' : 'QR 체크인', icon: QrCode },
       { href: '/admin/language', label: locale === 'en' ? 'Language' : '언어교환 관리', icon: Languages },
+      { href: '/admin/history', label: locale === 'en' ? 'History' : '히스토리', icon: History },
     ] : []),
     ...(isStaff ? [
       { href: '/admin/arrange', label: locale === 'en' ? 'Seating' : '자리 배치', icon: LayoutGrid },

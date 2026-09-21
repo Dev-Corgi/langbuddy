@@ -24,7 +24,10 @@ export type AdminUserUpdatePayload = {
   nationality?: '한국인' | '외국인'
   kakao_id?: string
   onboarding_completed?: boolean
-  /** @deprecated role 사용 */
+  /** 소모임장(번개 관리) */
   is_admin?: boolean
+  /** 스탭(자리배치·QR 체크인) */
+  is_staff?: boolean
+  /** @deprecated is_admin / is_staff 사용 */
   role?: AdminUserRole
 }

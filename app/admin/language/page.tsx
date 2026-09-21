@@ -245,8 +245,8 @@ function LanguageManagementContent() {
   const handleCancelResponse = async (res: { id: string }) => {
     const msg =
       locale === 'en'
-        ? 'Delete this application permanently? The participant will be notified (Kakao Talk or email). This cannot be undone.'
-        : '이 신청을 삭제할까요? 참가자에게 카카오톡(나에게 보내기) 또는 이메일로 취소 안내가 발송되며, 되돌릴 수 없습니다.';
+        ? 'Delete this application permanently? This cannot be undone.'
+        : '이 신청을 삭제할까요? 되돌릴 수 없습니다.';
     if (!window.confirm(msg)) return;
 
     setDeletingResponseId(res.id);
@@ -264,34 +264,7 @@ function LanguageManagementContent() {
         );
         return;
       }
-      const notify = (data as {
-        notify?: { kakao?: string; email?: string; detail?: string; skippedNoUser?: boolean }
-      }).notify;
-      if (notify?.skippedNoUser) {
-        alert(
-          locale === 'en'
-            ? 'Application removed. No user account was linked, so no notification was sent.'
-            : '신청이 삭제되었습니다. 연결된 계정이 없어 알림은 발송되지 않았습니다.'
-        );
-      } else if (notify?.kakao === 'failed' && notify?.email === 'failed') {
-        alert(
-          locale === 'en'
-            ? 'Application removed, but both Kakao and email notifications failed. Please contact the participant manually.'
-            : '신청은 삭제되었으나 카카오·이메일 알림이 모두 실패했을 수 있습니다. 필요 시 직접 연락해 주세요.'
-        );
-      } else if (notify?.kakao === 'failed' && notify?.email !== 'sent') {
-        alert(
-          locale === 'en'
-            ? 'Application removed. Kakao notification failed (email not sent or unavailable).'
-            : '신청은 삭제되었으나 카카오 알림에 실패했습니다. 이메일이 없거나 발송되지 않았을 수 있습니다.'
-        );
-      } else {
-        alert(
-          locale === 'en'
-            ? 'Application cancelled and the participant was notified (if contact was available).'
-            : '삭제되었으며, 가능한 경우 참가자에게 안내를 발송했습니다.'
-        );
-      }
+      alert(locale === 'en' ? 'Application removed.' : '신청이 삭제되었습니다.');
       fetchResponses(schedules[activeTab].form_id);
     } catch (e) {
       console.error(e);

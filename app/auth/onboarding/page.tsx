@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { PRIVACY_POLICY_VERSION } from '@/lib/privacy-policy'
 import { Button } from '@/components/ui/button'
@@ -15,8 +15,15 @@ import { useLocale } from '@/hooks/use-locale'
 import { i18n } from '@/lib/i18n'
 import { toast } from 'sonner'
 
-export default function OnboardingPage() {
+function resolveReturnPath(raw: string | null): string {
+  if (raw && raw.startsWith('/') && !raw.startsWith('//')) return raw
+  return '/'
+}
+
+function OnboardingPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnPath = resolveReturnPath(searchParams.get('next'))
   const supabase = createClient()
   const locale = useLocale()
   const tDict = i18n[locale]
@@ -46,7 +53,7 @@ export default function OnboardingPage() {
         .single()
       
       if (userData?.onboarding_completed) {
-        router.push('/')
+        router.push(returnPath)
         return
       }
 
@@ -54,7 +61,7 @@ export default function OnboardingPage() {
     }
 
     checkAuth()
-  }, [supabase, router])
+  }, [supabase, router, returnPath])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -97,7 +104,7 @@ export default function OnboardingPage() {
     }
 
     toast.success(locale === 'en' ? 'Welcome to LangBuddy!' : 'LangBuddy에 오신 것을 환영합니다!')
-    router.push('/')
+    router.push(returnPath)
   }
 
   if (loading) {
@@ -250,5 +257,19 @@ export default function OnboardingPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-muted flex items-center justify-center">
+          <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <OnboardingPageContent />
+    </Suspense>
   )
 }

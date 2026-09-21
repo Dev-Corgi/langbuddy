@@ -56,6 +56,7 @@ import {
   loadReceiptDraft,
   saveReceiptDraft,
 } from '@/lib/apply-payment-draft'
+import { buildOnboardingUrl, isOnboardingCompleted } from '@/lib/onboarding-gate'
 
 /** 디버깅용 임시 기능 — 스탭 무료 신청. 재활성화 시 true로 변경 */
 const STAFF_FREE_APPLY_ENABLED = true
@@ -325,6 +326,14 @@ export default function ApplicationFormPage() {
           .eq('id', authUser.id)
           .single()
         if (cancelled) return
+
+        if (!userInfo?.onboarding_completed) {
+          router.replace(
+            buildOnboardingUrl(pathname || `/posting/${id}/apply`)
+          )
+          return
+        }
+
         setUserData(userInfo)
         currentUserInfo = userInfo
 
@@ -717,6 +726,16 @@ export default function ApplicationFormPage() {
     e.preventDefault()
     setSubmitting(true)
 
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    if (authUser) {
+      const onboarded = await isOnboardingCompleted(supabase, authUser.id)
+      if (!onboarded) {
+        router.replace(buildOnboardingUrl(pathname || `/posting/${id}/apply`))
+        setSubmitting(false)
+        return
+      }
+    }
+
     const isRecurringLe =
       !!posting?.is_recurring &&
       posting?.category === '언어교환'
@@ -966,7 +985,7 @@ export default function ApplicationFormPage() {
         }
       }
 
-      // QR is sent on the application complete page (Kakao/email), not on admin confirm.
+      // QR is shown on the application complete page; no outbound notifications.
 
       // 4. Trigger Webhook if exists
       if (form.webhook_url) {
@@ -1675,9 +1694,9 @@ export default function ApplicationFormPage() {
                   <p className="text-[11px] text-muted-foreground font-medium leading-tight flex items-start gap-1">
                     <span className="text-amber-500 shrink-0">*</span>
                     <span>
-                      {locale === 'en' 
-                        ? 'Your QR code will be sent via KakaoTalk or email right after you apply.' 
-                        : '신청 직후 카카오톡 또는 이메일로 QR 코드가 발송됩니다.'}
+                      {locale === 'en'
+                        ? 'After you apply, your QR code will be shown on the confirmation page.'
+                        : '신청 완료 후 QR 코드는 완료 페이지에서 바로 확인할 수 있습니다.'}
                     </span>
                   </p>
                 </div>

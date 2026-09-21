@@ -94,11 +94,12 @@ export async function GET(request: Request) {
         .single()
       
       if (!userData || !userData.onboarding_completed) {
-        const skipOnboarding = nextPath.includes('/apply') || nextPath.startsWith('/admin')
-        if (skipOnboarding) {
+        if (nextPath.startsWith('/admin')) {
           return NextResponse.redirect(new URL(nextPath, requestUrl.origin))
         }
-        return NextResponse.redirect(new URL('/auth/onboarding', requestUrl.origin))
+        const onboardingUrl = new URL('/auth/onboarding', requestUrl.origin)
+        onboardingUrl.searchParams.set('next', nextPath)
+        return NextResponse.redirect(onboardingUrl)
       }
       
       if (nextPath.startsWith('/')) {

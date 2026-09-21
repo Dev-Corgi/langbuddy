@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { VALID_FACILITY_REPORT_REASONS } from '@/lib/facility-report-reasons'
 import { verifySessionParticipation } from '@/lib/verify-session-participation'
+import { ensureUsersExist } from '@/lib/ensure-users-exist'
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,6 +49,12 @@ export async function POST(request: NextRequest) {
 
     if (!participated) {
       return NextResponse.json({ error: 'not_participant' }, { status: 403 })
+    }
+
+    const ensured = await ensureUsersExist(admin, [user.id])
+    if (!ensured.ok) {
+      console.error('[POST /api/facility-reports] ensureUsersExist', ensured.error)
+      return NextResponse.json({ error: 'insert_failed' }, { status: 500 })
     }
 
     const { error: insertErr } = await admin.from('facility_reports').insert({

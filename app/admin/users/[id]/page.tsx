@@ -10,24 +10,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Loader2, Pencil, Save, X } from 'lucide-react'
 import { useLocale } from '@/hooks/use-locale'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import {
-  ADMIN_USER_ROLES,
-  getAdminRoleLabel,
-  resolveAdminUserRole,
-  type AdminUserRole,
-} from '@/lib/admin-user-role'
+import { formatAdminRoleLabels, getAdminRoleLabel } from '@/lib/admin-user-role'
+import { isSuperAdminUser } from '@/lib/admin-access'
 
 type UserDetail = AdminUserRow & { email?: string | null }
 
@@ -48,7 +37,8 @@ export default function AdminUserDetailPage() {
   const [nationality, setNationality] = useState<'한국인' | '외국인'>('한국인')
   const [kakaoId, setKakaoId] = useState('')
   const [onboardingCompleted, setOnboardingCompleted] = useState(false)
-  const [role, setRole] = useState<AdminUserRole>('member')
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [isStaff, setIsStaff] = useState(false)
 
   const hydrateForm = useCallback((u: UserDetail) => {
     setName(u.name ?? '')
@@ -56,7 +46,8 @@ export default function AdminUserDetailPage() {
     setNationality((u.nationality === '외국인' ? '외국인' : '한국인') as '한국인' | '외국인')
     setKakaoId(u.kakao_id ?? '')
     setOnboardingCompleted(!!u.onboarding_completed)
-    setRole(u.role ?? resolveAdminUserRole(u.email, u))
+    setIsAdmin(!!u.is_admin)
+    setIsStaff(!!u.is_staff)
   }, [])
 
   const fetchUser = useCallback(async () => {
@@ -98,7 +89,8 @@ export default function AdminUserDetailPage() {
           nationality,
           kakao_id: kakaoId.trim(),
           onboarding_completed: onboardingCompleted,
-          role,
+          is_admin: isAdmin,
+          is_staff: isStaff,
         }),
       })
       if (!res.ok) {
@@ -141,9 +133,13 @@ export default function AdminUserDetailPage() {
 
   if (!user) return null
 
-  const targetRole = user.role ?? resolveAdminUserRole(user.email, user)
-  const targetIsSuper = targetRole === 'superadmin'
-  const roleLabel = getAdminRoleLabel(targetRole, isEn)
+  const targetIsSuper = isSuperAdminUser(user.email, user)
+  const roleLabel = formatAdminRoleLabels(user, user.email, isEn)
+  const hasAnyRole =
+    targetIsSuper ||
+    !!user.is_admin ||
+    !!user.is_staff ||
+    (user.role && user.role !== 'member')
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6 pb-24">
@@ -271,39 +267,39 @@ export default function AdminUserDetailPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <InfoRow label={isEn ? 'Role' : '역할'} value={roleLabel} highlight={targetRole !== 'member'} />
+          <InfoRow label={isEn ? 'Role' : '역할'} value={roleLabel} highlight={hasAnyRole} />
           {editing && !targetIsSuper ? (
-            <div className="space-y-2 rounded-2xl border border-border p-4">
-              <Label className="font-bold">{isEn ? 'Role' : '역할'}</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as AdminUserRole)}>
-                <SelectTrigger className="h-12 w-full rounded-xl font-bold">
-                  <SelectValue placeholder={isEn ? 'Select role' : '역할 선택'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {ADMIN_USER_ROLES.map((r) => (
-                    <SelectItem key={r} value={r} className="font-bold">
-                      {getAdminRoleLabel(r, isEn)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="space-y-4 rounded-2xl border border-border p-4">
               <p className="text-xs text-muted-foreground font-medium">
-                {role === 'staff'
-                  ? isEn
-                    ? 'Can use QR check-in and seating tools.'
-                    : 'QR 체크인·자리배치 메뉴를 사용할 수 있습니다.'
-                  : role === 'admin'
-                    ? isEn
-                      ? 'Can use meetup management and settings only.'
-                      : '번개 관리, 설정 메뉴만 사용할 수 있습니다.'
-                    : role === 'superadmin'
-                      ? isEn
-                        ? 'Full access to all admin features.'
-                        : '모든 관리자 기능에 접근할 수 있습니다.'
-                      : isEn
-                        ? 'No admin panel access.'
-                        : '관리자 패널 접근 권한이 없습니다.'}
+                {isEn
+                  ? 'Club leader and staff roles can be enabled together.'
+                  : '소모임장과 스탭 권한을 동시에 줄 수 있습니다.'}
               </p>
+              <div className="flex items-center justify-between rounded-2xl border border-border p-4">
+                <div className="space-y-1">
+                  <Label className="font-bold">{getAdminRoleLabel('admin', isEn)}</Label>
+                  <p className="text-xs text-muted-foreground font-medium">
+                    {isEn ? 'Meetup management and settings.' : '번개 관리, 설정 메뉴.'}
+                  </p>
+                </div>
+                <Switch checked={isAdmin} onCheckedChange={setIsAdmin} />
+              </div>
+              <div className="flex items-center justify-between rounded-2xl border border-border p-4">
+                <div className="space-y-1">
+                  <Label className="font-bold">{getAdminRoleLabel('staff', isEn)}</Label>
+                  <p className="text-xs text-muted-foreground font-medium">
+                    {isEn ? 'QR check-in and seating tools.' : 'QR 체크인·자리배치 메뉴.'}
+                  </p>
+                </div>
+                <Switch checked={isStaff} onCheckedChange={setIsStaff} />
+              </div>
+              {isAdmin && isStaff ? (
+                <p className="text-xs text-primary font-bold">
+                  {isEn
+                    ? 'Both enabled: full meetup + on-site ops access.'
+                    : '둘 다 켜짐: 번개 관리와 현장 운영 메뉴를 모두 사용합니다.'}
+                </p>
+              ) : null}
             </div>
           ) : targetIsSuper ? (
             <p className="text-xs text-muted-foreground font-medium">

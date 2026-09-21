@@ -6,13 +6,11 @@ import { createClient } from "@/lib/supabase"
 import { MainNav } from "@/app/_components/main-nav"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { CheckCircle2, Download, Loader2, QrCode, MessageCircle, Mail } from "lucide-react"
+import { CheckCircle2, Download, Loader2, QrCode } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { useLocale } from "@/hooks/use-locale"
 import { i18n } from "@/lib/i18n"
 import { cn, extractParticipantInfoFromAnswers, type CoreFormQuestion } from "@/lib/utils"
-import { initKakaoSDK } from "@/lib/kakao-share"
-import { kakaoSendNeedsParticipantKakaoReconnect } from "@/lib/kakao-send-status"
 import {
   formatSessionDateLabel,
   resolveApplicationSessionYmd,
@@ -22,14 +20,7 @@ import {
   formatPaymentMethodLabel,
   isBankTransferMethod,
 } from "@/lib/supported-payment-methods"
-import { toast } from "sonner"
-
-const mailDeliveryProblemToast = (locale: string) =>
-  toast.error(
-    locale === "en"
-      ? "Something went wrong, please contact the administrator."
-      : "문제가 발생했습니다, 관리자에게 문의하세요"
-  )
+import { buildOnboardingUrl, isOnboardingCompleted } from '@/lib/onboarding-gate'
 
 export default function ApplicationCompletePage() {
   const searchParams = useSearchParams()
@@ -42,23 +33,7 @@ export default function ApplicationCompletePage() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [questions, setQuestions] = useState<CoreFormQuestion[]>([])
-  const [sendingToKakao, setSendingToKakao] = useState(false)
-  const [kakaoSent, setKakaoSent] = useState(false)
-  const [kakaoReconnectNeeded, setKakaoReconnectNeeded] = useState(false)
-  const [sendingEmail, setSendingEmail] = useState(false)
-  const [emailSent, setEmailSent] = useState(false)
-  const [gmailNotConfigured, setGmailNotConfigured] = useState(false)
-  const [user, setUser] = useState<any>(null)
-  const [hasKakaoUuid, setHasKakaoUuid] = useState(false)
   const qrRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    // Initialize Kakao SDK for Share functionality
-    const kakaoAppKey = process.env.NEXT_PUBLIC_KAKAO_APP_KEY
-    if (kakaoAppKey) {
-      initKakaoSDK(kakaoAppKey)
-    }
-  }, [])
 
   useEffect(() => {
     if (!id) {
@@ -72,7 +47,6 @@ export default function ApplicationCompletePage() {
       const {
         data: { user: authUser },
       } = await supabase.auth.getUser()
-      setUser(authUser)
 
       if (!authUser) {
         const next = `/apply/complete?id=${encodeURIComponent(responseId)}`
@@ -81,13 +55,14 @@ export default function ApplicationCompletePage() {
         return
       }
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('kakao_uuid')
-        .eq('id', authUser.id)
-        .single()
-
-      setHasKakaoUuid(!!userData?.kakao_uuid)
+      const onboarded = await isOnboardingCompleted(supabase, authUser.id)
+      if (!onboarded) {
+        router.replace(
+          buildOnboardingUrl(`/apply/complete?id=${encodeURIComponent(responseId)}`)
+        )
+        setLoading(false)
+        return
+      }
 
       const { data: response, error } = await supabase
         .from('form_responses')
@@ -137,137 +112,6 @@ export default function ApplicationCompletePage() {
     fetchData()
   }, [id, supabase, router])
 
-  /** 입금 대기가 아닐 때 1회: 카카오 연동이면 나에게 보내기, 아니면 이메일(설정 시) */
-  useEffect(() => {
-    if (loading || !data?.id || !data?.qr_code || !user?.id) return
-
-    const storageKey = `langbuddy_auto_qr_${data.id}`
-    const lockKey = `${storageKey}_lock`
-    const prev = typeof window !== 'undefined' ? sessionStorage.getItem(storageKey) : null
-    if (prev === 'kakao') {
-      setKakaoSent(true)
-      return
-    }
-    if (prev === 'email') {
-      setEmailSent(true)
-      return
-    }
-
-    if (typeof window !== 'undefined' && sessionStorage.getItem(lockKey)) return
-    if (typeof window !== 'undefined') sessionStorage.setItem(lockKey, '1')
-
-    let cancelled = false
-
-    async function runAutoSend() {
-      try {
-        if (hasKakaoUuid) {
-          setSendingToKakao(true)
-          setKakaoReconnectNeeded(false)
-          const { data: userData } = await supabase
-            .from('users')
-            .select('kakao_uuid, name')
-            .eq('id', user.id)
-            .single()
-
-          if (cancelled || !userData?.kakao_uuid) return
-
-          const nameQuestion = questions.find((q) => q.system_key === 'name')
-          const userName = nameQuestion ? data.answers?.[nameQuestion.id] : userData.name || 'User'
-          const displayDayAuto =
-            typeof data.answers?._selected_day === 'string' ? data.answers._selected_day : ''
-          const sessionYmdAuto = resolveApplicationSessionYmd(
-            displayDayAuto,
-            data.answers?._event_date,
-            data.created_at as string
-          )
-          const kind = data._recurring_kind as 'language' | null | undefined
-          const builtAuto =
-            kind && sessionYmdAuto.length >= 10
-              ? buildRecurringSessionDisplayTitles(displayDayAuto, sessionYmdAuto, kind)
-              : null
-          const ft = builtAuto
-            ? locale === 'en'
-              ? builtAuto.title_en
-              : builtAuto.title
-            : (locale === 'en' && data.forms?.title_en ? data.forms.title_en : data.forms?.title) ||
-              'LangBuddy'
-
-          const res = await fetch('/api/send-kakao-qr', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              kakaoId: userData.kakao_uuid,
-              qrCode: data.qr_code,
-              formTitle: ft,
-              name: userName,
-              responseId: data.id,
-              userId: user.id,
-            }),
-          })
-          const result = await res.json()
-          if (cancelled) return
-          if (res.ok && result.success) {
-            sessionStorage.setItem(storageKey, 'kakao')
-            setKakaoSent(true)
-          } else if (kakaoSendNeedsParticipantKakaoReconnect(result.kakaoSendStatus)) {
-            setKakaoReconnectNeeded(true)
-          }
-        } else if (user.email) {
-          setSendingEmail(true)
-          setGmailNotConfigured(false)
-          const res = await fetch('/api/send-qr-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              responseId: data.id,
-              locale: locale === 'en' ? 'en' : 'ko',
-            }),
-          })
-          const result = await res.json()
-          if (cancelled) return
-          if (res.ok && result.ok) {
-            sessionStorage.setItem(storageKey, 'email')
-            setEmailSent(true)
-          } else if (result.error === 'email_not_configured') {
-            setGmailNotConfigured(true)
-          } else {
-            mailDeliveryProblemToast(locale)
-          }
-        }
-      } catch (e) {
-        console.error('Auto QR delivery:', e)
-        if (!cancelled) mailDeliveryProblemToast(locale)
-      } finally {
-        if (typeof window !== 'undefined') sessionStorage.removeItem(lockKey)
-        if (!cancelled) {
-          setSendingToKakao(false)
-          setSendingEmail(false)
-        }
-      }
-    }
-
-    runAutoSend()
-    return () => {
-      cancelled = true
-      if (typeof window !== 'undefined' && !sessionStorage.getItem(storageKey)) {
-        sessionStorage.removeItem(lockKey)
-      }
-    }
-  }, [
-    loading,
-    data?.id,
-    data?.qr_code,
-    data?.payment_status,
-    data?.answers,
-    data?.forms,
-    user?.id,
-    user?.email,
-    hasKakaoUuid,
-    questions,
-    supabase,
-    locale,
-  ])
-
   const handleDownloadQR = () => {
     const svg = qrRef.current?.querySelector('svg')
     if (!svg) return
@@ -297,154 +141,6 @@ export default function ApplicationCompletePage() {
       URL.revokeObjectURL(url)
     }
     img.src = url
-  }
-
-  const handleReconnectKakao = async () => {
-    if (!data?.id || typeof window === 'undefined') return
-    const next = `/apply/complete?id=${encodeURIComponent(data.id)}`
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'kakao',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-        scopes: 'profile_nickname profile_image account_email talk_message',
-      },
-    })
-    if (error) {
-      alert(
-        locale === 'en'
-          ? `Could not start Kakao login: ${error.message}`
-          : `카카오 로그인을 시작하지 못했습니다: ${error.message}`
-      )
-    }
-  }
-
-  const handleSendToKakao = async () => {
-    if (!data || sendingToKakao) return
-    
-    setSendingToKakao(true)
-    try {
-      setKakaoReconnectNeeded(false)
-      if (!user || !hasKakaoUuid) {
-        alert(locale === 'en' ? 'Please login with Kakao to send QR' : '카카오 로그인이 필요합니다')
-        return
-      }
-
-      // Get user's kakao_uuid from database
-      const { data: userData } = await supabase
-        .from('users')
-        .select('kakao_uuid, name')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData?.kakao_uuid) {
-        alert(locale === 'en' ? 'Kakao UUID not found' : '카카오 정보를 찾을 수 없습니다')
-        return
-      }
-
-      const nameQuestion = questions.find(q => q.system_key === 'name')
-      const userName = nameQuestion ? data.answers?.[nameQuestion.id] : userData.name || 'User'
-
-      // Call server API to send via Kakao Channel Message
-      const response = await fetch('/api/send-kakao-qr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kakaoId: userData.kakao_uuid,
-          qrCode: data.qr_code,
-          formTitle: formTitle,
-          name: userName,
-          responseId: data.id,
-          userId: user.id,
-        }),
-      })
-
-      const result = await response.json()
-
-      if (!response.ok || !result.success) {
-        if (kakaoSendNeedsParticipantKakaoReconnect(result.kakaoSendStatus)) {
-          setKakaoReconnectNeeded(true)
-          return
-        }
-        const msg =
-          locale === 'en'
-            ? result.messageEn || result.message || 'Could not send via KakaoTalk.'
-            : result.message || '카카오톡으로 보내지 못했습니다.'
-        alert(msg)
-        return
-      }
-
-      setKakaoReconnectNeeded(false)
-      setKakaoSent(true)
-      alert(locale === 'en' ? 'Check your KakaoTalk chat with yourself (memo).' : '카카오톡 「나와의 채팅」에서 메모를 확인해 주세요.')
-    } catch (error) {
-      console.error('Error sending to Kakao:', error)
-      alert(locale === 'en' ? 'Failed to send to KakaoTalk' : '카카오톡 전송에 실패했습니다')
-    } finally {
-      setSendingToKakao(false)
-    }
-  }
-
-  const handleSendQrEmail = async () => {
-    if (!data || !user?.email || sendingEmail) return
-    setSendingEmail(true)
-    try {
-      const response = await fetch('/api/send-qr-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          responseId: data.id,
-          locale: locale === 'en' ? 'en' : 'ko',
-        }),
-      })
-      const result = await response.json()
-      if (!response.ok || !result.ok) {
-        if (result.error === 'email_not_configured') {
-          setGmailNotConfigured(true)
-        }
-        mailDeliveryProblemToast(locale)
-        return
-      }
-      setEmailSent(true)
-      toast.success(
-        locale === 'en'
-          ? `We sent the QR to ${user.email}`
-          : `${user.email} 으로 QR 안내 메일을 보냈습니다. 스팸함도 확인해 주세요.`
-      )
-    } catch (e) {
-      console.error(e)
-      mailDeliveryProblemToast(locale)
-    } finally {
-      setSendingEmail(false)
-    }
-  }
-
-  const handleKakaoShare = () => {
-    // Fallback: Use Kakao Share SDK for non-logged-in users
-    if (typeof window !== 'undefined' && window.Kakao) {
-      window.Kakao.Share.sendDefault({
-        objectType: 'feed',
-        content: {
-          title: '🎉 LangBuddy 신청 완료!',
-          description: `${formTitle}\n\nQR 코드를 확인하세요!`,
-          imageUrl: 'https://via.placeholder.com/400x400.png?text=QR+Code',
-          link: {
-            mobileWebUrl: window.location.href,
-            webUrl: window.location.href,
-          },
-        },
-        buttons: [
-          {
-            title: 'QR 코드 확인하기',
-            link: {
-              mobileWebUrl: window.location.href,
-              webUrl: window.location.href,
-            },
-          },
-        ],
-      })
-    } else {
-      alert(locale === 'en' ? 'Kakao SDK not loaded' : '카카오톡 공유 기능을 사용할 수 없습니다')
-    }
   }
 
   if (loading) {
@@ -536,128 +232,30 @@ export default function ApplicationCompletePage() {
                 </p>
                 <p className="text-xs text-amber-700 leading-relaxed">
                   {locale === 'en'
-                    ? 'Please complete the transfer below. Admin confirmation is for record-keeping only; your QR is available now and sent via Kakao or email if linked.'
-                    : '아래 계좌로 입금해 주세요. 관리자 확인은 입금 기록용이며, QR은 아래·카카오·이메일로 바로 이용하실 수 있습니다.'}
+                    ? 'Please complete the transfer below. Admin confirmation is for record-keeping only; your QR is available on this page.'
+                    : '아래 계좌로 입금해 주세요. 관리자 확인은 입금 기록용이며, QR은 이 페이지에서 바로 확인하실 수 있습니다.'}
                 </p>
               </div>
             ) : null}
-            <>
-                {(sendingToKakao || sendingEmail) && !kakaoSent && !emailSent ? (
-                  <p className="text-center text-sm font-bold text-muted-foreground flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    {locale === 'en'
-                      ? 'Sending your QR to Kakao or email…'
-                      : 'QR 코드를 카카오톡 또는 이메일로 보내는 중…'}
-                  </p>
-                ) : null}
-                {gmailNotConfigured && user?.email && !hasKakaoUuid ? (
-                  <div
-                    role="status"
-                    className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-950 text-center leading-relaxed"
-                  >
-                    {locale === 'en'
-                      ? 'Automatic email is off: set GMAIL_USER and GMAIL_APP_PASSWORD on the server (Gmail SMTP). You can still save the QR image below.'
-                      : 'Gmail SMTP가 서버에 설정되지 않아 이메일 자동 발송을 할 수 없습니다. GMAIL_USER·GMAIL_APP_PASSWORD를 설정하거나 아래에서 QR을 저장해 주세요.'}
-                  </div>
-                ) : null}
-                <div 
-                  ref={qrRef}
-                  className="relative aspect-square max-w-[280px] mx-auto p-6 bg-white rounded-3xl shadow-inner border-8 border-muted flex items-center justify-center"
-                >
-                  <QRCodeSVG 
-                    value={data.qr_code || ""} 
-                    size={240}
-                    level="H"
-                    includeMargin={false}
-                  />
-                </div>
+            <div
+              ref={qrRef}
+              className="relative aspect-square max-w-[280px] mx-auto p-6 bg-white rounded-3xl shadow-inner border-8 border-muted flex items-center justify-center"
+            >
+              <QRCodeSVG
+                value={data.qr_code || ""}
+                size={240}
+                level="H"
+                includeMargin={false}
+              />
+            </div>
 
-                <div className="space-y-4">
-                  {user && hasKakaoUuid && kakaoReconnectNeeded && (
-                    <div
-                      role="status"
-                      className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-5 text-left space-y-3"
-                    >
-                      <p className="text-sm font-bold text-amber-950">
-                        {locale === 'en'
-                          ? 'Your Kakao connection expired or needs to be renewed.'
-                          : '카카오 연결이 만료되었거나 다시 연결이 필요합니다.'}
-                      </p>
-                      <p className="text-sm text-amber-900/90 leading-relaxed">
-                        {locale === 'en'
-                          ? 'Sign in with Kakao again, then tap “Send to Kakao (me)” once more. You will return to this page after login.'
-                          : '아래에서 카카오로 다시 로그인한 뒤「카카오톡 나에게 보내기」를 다시 눌러 주세요. 로그인 후 이 페이지로 돌아옵니다.'}
-                      </p>
-                      <Button
-                        type="button"
-                        onClick={handleReconnectKakao}
-                        className="w-full h-12 rounded-xl bg-[#FEE500] hover:bg-[#FEE500]/90 text-[#000000] font-black"
-                      >
-                        <MessageCircle className="w-5 h-5 mr-2" />
-                        {locale === 'en' ? 'Reconnect Kakao' : '카카오 다시 연결'}
-                      </Button>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Button 
-                      onClick={handleDownloadQR}
-                      className="h-14 rounded-2xl bg-primary hover:bg-secondary font-black text-lg shadow-lg shadow-primary/20"
-                    >
-                      <Download className="w-5 h-5 mr-2" />
-                      {locale === 'en' ? 'Save QR' : 'QR 저장'}
-                    </Button>
-                    
-                    {user && hasKakaoUuid ? (
-                      <Button 
-                        onClick={handleSendToKakao}
-                        disabled={sendingToKakao || kakaoSent}
-                        className="h-14 rounded-2xl bg-[#FEE500] hover:bg-[#FEE500]/90 text-[#000000] font-black text-lg shadow-lg"
-                      >
-                        {sendingToKakao ? (
-                          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        ) : (
-                          <MessageCircle className="w-5 h-5 mr-2" />
-                        )}
-                        {kakaoSent
-                          ? locale === 'en'
-                            ? 'Sent to Kakao'
-                            : '카카오 전송 완료'
-                          : locale === 'en'
-                            ? 'Send to Kakao (me)'
-                            : '카카오톡 나에게 보내기'}
-                      </Button>
-                    ) : user?.email && !hasKakaoUuid ? (
-                      <Button
-                        onClick={handleSendQrEmail}
-                        disabled={sendingEmail || emailSent}
-                        variant="secondary"
-                        className="h-14 rounded-2xl font-black text-lg shadow-lg border-2 border-border"
-                      >
-                        {sendingEmail ? (
-                          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        ) : (
-                          <Mail className="w-5 h-5 mr-2" />
-                        )}
-                        {emailSent
-                          ? locale === 'en'
-                            ? 'Email sent'
-                            : '메일 발송 완료'
-                          : locale === 'en'
-                            ? 'Email me the QR'
-                            : 'QR을 이메일로 받기'}
-                      </Button>
-                    ) : (
-                      <Button 
-                        onClick={handleKakaoShare}
-                        className="h-14 rounded-2xl bg-[#FEE500] hover:bg-[#FEE500]/90 text-[#000000] font-black text-lg shadow-lg"
-                      >
-                        <MessageCircle className="w-5 h-5 mr-2" />
-                        {locale === 'en' ? 'Share to Kakao' : '카카오톡 공유'}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-            </>
+            <Button
+              onClick={handleDownloadQR}
+              className="w-full h-14 rounded-2xl bg-primary hover:bg-secondary font-black text-lg shadow-lg shadow-primary/20"
+            >
+              <Download className="w-5 h-5 mr-2" />
+              {locale === 'en' ? 'Save QR' : 'QR 저장'}
+            </Button>
 
             <div className="p-6 rounded-3xl bg-muted/50 border border-border space-y-4">
               {/* 선택 요일 */}

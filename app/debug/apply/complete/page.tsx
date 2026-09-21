@@ -10,7 +10,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useLocale } from '@/hooks/use-locale'
 import { DEBUG_BASE_PATH } from '@/lib/debug/debug-base-path'
 import { MOCK_COMPLETE_RESPONSE } from '@/lib/debug/mock-data'
-import { toast } from 'sonner'
 
 function DebugCompleteInner() {
   const locale = useLocale()
@@ -30,8 +29,8 @@ function DebugCompleteInner() {
           </h1>
           <p className="text-sm text-muted-foreground">
             {isEn
-              ? 'Kakao/email send buttons are no-ops in debug.'
-              : '디버그에서는 카카오/이메일 발송 버튼이 동작하지 않습니다.'}
+              ? 'QR is shown on this page only (no notifications in debug).'
+              : 'QR은 이 페이지에서만 표시됩니다 (디버그에서는 알림 없음).'}
           </p>
         </div>
 
@@ -48,31 +47,11 @@ function DebugCompleteInner() {
               <QrCode className="w-3.5 h-3.5" />
               {qrValue}
             </p>
-            <div className="grid w-full gap-2">
-              <Button
-                variant="outline"
-                className="font-bold"
-                onClick={() =>
-                  toast.message(isEn ? 'Mock: Kakao send skipped' : '목업: 카카오 발송 생략')
-                }
-              >
-                {isEn ? 'Send to Kakao (mock)' : '카카오로 보내기 (목업)'}
-              </Button>
-              <Button
-                variant="outline"
-                className="font-bold"
-                onClick={() =>
-                  toast.message(isEn ? 'Mock: email send skipped' : '목업: 이메일 발송 생략')
-                }
-              >
-                {isEn ? 'Send email (mock)' : '이메일 보내기 (목업)'}
-              </Button>
-              <Button asChild className="font-black">
-                <Link href={`${DEBUG_BASE_PATH}/my`}>
-                  {isEn ? 'Go to My page' : '마이페이지로'}
-                </Link>
-              </Button>
-            </div>
+            <Button asChild className="font-black w-full">
+              <Link href={`${DEBUG_BASE_PATH}/my`}>
+                {isEn ? 'Go to My page' : '마이페이지로'}
+              </Link>
+            </Button>
           </CardContent>
         </Card>
       </main>

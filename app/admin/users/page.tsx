@@ -11,28 +11,37 @@ import { Badge } from '@/components/ui/badge'
 import { Loader2, Search, ChevronRight, User } from 'lucide-react'
 import { useLocale } from '@/hooks/use-locale'
 import { cn } from '@/lib/utils'
-import { getAdminRoleLabel, type AdminUserRole } from '@/lib/admin-user-role'
+import { getAdminRoleLabel } from '@/lib/admin-user-role'
 
-function RoleBadge({ role, isEn }: { role: AdminUserRole; isEn: boolean }) {
-  if (role === 'member') return null
-  const label = getAdminRoleLabel(role, isEn)
-  if (role === 'superadmin') {
+function RoleBadges({ user, isEn }: { user: AdminUserRow; isEn: boolean }) {
+  if (user.is_superadmin || user.role === 'superadmin') {
     return (
-      <Badge className="rounded-lg font-bold bg-primary/15 text-primary border-0">{label}</Badge>
-    )
-  }
-  if (role === 'staff') {
-    return (
-      <Badge className="rounded-lg font-bold bg-amber-500/15 text-amber-700 border-0 dark:text-amber-400">
-        {label}
+      <Badge className="rounded-lg font-bold bg-primary/15 text-primary border-0">
+        {getAdminRoleLabel('superadmin', isEn)}
       </Badge>
     )
   }
-  return (
-    <Badge variant="secondary" className="rounded-lg font-bold">
-      {label}
-    </Badge>
-  )
+
+  const badges: React.ReactNode[] = []
+  if (user.is_admin) {
+    badges.push(
+      <Badge key="admin" variant="secondary" className="rounded-lg font-bold">
+        {getAdminRoleLabel('admin', isEn)}
+      </Badge>
+    )
+  }
+  if (user.is_staff) {
+    badges.push(
+      <Badge
+        key="staff"
+        className="rounded-lg font-bold bg-amber-500/15 text-amber-700 border-0 dark:text-amber-400"
+      >
+        {getAdminRoleLabel('staff', isEn)}
+      </Badge>
+    )
+  }
+  if (badges.length === 0) return null
+  return <>{badges}</>
 }
 
 function UsersListContent() {
@@ -120,7 +129,7 @@ function UsersListContent() {
                       <p className="font-black text-foreground truncate">
                         {u.name || (isEn ? 'Unnamed' : '이름 없음')}
                       </p>
-                      <RoleBadge role={u.role ?? 'member'} isEn={isEn} />
+                      <RoleBadges user={u} isEn={isEn} />
                       {u.onboarding_completed ? (
                         <Badge className="rounded-lg font-bold">{isEn ? 'Onboarded' : '온보딩 완료'}</Badge>
                       ) : (

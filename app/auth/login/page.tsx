@@ -48,13 +48,12 @@ function LoginPageContent() {
         
         if (userData?.onboarding_completed) {
           router.push(nextPath)
+        } else if (nextPath.startsWith('/admin')) {
+          router.push(nextPath)
         } else {
-          const isApply = nextPath.includes('/apply')
-          if (isApply) {
-            router.push(nextPath)
-          } else {
-            router.push('/auth/onboarding')
-          }
+          router.push(
+            `/auth/onboarding?next=${encodeURIComponent(nextPath)}`
+          )
         }
       }
     }

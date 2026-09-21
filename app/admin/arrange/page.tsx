@@ -11,7 +11,6 @@ import {
   Loader2,
   Users,
   LayoutGrid,
-  Bell,
   RotateCcw,
   UserPlus,
   AlertTriangle,
@@ -633,8 +632,6 @@ export default function AdminArrangePage() {
   const [deletingParticipantId, setDeletingParticipantId] = useState<string | null>(null)
   const [debugLogs, setDebugLogs] = useState<string[]>([])
   const [showDebugLogs, setShowDebugLogs] = useState(false)
-  const [notifyingRound, setNotifyingRound] = useState<number | null>(null)
-
   formQuestionsRef.current = formQuestions
   participantsRef.current = participants
   roundsRef.current = rounds
@@ -1210,82 +1207,6 @@ export default function AdminArrangePage() {
     }
   }
 
-  const handleNotifyParticipants = useCallback(
-    async (roundNum: number) => {
-      const sessionForNotify = session
-      if (!sessionForNotify?.id) return
-
-      const roundData = roundsRef.current.find((r) => r.round === roundNum)
-      if (!roundData || roundData.assignments.length === 0) {
-        toast.error(`${roundNum}라운드에 배정된 참가자가 없습니다.`)
-        return
-      }
-
-      await runRoundPersist(roundNum)
-
-      const roundAfter = roundsRef.current.find((r) => r.round === roundNum) ?? roundData
-      setNotifyingRound(roundNum)
-      try {
-        const res = await fetch('/api/admin/notify-seating-round', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            postingId: sessionForNotify.id,
-            sessionDate: todayYYYYMMDDSeoul(),
-            round: roundNum,
-            tableLanguages: roundAfter.tableLanguages || {},
-            assignments: roundAfter.assignments,
-            participants: participantsRef.current.filter((p) => p.checked_in_at).map((p) => ({
-              id: p.id,
-              name: p.name,
-              nationality: String(p.nationality),
-              gender: String(p.gender),
-              language: p.language,
-            })),
-            eventTitle: sessionForNotify.title || 'LangBuddy',
-          }),
-        })
-        const j = (await res.json().catch(() => ({}))) as {
-          sent?: { kakao?: number; email?: number; skipped?: number }
-          errors?: string[]
-          message?: string
-          debug?: {
-            summary?: Record<string, unknown>
-            steps?: string[]
-            recipients?: unknown[]
-          }
-        }
-        if (!res.ok) {
-          console.error('[seating-notify] HTTP error', res.status, j.debug ?? j)
-          toast.error(`참가자 알림 실패 (${res.status}): ${j.message || 'see console'}`)
-          return
-        }
-        if (j.debug && typeof console !== 'undefined') {
-          console.groupCollapsed('[seating-notify] debug')
-          console.log('summary', j.debug.summary)
-          console.log('steps', j.debug.steps)
-          if (j.debug.recipients?.length) console.table(j.debug.recipients)
-          if (j.errors?.length) console.warn('errors', j.errors)
-          console.groupEnd()
-        }
-        const s = j.sent
-        toast.success(
-          `${roundNum}라운드 알림 완료 — 카카오 ${s?.kakao ?? 0} · 이메일 ${s?.email ?? 0} · 건너뜀 ${s?.skipped ?? 0}`
-        )
-        if (j.errors?.length) {
-          toast.info(`알림 일부 오류: ${j.errors.slice(0, 4).join(' · ')}`, {
-            duration: 12000,
-          })
-        }
-      } catch {
-        toast.error('참가자 알림 요청 중 오류')
-      } finally {
-        setNotifyingRound(null)
-      }
-    },
-    [runRoundPersist, session]
-  )
-
   // --- DnD Handlers ---
 
   const onDragStart = (event: DragStartEvent) => {
@@ -1650,23 +1571,6 @@ export default function AdminArrangePage() {
             >
               <Download className="w-4 h-4" />
               CSV 내보내기
-            </Button>
-            <Button
-              type="button"
-              variant="default"
-              className="rounded-xl font-black gap-2"
-              disabled={
-                notifyingRound !== null ||
-                (rounds.find((r) => r.round === currentRound)?.assignments.length ?? 0) === 0
-              }
-              onClick={() => void handleNotifyParticipants(currentRound)}
-            >
-              {notifyingRound === currentRound ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Bell className="w-4 h-4" />
-              )}
-              참가자 알림
             </Button>
             {seatingSyncing ? (
               <span className="text-xs font-bold text-muted-foreground self-center px-1">
