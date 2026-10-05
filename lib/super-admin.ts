@@ -3,6 +3,7 @@ export const SUPER_ADMIN_EMAILS = [
   'pomato5959@gmail.com',
   'bora5242@gmail.com',
   'skyhappyjun68@gmail.com',
+  'erantra50@naver.com',
 ] as const
 
 export function isSuperAdminEmail(email: string | null | undefined): boolean {

@@ -41,8 +41,20 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 }
 
 const DRINK_ALIASES: Record<string, string> = {
+  아이스티: '아이스티',
+  'iced tea': '아이스티',
+  '초코라떼(아이스만)': '초코라떼(아이스만)',
+  '초코라떼': '초코라떼(아이스만)',
+  'chocolate latte (iced only)': '초코라떼(아이스만)',
+  'chocolate latte': '초코라떼(아이스만)',
+  아아: '아아',
+  'iced americano': '아아',
   아메리카노: '아메리카노',
   americano: '아메리카노',
+  홍차: '홍차',
+  'black tea': '홍차',
+  캐모마일: '캐모마일',
+  chamomile: '캐모마일',
   라떼: '라떼',
   latte: '라떼',
   차: '차',

@@ -276,7 +276,7 @@ export default function ApplicationFormPage() {
         .select('id')
         .eq('user_id', user.id)
         .eq('form_id', form.id)
-        .eq('answers->_event_date', sessionEventDate)
+        .eq('answers->>_event_date', sessionEventDate)
         .limit(1)
 
       if (cancelled) return
@@ -833,7 +833,7 @@ export default function ApplicationFormPage() {
         .select('id')
         .eq('user_id', user.id)
         .eq('form_id', submitFormId)
-        .eq('answers->_event_date', finalEventDate)
+        .eq('answers->>_event_date', finalEventDate)
         .limit(1)
       if (dupErr) {
         console.error('Duplicate check before submit:', dupErr)

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase'
 import type { FormData as FormBuilderData } from '@/components/admin/form-builder'
 import { buildAutoRecurringFormTitles } from '@/lib/session-event-date'
+import { DRINK_OPTIONS_EN, DRINK_OPTIONS_KO } from '@/lib/drink-options'
 
 export async function fetchFormBuilderData(formId: string): Promise<FormBuilderData | null> {
   const supabase = createClient()
@@ -94,8 +95,8 @@ export function buildDefaultLanguageFormData(dayKo: string): FormBuilderData {
         question_text_en: 'Preferred Drink',
         question_type: 'select',
         is_required: false,
-        options: ['아메리카노', '라떼', '차', '기타'],
-        options_en: ['Americano', 'Latte', 'Tea', 'Other'],
+        options: [...DRINK_OPTIONS_KO],
+        options_en: [...DRINK_OPTIONS_EN],
         is_new: true,
         system_key: 'drink',
       },

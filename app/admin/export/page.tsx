@@ -261,7 +261,7 @@ export default function ExportPosterPage() {
               <h2 className="text-xl font-black text-center">{locale === 'en' ? 'English Version' : '영어 버전 프리뷰'}</h2>
               <div className="flex justify-center">
                 <div ref={enPosterRef}>
-                  <PosterTemplate lang="en" />
+                  <PosterTemplate lang="ja" />
                 </div>
               </div>
             </div>

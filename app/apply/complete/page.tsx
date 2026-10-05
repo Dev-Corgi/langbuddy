@@ -21,6 +21,9 @@ import {
   isBankTransferMethod,
 } from "@/lib/supported-payment-methods"
 import { buildOnboardingUrl, isOnboardingCompleted } from '@/lib/onboarding-gate'
+import { fetchPastParticipationSessions } from '@/lib/previous-participation-history'
+import type { PastParticipationSession } from '@/lib/previous-participation-history'
+import { PastParticipationReportDialog } from '@/components/apply/past-participation-report-dialog'
 
 export default function ApplicationCompletePage() {
   const searchParams = useSearchParams()
@@ -33,6 +36,8 @@ export default function ApplicationCompletePage() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [questions, setQuestions] = useState<CoreFormQuestion[]>([])
+  const [pastSessions, setPastSessions] = useState<PastParticipationSession[]>([])
+  const [showReportPrompt, setShowReportPrompt] = useState(false)
   const qrRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -96,6 +101,13 @@ export default function ApplicationCompletePage() {
       }
 
       setData({ ...response, _recurring_kind: recurringKind })
+
+      const sessions = await fetchPastParticipationSessions(supabase, authUser.id, {
+        locale: locale === 'en' ? 'en' : 'ko',
+      })
+      setPastSessions(sessions)
+      setShowReportPrompt(sessions.length > 0)
+
       if (response.form_id) {
         const { data: qData } = await supabase
           .from('form_questions')
@@ -110,7 +122,7 @@ export default function ApplicationCompletePage() {
     }
 
     fetchData()
-  }, [id, supabase, router])
+  }, [id, supabase, router, locale])
 
   const handleDownloadQR = () => {
     const svg = qrRef.current?.querySelector('svg')
@@ -315,6 +327,13 @@ export default function ApplicationCompletePage() {
           </Button>
         </div>
       </main>
+
+      <PastParticipationReportDialog
+        open={showReportPrompt}
+        onOpenChange={setShowReportPrompt}
+        sessions={pastSessions}
+        isEn={locale === 'en'}
+      />
     </div>
   )
 }

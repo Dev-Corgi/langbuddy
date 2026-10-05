@@ -21,6 +21,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { useLocale } from '@/hooks/use-locale'
+import { canAccessStaffOps, isSuperAdminUser } from '@/lib/admin-access'
+import { LanguageApplicationStatusTable } from '@/components/admin/language-application-status-table'
 
 export default function AdminDashboardPage() {
   const locale = useLocale()
@@ -32,6 +34,7 @@ export default function AdminDashboardPage() {
   const [formCount, setFormCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const [canViewStaffOps, setCanViewStaffOps] = useState(false)
 
   const [todaySession, setTodaySession] = useState<any>(null)
   const [checkinCount, setCheckinCount] = useState(0)
@@ -47,15 +50,17 @@ export default function AdminDashboardPage() {
       if (user) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('is_superadmin')
+          .select('is_superadmin, is_staff')
           .eq('id', user.id)
           .single()
         userProfile = profile
-        setIsSuperAdmin(!!profile?.is_superadmin)
+        const superAdmin = isSuperAdminUser(user.email, profile)
+        setIsSuperAdmin(superAdmin)
+        setCanViewStaffOps(canAccessStaffOps(user.email, profile))
       }
       
       // Fetch today's session for seating system
-      if (userProfile?.is_superadmin) {
+      if (isSuperAdminUser(user?.email, userProfile)) {
         const todayStr = new Date().toISOString().split('T')[0]
         const { data: sessions } = await supabase
           .from('postings')
@@ -88,11 +93,11 @@ export default function AdminDashboardPage() {
         .from('postings')
         .select('*', { count: 'exact', head: true })
 
-      if (!userProfile?.is_superadmin && user) {
+      if (!isSuperAdminUser(user?.email, userProfile) && user) {
         statsQuery = statsQuery.eq('created_by', user.id)
       }
 
-      const { count: languageCount } = await (userProfile?.is_superadmin 
+      const { count: languageCount } = await (isSuperAdminUser(user?.email, userProfile)
         ? supabase.from('postings').select('*', { count: 'exact', head: true }).eq('category', '언어교환')
         : Promise.resolve({ count: 0 }))
 
@@ -116,7 +121,7 @@ export default function AdminDashboardPage() {
         .order('created_at', { ascending: false })
         .limit(3)
       
-      if (!userProfile?.is_superadmin && user) {
+      if (!isSuperAdminUser(user?.email, userProfile) && user) {
         recentQuery = recentQuery.eq('created_by', user.id)
       }
 
@@ -126,7 +131,7 @@ export default function AdminDashboardPage() {
 
       const statsItems = []
       
-      if (userProfile?.is_superadmin) {
+      if (isSuperAdminUser(user?.email, userProfile)) {
         statsItems.push(
           { 
             label: locale === 'en' ? 'Language' : '언어교환', 
@@ -238,6 +243,13 @@ export default function AdminDashboardPage() {
             </Link>
           </Button>
         </div>
+
+        {canViewStaffOps ? (
+          <LanguageApplicationStatusTable
+            isEn={locale === 'en'}
+            canOpenLanguageAdmin={isSuperAdmin}
+          />
+        ) : null}
 
         {/* Seating System Quick Access (SuperAdmin Only) */}
         {isSuperAdmin && todaySession && (
