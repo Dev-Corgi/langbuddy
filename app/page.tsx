@@ -4,6 +4,7 @@ import { MainCarousel } from "./_components/main-carousel";
 import { PostingCarousel } from "./_components/posting-carousel";
 import { PostingList } from "./_components/posting-list";
 import { LangBuddyNews } from "./_components/langbuddy-news";
+import { EarlyApplicationRewardBanner } from "@/components/early-application-reward-banner";
 
 export default function Home() {
   return (
@@ -18,6 +19,7 @@ export default function Home() {
       <MainNav activePrimaryLabel="Home" />
       <main className="pt-5 pb-5 md:pt-0 md:pb-10 relative z-10">
         <MainCarousel />
+        <EarlyApplicationRewardBanner />
         
         <div className="mx-auto w-full max-w-[1600px] space-y-10 pb-5 md:space-y-32">
           <div className="px-4 xl:px-40 bg-muted/30 py-15">

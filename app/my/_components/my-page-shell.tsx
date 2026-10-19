@@ -11,6 +11,7 @@ import { ScheduleCalendarCard } from './schedule-calendar-card'
 import { ApplicationsListCard } from './applications-list-card'
 import { SeatingHistoryCard } from './seating-history-card'
 import { MyPageLoadingSkeleton } from './my-page-loading-skeleton'
+import { RewardWalletCard } from './reward-wallet-card'
 
 export function MyPageShell() {
   const locale = useLocale()
@@ -18,8 +19,18 @@ export function MyPageShell() {
   const t = i18n[locale].myPage
   const isEn = locale === 'en'
 
-  const { ready, user, userRow, showAuth, applications, seatingSessions, markedDates, reload } =
-    useMyPageData(isEn)
+  const {
+    ready,
+    user,
+    userRow,
+    showAuth,
+    applications,
+    seatingSessions,
+    markedDates,
+    rewardAccount,
+    rewardEntries,
+    reload,
+  } = useMyPageData(isEn)
 
   const greetingName = userRow?.name || user?.email?.split('@')[0] || ''
 
@@ -45,6 +56,8 @@ export function MyPageShell() {
       <MainNav />
       <main className="mx-auto max-w-5xl space-y-8 px-4 py-8 md:px-6 md:py-12">
         <MyPageHeader title={t.title} greeting={t.greeting} displayName={greetingName} />
+
+        <RewardWalletCard account={rewardAccount} entries={rewardEntries} isEn={isEn} />
 
         <ScheduleCalendarCard
           title={t.calendarTitle}

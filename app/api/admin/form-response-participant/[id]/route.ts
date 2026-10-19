@@ -11,7 +11,7 @@ import {
 import { mergeParticipantFieldPatchIntoAnswers } from '@/lib/admin-participant-patch'
 import { uploadPaymentReceipt } from '@/lib/payment-receipt-upload'
 import {
-  isSupportedPaymentMethod,
+  isEditablePaymentMethod,
   type PaymentMethod,
 } from '@/lib/supported-payment-methods'
 import {
@@ -25,7 +25,7 @@ type RouteContext = { params: Promise<{ id: string }> }
 function parsePaymentMethod(body: Record<string, unknown>): PaymentMethod | undefined {
   if (body.paymentMethod === undefined) return undefined
   const raw = typeof body.paymentMethod === 'string' ? body.paymentMethod.trim() : ''
-  if (!isSupportedPaymentMethod(raw)) return undefined
+  if (!isEditablePaymentMethod(raw)) return undefined
   return raw
 }
 

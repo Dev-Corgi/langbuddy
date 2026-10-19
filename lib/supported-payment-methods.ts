@@ -6,7 +6,13 @@ export const PAYMENT_METHODS = [
   '스탭무료',
 ] as const
 
-export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
+export type EditablePaymentMethod = (typeof PAYMENT_METHODS)[number]
+export type PaymentMethod = EditablePaymentMethod | '쿠폰사용'
+
+const SUPPORTED_PAYMENT_METHODS: readonly PaymentMethod[] = [
+  ...PAYMENT_METHODS,
+  '쿠폰사용',
+]
 
 /** 과거 응답(쿠폰 기능 폐지 이전)의 표시 호환용 — 신규 선택지에는 없음 */
 const LEGACY_DISPLAY_ONLY: Record<string, string> = {
@@ -25,9 +31,15 @@ const LEGACY_ALIASES: Record<string, PaymentMethod> = {
   테스트더미: '현장현금',
   스탭: '스탭무료',
   스탭무료: '스탭무료',
+  쿠폰사용: '쿠폰사용',
 }
 
 export function isSupportedPaymentMethod(value: string): value is PaymentMethod {
+  return (SUPPORTED_PAYMENT_METHODS as readonly string[]).includes(value)
+}
+
+/** 운영자 화면에서 직접 바꿀 수 있는 결제 수단. 쿠폰 차감은 신청 트리거만 수행한다. */
+export function isEditablePaymentMethod(value: string): value is EditablePaymentMethod {
   return (PAYMENT_METHODS as readonly string[]).includes(value)
 }
 
@@ -35,7 +47,7 @@ export function isSupportedPaymentMethod(value: string): value is PaymentMethod 
 export function parseOptionalPaymentMethod(raw: unknown): PaymentMethod | undefined {
   if (raw === undefined) return undefined
   const trimmed = typeof raw === 'string' ? raw.trim() : ''
-  if (!isSupportedPaymentMethod(trimmed)) return undefined
+  if (!isEditablePaymentMethod(trimmed)) return undefined
   return trimmed
 }
 
@@ -80,15 +92,17 @@ export function formatPaymentMethodLabel(
     return '계좌이체'
   }
   if (method === '스탭무료') return '스탭'
+  if (method === '쿠폰사용') return '무료 참가권'
   return method
 }
 
 /** 신청 폼 결제 선택 UI 값 → DB canonical */
-export type ApplyPaymentChoice = 'bank' | 'on_site' | ''
+export type ApplyPaymentChoice = 'bank' | 'on_site' | 'coupon' | ''
 
 export function paymentMethodFromApplyChoice(
   choice: ApplyPaymentChoice
 ): PaymentMethod {
   if (choice === 'bank') return '계좌이체'
+  if (choice === 'coupon') return '쿠폰사용'
   return '현장현금'
 }

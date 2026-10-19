@@ -19,7 +19,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select"
-import { ChevronLeft, Loader2, X, MapPin, Wallet, Upload, Info } from "lucide-react"
+import { ChevronLeft, Clock3, Gift, Loader2, X, MapPin, Wallet, Upload, Info, TicketCheck } from "lucide-react"
 import { useLocale } from "@/hooks/use-locale"
 import { i18n } from "@/lib/i18n"
 import { cn, extractParticipantInfoFromAnswers } from "@/lib/utils"
@@ -57,6 +57,13 @@ import {
   saveReceiptDraft,
 } from '@/lib/apply-payment-draft'
 import { buildOnboardingUrl, isOnboardingCompleted } from '@/lib/onboarding-gate'
+import { RewardStampRow } from '@/components/rewards/reward-stamp-row'
+import {
+  EMPTY_REWARD_ACCOUNT,
+  formatRewardDeadline,
+  getEarlyRewardTiming,
+  type RewardAccount,
+} from '@/lib/early-application-rewards'
 
 /** 디버깅용 임시 기능 — 스탭 무료 신청. 재활성화 시 true로 변경 */
 const STAFF_FREE_APPLY_ENABLED = true
@@ -118,7 +125,7 @@ export default function ApplicationFormPage() {
   const [availableLangs, setAvailableLangs] = useState<string[]>([])
   const [selectedLang, setSelectedLang] = useState<string>("")
   /** 서울 주차·21시 마감 반영을 위해 분 단위로 재계산 */
-  const [availabilityClock, setAvailabilityClock] = useState(0)
+  const [availabilityClock, setAvailabilityClock] = useState(() => Date.now())
   const [user, setUser] = useState<any>(null)
   const [userData, setUserData] = useState<any>(null)
   const [authChecked, setAuthChecked] = useState(false)
@@ -126,6 +133,7 @@ export default function ApplicationFormPage() {
   const [showApplyAuthGate, setShowApplyAuthGate] = useState(false)
   /** 스탭(또는 슈퍼 관리자): 언어교환 신청 시 결제 없이 바로 무료 신청 */
   const [staffFreeApply, setStaffFreeApply] = useState(false)
+  const [rewardAccount, setRewardAccount] = useState<RewardAccount>(EMPTY_REWARD_ACCOUNT)
   /** 반복 모임: 이번 회차(user+form+_event_date) 기존 신청 여부 */
   const [duplicateApplicationPending, setDuplicateApplicationPending] = useState(false)
   const [hasDuplicateApplication, setHasDuplicateApplication] = useState(false)
@@ -204,7 +212,7 @@ export default function ApplicationFormPage() {
   useEffect(() => {
     if (posting?.category !== '언어교환') return
     if (!posting?.is_recurring) return
-    const t = setInterval(() => setAvailabilityClock((c) => c + 1), 60_000)
+    const t = setInterval(() => setAvailabilityClock(Date.now()), 60_000)
     return () => clearInterval(t)
   }, [posting?.category, posting?.is_recurring])
 
@@ -234,6 +242,13 @@ export default function ApplicationFormPage() {
       return ''
     }
   }, [selectedDay, posting?.category, posting?.is_recurring])
+
+  const earlyRewardTiming = useMemo(() => {
+    if (!sessionEventDate || !selectedDay) return null
+    const schedule = schedulesByDay[selectedDay]
+    if (!schedule?.time) return null
+    return getEarlyRewardTiming(sessionEventDate, schedule.time, new Date(availabilityClock))
+  }, [sessionEventDate, selectedDay, schedulesByDay, availabilityClock])
 
   /** DB의 forms.title은 저장 시점에 고정될 수 있음 — 표시는 매주 서울 주차 기준으로 계산 */
   const recurringAutoFormTitles = useMemo(() => {
@@ -337,6 +352,14 @@ export default function ApplicationFormPage() {
         setUserData(userInfo)
         currentUserInfo = userInfo
 
+        const { data: rewardRow } = await supabase
+          .from('le_reward_accounts')
+          .select('stamp_count, coupon_count, updated_at')
+          .eq('user_id', authUser.id)
+          .maybeSingle()
+        if (cancelled) return
+        setRewardAccount((rewardRow as RewardAccount | null) || EMPTY_REWARD_ACCOUNT)
+
         if (STAFF_FREE_APPLY_ENABLED) {
           const { data: profileFlags } = await supabase
             .from('profiles')
@@ -350,6 +373,7 @@ export default function ApplicationFormPage() {
         }
       } else {
         setStaffFreeApply(false)
+        setRewardAccount(EMPTY_REWARD_ACCOUNT)
       }
       
       // 1. Fetch posting to get form_id
@@ -916,7 +940,7 @@ export default function ApplicationFormPage() {
       form_id: submitFormId,
       qr_code: qrCode,
       payment_receipt_url: paymentReceiptUrl,
-      payment_status: paymentMethod === 'bank' ? 'pending' : null,
+      payment_status: paymentMethod === 'bank' ? 'pending' : paymentMethod === 'coupon' ? 'confirmed' : null,
       answers: {
         ...canonicalAnswers,
         ...(participantInfo.name ? { name: participantInfo.name, _participant_name: participantInfo.name } : {}),
@@ -926,6 +950,7 @@ export default function ApplicationFormPage() {
         _selected_day: selectedDay,
         _event_date: finalEventDate,
         _payment_method: canonicalPaymentMethod,
+        ...(paymentMethod === 'coupon' ? { _le_free_coupon: true } : {}),
       },
     }
     if (user?.id) {
@@ -949,6 +974,14 @@ export default function ApplicationFormPage() {
           locale === 'en'
             ? 'You already have an application for this session. If this is unexpected, please contact the organizer.'
             : '이번 회차에 이미 신청 내역이 있습니다. 문제가 있다면 운영진에게 문의해 주세요.'
+        )
+      } else if (error.message.includes('no_coupon_available')) {
+        setRewardAccount((prev) => ({ ...prev, coupon_count: 0 }))
+        setPaymentMethod('')
+        alert(
+          locale === 'en'
+            ? 'That free pass is no longer available. Please choose another payment method.'
+            : '사용 가능한 무료 참가권이 없습니다. 다른 결제 방식을 선택해 주세요.'
         )
       } else {
         alert(error.message)
@@ -1523,6 +1556,40 @@ export default function ApplicationFormPage() {
               )
             })}
 
+            {!isStaffFreeApply && isRecurringApply && earlyRewardTiming ? (
+              <div className={cn(
+                'rounded-[24px] border p-5',
+                earlyRewardTiming.eligible
+                  ? 'border-primary/20 bg-primary/5'
+                  : 'border-border bg-muted/40'
+              )}>
+                <div className="flex items-start gap-3">
+                  <div className={cn(
+                    'flex size-10 shrink-0 items-center justify-center rounded-2xl',
+                    earlyRewardTiming.eligible ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                  )}>
+                    {earlyRewardTiming.eligible ? <Gift className="size-5" /> : <Clock3 className="size-5" />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-foreground">
+                      {earlyRewardTiming.eligible
+                        ? (locale === 'en' ? 'This session qualifies for an early-application stamp' : '이 모임은 미리 신청 도장 적립 대상이에요')
+                        : (locale === 'en' ? 'The early-application reward deadline has passed' : '미리 신청 혜택 마감 시간이 지났어요')}
+                    </p>
+                    <p className="mt-1 text-xs font-medium leading-relaxed text-muted-foreground">
+                      {earlyRewardTiming.eligible
+                        ? (locale === 'en'
+                            ? 'Complete your application now and check in at the venue to earn one stamp.'
+                            : '지금 신청하고 현장에서 체크인하면 도장 1개가 자동으로 적립돼요.')
+                        : (locale === 'en'
+                            ? `The reward deadline was ${formatRewardDeadline(earlyRewardTiming.deadlineAt, 'en')}. You can still apply normally.`
+                            : `혜택 마감은 ${formatRewardDeadline(earlyRewardTiming.deadlineAt, 'ko')}이었어요. 일반 신청은 계속할 수 있어요.`)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {isStaffFreeApply && (
               <p className="text-center text-sm font-black text-emerald-600">
                 {locale === 'en'
@@ -1574,7 +1641,9 @@ export default function ApplicationFormPage() {
               </CardTitle>
               <div className="mt-2 space-y-1">
                 <div className="text-xl font-black text-primary">
-                  {displayCost || (locale === 'en' ? 'Free' : '무료')}
+                  {paymentMethod === 'coupon'
+                    ? (locale === 'en' ? 'Free' : '무료')
+                    : displayCost || (locale === 'en' ? 'Free' : '무료')}
                 </div>
               </div>
               <CardDescription className="text-muted-foreground font-medium pt-2">
@@ -1584,7 +1653,52 @@ export default function ApplicationFormPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-8 pt-4 space-y-6 touch-pan-y">
+              <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Gift className="size-4 text-primary" />
+                    <span className="text-sm font-black text-foreground">
+                      {locale === 'en' ? `My stamps ${rewardAccount.stamp_count}/10` : `내 도장 ${rewardAccount.stamp_count}/10`}
+                    </span>
+                  </div>
+                  <span className="text-xs font-black text-primary">
+                    {locale === 'en'
+                      ? `${rewardAccount.coupon_count} free pass${rewardAccount.coupon_count === 1 ? '' : 'es'}`
+                      : `무료 참가권 ${rewardAccount.coupon_count}장`}
+                  </span>
+                </div>
+                <RewardStampRow count={rewardAccount.stamp_count} compact className="mt-3" />
+                {rewardAccount.coupon_count === 0 ? (
+                  <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+                    {locale === 'en'
+                      ? `${10 - rewardAccount.stamp_count} more stamps until a free pass.`
+                      : `${10 - rewardAccount.stamp_count}개 더 모으면 무료 참가권이 발급돼요.`}
+                  </p>
+                ) : null}
+              </div>
+
               <div className="grid grid-cols-1 gap-3">
+                <button
+                  type="button"
+                  disabled={rewardAccount.coupon_count <= 0}
+                  onClick={() => setPaymentMethod('coupon')}
+                  className={cn(
+                    'flex flex-col items-center justify-center gap-1.5 rounded-2xl border-2 p-6 transition-all',
+                    paymentMethod === 'coupon'
+                      ? 'scale-[1.02] border-emerald-600 bg-emerald-600 text-white shadow-lg'
+                      : rewardAccount.coupon_count > 0
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-400'
+                        : 'cursor-not-allowed border-border bg-muted/50 text-muted-foreground opacity-60'
+                  )}
+                >
+                  <TicketCheck className="size-6" />
+                  <span className="text-lg font-black">{locale === 'en' ? 'Use a free pass' : '무료 참가권 사용'}</span>
+                  <span className="text-xs font-bold">
+                    {rewardAccount.coupon_count > 0
+                      ? (locale === 'en' ? 'No payment required' : '결제 없이 바로 신청')
+                      : (locale === 'en' ? 'No free passes available' : '사용 가능한 참가권이 없어요')}
+                  </span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -1711,6 +1825,16 @@ export default function ApplicationFormPage() {
                   </p>
                 </div>
               )}
+
+              {paymentMethod === 'coupon' ? (
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
+                  <p className="text-sm font-bold leading-relaxed text-emerald-700">
+                    {locale === 'en'
+                      ? 'One free pass will be used when this application is completed.'
+                      : '신청을 완료하면 무료 참가권 1장이 사용됩니다.'}
+                  </p>
+                </div>
+              ) : null}
 
               <div className="flex gap-3 pt-2">
                 <Button 

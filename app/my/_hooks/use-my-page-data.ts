@@ -9,6 +9,11 @@ import {
   buildRecurringSessionDisplayTitles,
 } from '@/lib/session-event-date'
 import type { AppCategory, ApplicationRow, SeatingMemory, SeatingSession } from '../_lib/types'
+import {
+  EMPTY_REWARD_ACCOUNT,
+  type RewardAccount,
+  type RewardLedgerEntry,
+} from '@/lib/early-application-rewards'
 
 export function useMyPageData(isEn: boolean) {
   const supabase = createClient()
@@ -23,6 +28,8 @@ export function useMyPageData(isEn: boolean) {
   const [seatingHistory, setSeatingHistory] = useState<SeatingMemory[]>([])
   const [seatingSessions, setSeatingSessions] = useState<SeatingSession[]>([])
   const [markedDates, setMarkedDates] = useState<Set<string>>(new Set())
+  const [rewardAccount, setRewardAccount] = useState<RewardAccount>(EMPTY_REWARD_ACCOUNT)
+  const [rewardEntries, setRewardEntries] = useState<RewardLedgerEntry[]>([])
 
   const load = useCallback(async () => {
     setReady(false)
@@ -33,21 +40,34 @@ export function useMyPageData(isEn: boolean) {
     if (!u) {
       setShowAuth(true)
       setUserRow(null)
-    setApplications([])
-    setSeatingHistory([])
-    setSeatingSessions([])
-    setMarkedDates(new Set())
+      setApplications([])
+      setSeatingHistory([])
+      setSeatingSessions([])
+      setMarkedDates(new Set())
+      setRewardAccount(EMPTY_REWARD_ACCOUNT)
+      setRewardEntries([])
       setReady(true)
       return
     }
     setShowAuth(false)
 
-    const { data: profile } = await supabase
-      .from('users')
-      .select('name')
-      .eq('id', u.id)
-      .single()
+    const [{ data: profile }, { data: account }, { data: ledger }] = await Promise.all([
+      supabase.from('users').select('name').eq('id', u.id).single(),
+      supabase
+        .from('le_reward_accounts')
+        .select('stamp_count, coupon_count, updated_at')
+        .eq('user_id', u.id)
+        .maybeSingle(),
+      supabase
+        .from('le_reward_ledger')
+        .select('id, entry_type, stamp_delta, coupon_delta, stamp_balance, coupon_balance, session_date, created_at')
+        .eq('user_id', u.id)
+        .order('created_at', { ascending: false })
+        .limit(5),
+    ])
     setUserRow(profile || {})
+    setRewardAccount((account as RewardAccount | null) || EMPTY_REWARD_ACCOUNT)
+    setRewardEntries((ledger as RewardLedgerEntry[] | null) || [])
 
     const [{ data: leSched }, { data: postingRows }] = await Promise.all([
       supabase.from('language_exchange_schedules').select('form_id, posting_id').eq('is_active', true),
@@ -309,6 +329,8 @@ export function useMyPageData(isEn: boolean) {
     seatingHistory,
     seatingSessions,
     markedDates,
+    rewardAccount,
+    rewardEntries,
     reload: load,
   }
 }

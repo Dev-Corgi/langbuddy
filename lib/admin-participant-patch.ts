@@ -5,7 +5,7 @@ import {
 } from '@/lib/form-answer-canonical'
 import {
   defaultPaymentStatusForMethod,
-  isSupportedPaymentMethod,
+  isEditablePaymentMethod,
   type PaymentMethod,
 } from '@/lib/supported-payment-methods'
 
@@ -64,7 +64,7 @@ export function mergeParticipantFieldPatchIntoAnswers(
 
   let payment_status: string | null = options?.previousPaymentStatus ?? null
 
-  if (fields.paymentMethod && isSupportedPaymentMethod(fields.paymentMethod)) {
+  if (fields.paymentMethod && isEditablePaymentMethod(fields.paymentMethod)) {
     next._payment_method = fields.paymentMethod
     const hasReceipt = Boolean(options?.hasReceipt)
     if (fields.paymentMethod === '계좌이체') {

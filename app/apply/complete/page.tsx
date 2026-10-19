@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase"
 import { MainNav } from "@/app/_components/main-nav"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { CheckCircle2, Download, Loader2, QrCode } from "lucide-react"
+import { CheckCircle2, Download, Gift, Loader2, QrCode } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { useLocale } from "@/hooks/use-locale"
 import { i18n } from "@/lib/i18n"
@@ -247,6 +247,27 @@ export default function ApplicationCompletePage() {
                     ? 'Please complete the transfer below. Admin confirmation is for record-keeping only; your QR is available on this page.'
                     : '아래 계좌로 입금해 주세요. 관리자 확인은 입금 기록용이며, QR은 이 페이지에서 바로 확인하실 수 있습니다.'}
                 </p>
+              </div>
+            ) : null}
+            {data.early_reward_eligible ? (
+              <div className="p-6 rounded-3xl bg-violet-50 border-2 border-violet-200 text-center space-y-2">
+                <Gift className="w-7 h-7 text-violet-600 mx-auto" />
+                <p className="text-sm font-black text-violet-950">
+                  {data.early_reward_credited_at
+                    ? locale === 'en'
+                      ? 'Early application stamp earned'
+                      : '미리 신청 도장이 적립됐어요'
+                    : locale === 'en'
+                      ? '1 early application stamp is pending'
+                      : '미리 신청 도장 1개가 적립 예정이에요'}
+                </p>
+                {!data.early_reward_credited_at ? (
+                  <p className="text-xs font-bold text-violet-700 leading-relaxed">
+                    {locale === 'en'
+                      ? 'It will be added automatically when you check in at the venue.'
+                      : '행사 당일 현장에서 체크인하면 자동으로 적립됩니다.'}
+                  </p>
+                ) : null}
               </div>
             ) : null}
             <div

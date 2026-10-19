@@ -753,6 +753,7 @@ export default function AdminArrangePage() {
     let bank = 0
     let cash = 0
     let staff = 0
+    let coupon = 0
 
     for (const p of participants) {
       if (p.nationality === '한국인') korean += 1
@@ -764,10 +765,11 @@ export default function AdminArrangePage() {
         const method = p.paymentMethod
         if (method === '계좌이체' || method === '현장계좌') bank += 1
         else if (method === '현장현금') cash += 1
+        else if (method === '쿠폰사용') coupon += 1
       }
     }
 
-    return { korean, foreigner, bank, cash, staff }
+    return { korean, foreigner, bank, cash, staff, coupon }
   }, [participants])
 
   const unassignedForCurrentRound = useMemo(() => {
@@ -1897,7 +1899,7 @@ export default function AdminArrangePage() {
 
                 <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
                   <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wide mb-3">결제 · 역할</p>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <div className="rounded-xl bg-card px-2 py-2.5 text-center shadow-sm">
                       <p className="text-xs font-bold text-muted-foreground mb-0.5">계좌</p>
                       <p className="text-xl font-black tabular-nums">{participantStats.bank}</p>
@@ -1909,6 +1911,10 @@ export default function AdminArrangePage() {
                     <div className="rounded-xl bg-card px-2 py-2.5 text-center shadow-sm">
                       <p className="text-xs font-bold text-muted-foreground mb-0.5">스태프</p>
                       <p className="text-xl font-black tabular-nums">{participantStats.staff}</p>
+                    </div>
+                    <div className="rounded-xl bg-card px-2 py-2.5 text-center shadow-sm">
+                      <p className="text-xs font-bold text-muted-foreground mb-0.5">무료권</p>
+                      <p className="text-xl font-black tabular-nums">{participantStats.coupon}</p>
                     </div>
                   </div>
                 </div>
