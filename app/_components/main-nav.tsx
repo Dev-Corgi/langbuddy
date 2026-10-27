@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils"
 import { i18n } from "@/lib/i18n"
 import { useLocale } from "@/hooks/use-locale"
 import { isDebugPath, prefixDebugHref, stripDebugPrefix } from "@/lib/debug/debug-base-path"
+import { SiteBrand } from "@/components/site-brand"
+import { siteConfig } from "@/lib/site-config"
 
 const PRIMARY_LINKS = (t: any) => [
   { href: "/", label: t.nav.home },
@@ -96,14 +98,14 @@ function MainNavContent({ activePrimaryLabel, user, userData }: { activePrimaryL
           <div className="flex items-center h-[64px] gap-6">
             {/* Logo */}
             <Link href={homeHref} className="shrink-0 transition-transform hover:scale-105 active:scale-95 flex items-center h-full">
-              <span className="text-[22px] font-black text-primary tracking-tighter leading-none">LangBuddy</span>
+              <SiteBrand className="text-[22px]" />
             </Link>
 
             {/* Slogan */}
             <div className="hidden lg:flex items-center gap-4 h-full">
               <div className="border-l border-border h-4" />
               <p className="text-[13px] font-bold text-muted-foreground tracking-tight whitespace-nowrap leading-none mt-0.5">
-                {locale === 'en' ? 'Making the World Your Neighborhood' : '글로벌친목 & 언어교환동아리'}
+                {locale === 'en' ? siteConfig.taglineEn : siteConfig.taglineKo}
               </p>
             </div>
 
@@ -201,7 +203,7 @@ function MainNavContent({ activePrimaryLabel, user, userData }: { activePrimaryL
         <div className="flex flex-col">
           <div className="flex items-center justify-between h-16 px-6 border-b border-border/50 bg-background/95 backdrop-blur-md">
             <Link href={homeHref} className="shrink-0 transition-transform active:scale-95 flex items-center h-full">
-              <span className="text-[20px] font-black text-primary tracking-tighter leading-none">LangBuddy</span>
+              <SiteBrand className="text-[20px]" />
             </Link>
             
             <div className="flex items-center gap-3">

@@ -1,5 +1,6 @@
 import { ensureValidKakaoAccessToken } from '@/lib/kakao-token-ensure'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { siteConfig } from '@/lib/site-config'
 
 const MEMO_SEND_URL = 'https://kapi.kakao.com/v2/api/talk/memo/default/send'
 
@@ -34,7 +35,7 @@ export async function sendSeatingTableKakaoMemo(opts: {
     },
     buttons: [
       {
-        title: 'LangBuddy 열기',
+        title: `${siteConfig.name} 열기`,
         link: {
           web_url: opts.linkUrl,
           mobile_web_url: opts.linkUrl,

@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer'
+import { siteConfig } from '@/lib/site-config'
 
 /** Gmail 앱 비밀번호가 서버에 설정되어 있으면 true */
 export function isGmailMailConfigured(): boolean {
@@ -11,7 +12,7 @@ function defaultMailFrom(): string {
   const u = process.env.GMAIL_USER!.trim()
   const custom = process.env.EMAIL_FROM?.trim()
   if (custom) return custom
-  return `LangBuddy <${u}>`
+  return `${siteConfig.name} <${u}>`
 }
 
 /**

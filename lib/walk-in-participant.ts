@@ -5,6 +5,7 @@ import {
 } from '@/lib/utils'
 import { normalizeLanguage, normalizeParticipantFields } from '@/lib/form-answer-canonical'
 import { normalizePaymentMethod, type PaymentMethod } from '@/lib/supported-payment-methods'
+import { siteConfig } from '@/lib/site-config'
 
 export const WALK_IN_SOURCE = 'admin_manual' as const
 
@@ -24,7 +25,7 @@ export async function createWalkInGuestUser(
 ): Promise<{ id: string } | { error: string }> {
   const id = crypto.randomUUID()
   const displayName = profile.name.trim() || 'Guest'
-  const email = `walkin-${id}@guests.langbuddy.local`
+  const email = `walkin-${id}@guests.${siteConfig.slug}.local`
 
   const { data: authData, error: authError } = await admin.auth.admin.createUser({
     id,

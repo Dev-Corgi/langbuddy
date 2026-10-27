@@ -5,6 +5,8 @@ import { Footer } from "./_components/footer";
 import { BottomNav } from "./_components/bottom-nav";
 import { Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
+import { siteConfig } from "@/lib/site-config";
+import type { CSSProperties } from "react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,8 +19,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LangBuddy - 글로벌 언어교환 커뮤니티",
-  description: "외국인 친구들과 함께 즐기는 언어교환, 번개 모임을 LangBuddy에서 만나보세요.",
+  title: `${siteConfig.name} - 글로벌 언어교환 커뮤니티`,
+  description: siteConfig.descriptionKo,
+  metadataBase: siteConfig.siteUrl ? new URL(siteConfig.siteUrl) : undefined,
 };
 
 export default function RootLayout({
@@ -27,7 +30,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html
+      lang="ko"
+      style={
+        siteConfig.primaryColor
+          ? ({ '--primary': siteConfig.primaryColor, '--ring': siteConfig.primaryColor } as CSSProperties)
+          : undefined
+      }
+    >
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden`}
       >

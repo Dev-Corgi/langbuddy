@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { toPng } from 'html-to-image'
 import download from 'downloadjs'
 import { useAdminAuth } from '@/hooks/use-admin-auth'
+import { siteConfig } from '@/lib/site-config'
 
 interface Event {
   id: string
@@ -69,11 +70,11 @@ export default function ExportPosterPage() {
       
       // Export Korean version
       const koDataUrl = await toPng(koPosterRef.current, { quality: 0.95, pixelRatio: 2 })
-      download(koDataUrl, `langbuddy-poster-ko-${today}.png`)
+      download(koDataUrl, `${siteConfig.slug}-poster-ko-${today}.png`)
 
       // Export English version
       const enDataUrl = await toPng(enPosterRef.current, { quality: 0.95, pixelRatio: 2 })
-      download(enDataUrl, `langbuddy-poster-en-${today}.png`)
+      download(enDataUrl, `${siteConfig.slug}-poster-en-${today}.png`)
     } catch (err) {
       console.error('Export failed:', err)
       alert('포스터 생성 중 오류가 발생했습니다.')
@@ -124,7 +125,7 @@ export default function ExportPosterPage() {
       >
         {/* Header */}
         <div className="flex justify-between items-baseline border-b-2 border-[#a31a1a] pb-3 mb-8">
-          <div className="text-2xl font-black text-[#a31a1a]">{"LANGBUDDY"}</div>
+          <div className="text-2xl font-black text-[#a31a1a]">{siteConfig.name.toUpperCase()}</div>
           <div className="text-2xl font-black uppercase tracking-tighter text-[#a31a1a]">{formatYearMonth()}</div>
         </div>
 
@@ -192,10 +193,10 @@ export default function ExportPosterPage() {
         <div className="mt-8 pt-6 border-t-2 border-[#a31a1a] flex justify-between items-end text-xs font-black text-[#a31a1a]">
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px]">INSTA</span> @langbuddy_official
+              <span className="text-[10px]">INSTA</span> {siteConfig.instagramHandle || '-'}
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px]">WEB</span> https://langbuddy-club.vercel.app/
+              <span className="text-[10px]">WEB</span> {siteConfig.siteUrl || '-'}
             </div>
           </div>
           <div className="text-right uppercase leading-tight tracking-tight">
@@ -261,7 +262,7 @@ export default function ExportPosterPage() {
               <h2 className="text-xl font-black text-center">{locale === 'en' ? 'English Version' : '영어 버전 프리뷰'}</h2>
               <div className="flex justify-center">
                 <div ref={enPosterRef}>
-                  <PosterTemplate lang="ja" />
+                  <PosterTemplate lang="en" />
                 </div>
               </div>
             </div>

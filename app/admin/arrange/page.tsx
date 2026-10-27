@@ -40,6 +40,7 @@ import {
 } from '@/lib/walk-in-participant'
 import { SUPPORTED_LANGUAGES, isSupportedLanguage } from '@/lib/supported-languages'
 import { useArrangeSync } from '@/hooks/use-arrange-sync'
+import { siteConfig } from '@/lib/site-config'
 
 function participantRecencyMs(p: ArrangedParticipant): { checkedIn: number; created: number } {
   const checkedIn = p.checked_in_at ? Date.parse(p.checked_in_at) : 0
@@ -942,7 +943,7 @@ export default function AdminArrangePage() {
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `langbuddy_round${roundNum}_${todayStr}.csv`
+      link.download = `${siteConfig.slug}_round${roundNum}_${todayStr}.csv`
       link.click()
       URL.revokeObjectURL(url)
       toast.success(`${roundNum}라운드 CSV를 저장했습니다.`)
@@ -1455,7 +1456,7 @@ export default function AdminArrangePage() {
 
     const tableGroups = _.groupBy(currentAssignments, 'table_label')
     const labels = orderedTableLabels(roundData?.tableLanguages ?? {}, roundData?.tableOrder)
-    let text = `[LangBuddy ${currentRound}라운드 배치 결과]\n\n`
+    let text = `[${siteConfig.name} ${currentRound}라운드 배치 결과]\n\n`
 
     labels.forEach((label) => {
       const members = (tableGroups[label] ?? [])

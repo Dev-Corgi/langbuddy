@@ -1,4 +1,6 @@
-const KEY_PREFIX = 'langbuddy-apply-receipt-draft:'
+import { siteConfig } from '@/lib/site-config'
+
+const KEY_PREFIX = `${siteConfig.slug}-apply-receipt-draft:`
 
 export type ApplyReceiptDraft = {
   postingId: string

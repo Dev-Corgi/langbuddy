@@ -1,3 +1,5 @@
+import { siteConfig } from '@/lib/site-config'
+
 export function seatingAssignmentNotifyEmailHtml(opts: {
   name: string
   round: number
@@ -20,7 +22,7 @@ export function seatingAssignmentNotifyEmailHtml(opts: {
           <tr><td style="height:4px;background:linear-gradient(90deg,#6366f1,#14b8a6);"></td></tr>
           <tr>
             <td style="padding:28px 24px 12px;">
-              <p style="margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:0.18em;color:#6366f1;">LANGBUDDY</p>
+              <p style="margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:0.18em;color:#6366f1;">${escapeHtml(siteConfig.name)}</p>
               <h1 style="margin:0;font-size:22px;font-weight:800;color:#111827;">자리 배치 안내</h1>
               <p style="margin:12px 0 0;font-size:14px;line-height:1.55;color:#6b7280;">
                 <strong style="color:#111;">${escapeHtml(name)}</strong>님, <strong>${escapeHtml(

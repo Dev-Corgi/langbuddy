@@ -1,3 +1,5 @@
+import { siteConfig } from '@/lib/site-config'
+
 function escapeHtml(s: string) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -15,6 +17,7 @@ export function cancellationEmailHtml(opts: {
   const name = escapeHtml(opts.displayName)
   const title = escapeHtml(opts.eventTitle)
   const home = escapeHtml(opts.siteUrl.replace(/\/$/, ''))
+  const brand = escapeHtml(siteConfig.name)
 
   return `<!DOCTYPE html>
 <html lang="ko">
@@ -24,7 +27,7 @@ export function cancellationEmailHtml(opts: {
 <tr><td align="center">
 <table role="presentation" width="100%" style="max-width:520px;background:#fff;border-radius:20px;overflow:hidden;border:1px solid #e4e4e7;box-shadow:0 8px 30px rgba(0,0,0,.08);">
 <tr><td style="padding:28px 28px 20px;background:linear-gradient(135deg,#4f46e5,#7c3aed);">
-<p style="margin:0;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.9);font-weight:700;">LANGBUDDY</p>
+<p style="margin:0;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.9);font-weight:700;">${brand}</p>
 <h1 style="margin:10px 0 0;font-size:20px;font-weight:800;color:#fff;line-height:1.35;">신청 취소 안내 · Application update</h1>
 </td></tr>
 <tr><td style="padding:26px 28px;">
@@ -41,7 +44,7 @@ Hello <strong style="color:#18181b;">${name}</strong>,<br/><br/>
 Your application for <strong style="color:#18181b;">${title}</strong> has been <strong style="color:#18181b;">cancelled by an administrator</strong>.
 This registration is no longer valid. If this was unexpected, you may submit a new application from our site or reach out through our usual contact channels.
 </p>
-<a href="${home}" style="display:inline-block;padding:14px 26px;background:#18181b;color:#fff!important;text-decoration:none;font-weight:800;font-size:14px;border-radius:12px;">LangBuddy 홈으로 · Visit LangBuddy</a>
+<a href="${home}" style="display:inline-block;padding:14px 26px;background:#18181b;color:#fff!important;text-decoration:none;font-weight:800;font-size:14px;border-radius:12px;">${brand} 홈으로 · Visit ${brand}</a>
 </td></tr>
 <tr><td style="padding:18px 28px 26px;border-top:1px solid #f4f4f5;background:#fafafa;">
 <p style="margin:0;font-size:11px;line-height:1.55;color:#a1a1aa;">본 메일은 신청 상태 변경을 안내하기 위해 발송되었습니다. / This message was sent to notify you of a registration status change.</p>
@@ -64,7 +67,7 @@ export function cancellationKakaoFeed(opts: {
   return {
     object_type: 'feed' as const,
     content: {
-      title: 'LangBuddy — 신청 취소 · Application cancelled',
+      title: `${siteConfig.name} — 신청 취소 · Application cancelled`,
       description: `${descKo}\n\n—\n\n${descEn}`,
       image_url: opts.imageUrl,
       image_width: 400,
@@ -76,7 +79,7 @@ export function cancellationKakaoFeed(opts: {
     },
     buttons: [
       {
-        title: 'LangBuddy 열기 · Open site',
+        title: `${siteConfig.name} 열기 · Open site`,
         link: {
           web_url: opts.siteUrl,
           mobile_web_url: opts.siteUrl,

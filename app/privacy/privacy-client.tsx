@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { MainNav } from '../_components/main-nav'
 import { useLocale } from '@/hooks/use-locale'
+import { siteConfig } from '@/lib/site-config'
 
 export function PrivacyClient() {
   const locale = useLocale()
@@ -31,7 +32,7 @@ export function PrivacyClient() {
 
           <header className="mb-10 md:mb-14 space-y-3">
             <p className="text-xs md:text-sm font-black tracking-wider text-primary uppercase">
-              LangBuddy
+              {siteConfig.name}
             </p>
             <h1 className="text-3xl md:text-4xl font-black tracking-tight text-foreground">
               {isKo ? '개인정보 처리방침' : 'Privacy Policy'}
@@ -48,7 +49,7 @@ export function PrivacyClient() {
           </div>
 
           <p className="mt-10 text-center text-[11px] md:text-xs text-muted-foreground/70 font-semibold tracking-tight">
-            &copy; 2026 LangBuddy
+            &copy; {new Date().getFullYear()} {siteConfig.name}
           </p>
         </div>
       </main>
@@ -61,7 +62,7 @@ function KoreanSections() {
     <>
       <Section title="1. 총칙">
         <p>
-          LangBuddy(이하 “서비스”)는 「개인정보 보호법」 등 관련 법령을 준수하며,
+          {siteConfig.nameKo}(이하 “서비스”)는 「개인정보 보호법」 등 관련 법령을 준수하며,
           이용자의 개인정보를 안전하게 보호하기 위해 노력합니다. 본 방침은
           서비스가 처리하는 개인정보와 그 처리 방법을 설명합니다.
         </p>
@@ -143,7 +144,7 @@ function KoreanSections() {
       </Section>
       <Section title="11. 개인정보 보호 책임자">
         <p>
-          개인정보와 관련한 문의는 LangBuddy 고객 지원 또는 공식 채널(예: SNS)로
+          개인정보와 관련한 문의는 {siteConfig.nameKo} 고객 지원 또는 공식 채널(예: SNS)로
           연락해 주세요. 접수 즉시 성실히 답변하겠습니다.
         </p>
       </Section>
@@ -156,7 +157,7 @@ function EnglishSections() {
     <>
       <Section title="1. Introduction">
         <p>
-          LangBuddy (“we”, “the service”) respects your privacy. This Privacy Policy
+          {siteConfig.name} (“we”, “the service”) respects your privacy. This Privacy Policy
           explains what personal information we process and how we protect it,
           consistent with applicable data protection laws and our commitment to users.
         </p>
@@ -216,7 +217,7 @@ function EnglishSections() {
         <p>
           Depending on your jurisdiction, you may request access, correction, deletion,
           restriction, or portability, and withdraw consent where processing is consent-based.
-          Contact us via in-app channels or LangBuddy&apos;s official support and we will
+          Contact us via in-app channels or {siteConfig.name}&apos;s official support and we will
           respond promptly where feasible.
         </p>
       </Section>
@@ -242,7 +243,7 @@ function EnglishSections() {
       </Section>
       <Section title="11. Contact">
         <p>
-          For privacy-related questions, please reach out through LangBuddy customer
+          For privacy-related questions, please reach out through {siteConfig.name} customer
           support or our official contact channels listed on this site or social profiles.
         </p>
       </Section>

@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { MessageSquare } from 'lucide-react'
 import { useLocale } from '@/hooks/use-locale'
 import { i18n } from '@/lib/i18n'
+import { siteConfig } from '@/lib/site-config'
 
 function LoginPageContent() {
   const router = useRouter()
@@ -123,7 +124,7 @@ function LoginPageContent() {
             <MessageSquare className="w-10 h-10 text-primary" />
           </div>
           <CardTitle className="text-3xl font-black text-foreground">
-            {locale === 'en' ? 'Welcome to LangBuddy' : 'LangBuddy에 오신 것을 환영합니다'}
+            {locale === 'en' ? `Welcome to ${siteConfig.name}` : `${siteConfig.nameKo}에 오신 것을 환영합니다`}
           </CardTitle>
           <CardDescription className="text-muted-foreground font-medium text-base">
             {locale === 'en' 

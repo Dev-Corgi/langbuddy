@@ -1,4 +1,6 @@
 // Kakao Share utility functions
+import { siteConfig } from '@/lib/site-config'
+
 declare global {
   interface Window {
     Kakao: any;
@@ -42,7 +44,7 @@ export function shareQRToKakao(params: {
     window.Kakao.Share.sendDefault({
       objectType: 'feed',
       content: {
-        title: '🎉 LangBuddy 신청 완료!',
+        title: `🎉 ${siteConfig.name} 신청 완료!`,
         description: `${params.formTitle}\n이름: ${params.name}${params.day ? `\n요일: ${params.day}` : ''}`,
         imageUrl: params.qrImageUrl,
         link: {

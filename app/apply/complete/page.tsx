@@ -23,6 +23,7 @@ import {
 import { buildOnboardingUrl, isOnboardingCompleted } from '@/lib/onboarding-gate'
 import { fetchPastParticipationSessions } from '@/lib/previous-participation-history'
 import type { PastParticipationSession } from '@/lib/previous-participation-history'
+import { siteConfig } from '@/lib/site-config'
 import { PastParticipationReportDialog } from '@/components/apply/past-participation-report-dialog'
 
 export default function ApplicationCompletePage() {
@@ -145,7 +146,7 @@ export default function ApplicationCompletePage() {
         const pngUrl = canvas.toDataURL('image/png')
         const downloadLink = document.createElement('a')
         downloadLink.href = pngUrl
-        downloadLink.download = `LangBuddy-QR-${id?.slice(0, 8)}.png`
+        downloadLink.download = `${siteConfig.slug}-QR-${id?.slice(0, 8)}.png`
         document.body.appendChild(downloadLink)
         downloadLink.click()
         document.body.removeChild(downloadLink)

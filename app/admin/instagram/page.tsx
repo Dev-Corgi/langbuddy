@@ -24,6 +24,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { siteConfig } from '@/lib/site-config'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -85,7 +86,7 @@ export default function AdminInstagramPage() {
       .update({ 
         access_token: token, 
         is_connected: true,
-        username: 'langbuddy_official' 
+        username: siteConfig.instagramHandle.replace(/^@/, '') || null
       })
       .eq('id', settings.id)
     
@@ -141,7 +142,7 @@ export default function AdminInstagramPage() {
           post_url: item.permalink,
           thumbnail_url: item.media_type === 'VIDEO' ? item.thumbnail_url : item.media_url,
           caption: item.caption,
-          author_name: '@langbuddy_official',
+          author_name: siteConfig.instagramHandle || settings.username || '',
           created_at: item.timestamp,
           is_active: true
         }
@@ -223,7 +224,7 @@ export default function AdminInstagramPage() {
               {locale === 'en' ? 'Instagram Sync' : '인스타그램 연동'}
             </h1>
             <p className="text-muted-foreground font-medium text-sm md:text-base">
-              {locale === 'en' ? 'Manage Instagram posts in LANGBUDDY NEWS section.' : 'LANGBUDDY NEWS 섹션의 인스타그램 게시물을 관리하세요.'}
+              {locale === 'en' ? `Manage Instagram posts in ${siteConfig.name.toUpperCase()} NEWS.` : `${siteConfig.nameKo} 뉴스의 인스타그램 게시물을 관리하세요.`}
             </p>
           </div>
           

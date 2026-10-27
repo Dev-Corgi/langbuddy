@@ -23,6 +23,7 @@ import Link from 'next/link'
 import { useLocale } from '@/hooks/use-locale'
 import { canAccessStaffOps, isSuperAdminUser } from '@/lib/admin-access'
 import { LanguageApplicationStatusTable } from '@/components/admin/language-application-status-table'
+import { siteConfig } from '@/lib/site-config'
 
 export default function AdminDashboardPage() {
   const locale = useLocale()
@@ -392,7 +393,7 @@ export default function AdminDashboardPage() {
               <Instagram className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-black text-foreground truncate">@langbuddy_official</p>
+              <p className="text-sm font-black text-foreground truncate">{siteConfig.instagramHandle || '-'}</p>
               <p className="text-xs font-bold text-muted-foreground">
                 {locale === 'en' ? `Status: Normal (${instaCount} posts)` : `연동 상태: 정상 (${instaCount}개 게시물)`}
               </p>
@@ -404,8 +405,8 @@ export default function AdminDashboardPage() {
         </div>
         <p className="text-xs md:text-sm font-medium text-muted-foreground leading-relaxed">
           {locale === 'en' 
-            ? "We are automatically importing Instagram posts and displaying them in the 'LANGBUDDY NEWS' section. You can manually add or hide posts as well."
-            : "인스타그램 게시물을 자동으로 불러와 'LANGBUDDY NEWS' 섹션에 표시하고 있습니다. 수동으로 게시물을 추가하거나 숨길 수도 있습니다."}
+            ? `Instagram posts appear in the '${siteConfig.name.toUpperCase()} NEWS' section. You can manually add or hide posts as well.`
+            : `인스타그램 게시물을 '${siteConfig.nameKo} 뉴스' 섹션에 표시합니다. 수동으로 게시물을 추가하거나 숨길 수도 있습니다.`}
         </p>
       </CardContent>
     </Card>

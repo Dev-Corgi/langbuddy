@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils'
 import { useLocale } from '@/hooks/use-locale'
 import { i18n } from '@/lib/i18n'
 import { isSuperAdminUser, isClubLeaderUser } from '@/lib/admin-access'
+import { siteConfig } from '@/lib/site-config'
 
 export default function AdminLayout({
   children,
@@ -157,7 +158,7 @@ export default function AdminLayout({
       <header className="md:hidden h-14 bg-card border-b border-border flex items-center justify-between px-5 sticky top-0 z-50">
         <Link href={adminHomeHref} className="shrink-0">
           <div className="flex flex-col leading-none">
-            <span className="text-[12px] font-black text-primary">LangBuddy</span>
+            <span className="text-[12px] font-black text-primary">{siteConfig.name}</span>
             <span className="text-[14px] font-black text-black">Admin Panel</span>
           </div>
         </Link>
@@ -193,7 +194,7 @@ export default function AdminLayout({
       )}>
         <div className="p-6 border-b border-border hidden md:block">
           <div className="flex flex-col leading-none">
-            <span className="text-[14px] font-black text-primary">LangBuddy</span>
+            <span className="text-[14px] font-black text-primary">{siteConfig.name}</span>
             <span className="text-[16px] font-black text-black">Admin Panel</span>
           </div>
         </div>

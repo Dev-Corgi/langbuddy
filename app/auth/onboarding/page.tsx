@@ -14,6 +14,7 @@ import { Loader2, UserCircle } from 'lucide-react'
 import { useLocale } from '@/hooks/use-locale'
 import { i18n } from '@/lib/i18n'
 import { toast } from 'sonner'
+import { siteConfig } from '@/lib/site-config'
 
 function resolveReturnPath(raw: string | null): string {
   if (raw && raw.startsWith('/') && !raw.startsWith('//')) return raw
@@ -103,7 +104,7 @@ function OnboardingPageContent() {
       return
     }
 
-    toast.success(locale === 'en' ? 'Welcome to LangBuddy!' : 'LangBuddy에 오신 것을 환영합니다!')
+    toast.success(locale === 'en' ? `Welcome to ${siteConfig.name}!` : `${siteConfig.nameKo}에 오신 것을 환영합니다!`)
     router.push(returnPath)
   }
 

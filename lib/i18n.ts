@@ -1,3 +1,5 @@
+import { siteConfig } from '@/lib/site-config'
+
 export type Locale = 'ko' | 'en';
 
 export const defaultLocale: Locale = 'ko';
@@ -18,10 +20,10 @@ export const i18n = {
     },
     home: {
       hero: {
-        title: "이제 LangBuddy로 떠나요!",
+        title: `이제 ${siteConfig.nameKo}로 떠나요!`,
       },
       news: {
-        title: "랭버디 뉴스",
+        title: `${siteConfig.nameKo} 뉴스`,
         description: "다양한 소식과 영상을 만나보세요",
       },
       sections: {
@@ -117,10 +119,10 @@ export const i18n = {
     },
     home: {
       hero: {
-        title: "Travel with LangBuddy now!",
+        title: `Travel with ${siteConfig.name} now!`,
       },
       news: {
-        title: "LANGBUDDY NEWS",
+        title: `${siteConfig.name.toUpperCase()} NEWS`,
         description: "Explore various news and videos from our club Instagram",
       },
       sections: {

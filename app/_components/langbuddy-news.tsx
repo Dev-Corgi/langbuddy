@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase"
 import Link from "next/link"
 import { useLocale } from "@/hooks/use-locale"
 import { i18n } from "@/lib/i18n"
+import { siteConfig } from "@/lib/site-config"
 
 export function LangBuddyNews() {
   const locale = useLocale()
@@ -42,7 +43,7 @@ export function LangBuddyNews() {
             id: '1',
             thumbnail_url: "/news/news1.jpg",
             post_url: "#",
-            caption: "[LANGBUDDY NEWS] 동아리 활동 하이라이트 #1"
+            caption: `[${siteConfig.name.toUpperCase()} NEWS] 동아리 활동 하이라이트 #1`
           },
           {
             id: '2',
@@ -169,7 +170,7 @@ export function LangBuddyNews() {
                     {item.caption}
                   </div>
                   <div className="flex items-center justify-between mt-2">
-                    <div className="text-[13px] font-bold text-muted-foreground/60">@langbuddy_official</div>
+                    <div className="text-[13px] font-bold text-muted-foreground/60">{siteConfig.instagramHandle}</div>
                     <ChevronRight className="w-5 h-5 text-primary opacity-0 group-hover:opacity-100 -translate-x-4 group-hover:translate-x-0 transition-all duration-500" />
                   </div>
                 </div>
@@ -222,7 +223,7 @@ export function LangBuddyNews() {
                       <div className="line-clamp-2 text-xl font-black leading-tight text-card-foreground">
                         {posts[mobileIndex].caption}
                       </div>
-                      <div className="text-xs font-bold text-muted-foreground/60 tracking-tight">@langbuddy_official</div>
+                      <div className="text-xs font-bold text-muted-foreground/60 tracking-tight">{siteConfig.instagramHandle}</div>
                     </div>
                   </Card>
                 </Link>

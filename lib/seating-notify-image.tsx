@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og'
+import { siteConfig } from '@/lib/site-config'
 
 export type SeatingNotifyParticipant = {
   name: string
@@ -85,7 +86,7 @@ export async function seatingSingleTableImageResponse(
                 textTransform: 'uppercase',
               }}
             >
-              LangBuddy
+              {siteConfig.name}
             </span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>

@@ -1,7 +1,8 @@
 import { orderedTableLabels } from '@/lib/seating-table-ops'
 import type { SeatingPatch, SeatingSessionSnapshot } from '@/lib/seating-session/types'
+import { siteConfig } from '@/lib/site-config'
 
-const STORAGE_KEY = 'langbuddy-seating-emergency-v1'
+const STORAGE_KEY = `${siteConfig.slug}-seating-emergency-v1`
 
 export type EmergencySeatingBackup = {
   postingId: string
