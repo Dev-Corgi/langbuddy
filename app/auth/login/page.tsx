@@ -69,7 +69,7 @@ function LoginPageContent() {
       provider: 'kakao',
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
-        scopes: 'profile_nickname profile_image account_email'
+        scopes: 'profile_nickname profile_image'
       }
     })
     

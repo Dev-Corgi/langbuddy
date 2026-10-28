@@ -62,7 +62,7 @@ function AdminLoginContent() {
       provider: 'kakao',
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent('/admin')}`,
-        scopes: 'profile_nickname profile_image account_email',
+        scopes: 'profile_nickname profile_image',
       },
     })
 
