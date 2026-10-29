@@ -2,7 +2,6 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { expiryIsoFromKakaoAccessToken } from '@/lib/kakao-oauth'
-import { createSupabaseAdmin } from '@/lib/supabase-admin'
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
@@ -77,8 +76,9 @@ export async function GET(request: Request) {
           kakaoPatch.kakao_refresh_token = providerRefresh
         }
 
-        const admin = createSupabaseAdmin()
-        const { error: upsertError } = await admin.from('users').upsert(
+        // The auth session was just established above. Write only this user's
+        // profile through that session, allowing users_insert_own/update_own RLS.
+        const { error: upsertError } = await supabase.from('users').upsert(
           { id: user.id, ...kakaoPatch },
           { onConflict: 'id' }
         )

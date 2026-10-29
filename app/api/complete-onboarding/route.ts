@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
-import { createSupabaseAdmin } from '@/lib/supabase-admin'
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,9 +17,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const admin = createSupabaseAdmin()
     const now = new Date().toISOString()
-    const { error } = await admin.from('users').upsert(
+    // Use the authenticated session so the users_insert_own / users_update_own
+    // RLS policies can verify that this profile belongs to the caller.
+    const { error } = await supabase.from('users').upsert(
       {
         id: user.id,
         name: name.trim(),
